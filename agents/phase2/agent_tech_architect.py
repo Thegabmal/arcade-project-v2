@@ -1,0 +1,168 @@
+"""
+Agent Tech Architect — Phase 2
+Définit l'architecture technique du jeu :
+physique, rendu, state management, inputs, optimisations.
+Adapte les choix techniques au genre et à la complexité du jeu.
+"""
+
+import json
+from config import call_gemini_json, with_fallback
+from genre_profile import GenreProfile
+from logger import phase2_log
+
+SYSTEM = """Tu es un ingénieur spécialisé dans le développement de jeux HTML5 JavaScript.
+Tu définit des architectures techniques précises, adaptées au genre et réalisables en un seul fichier HTML.
+Pour les jeux 2D tu utilises Canvas 2D API. Pour les jeux 3D tu utilises Three.js r128 via CDN.
+
+CONTRAINTES TECHNIQUES 3D (Three.js r128) :
+- Tout le code dans document.addEventListener('DOMContentLoaded', function() { ... })
+- THREE.WebGLRenderer + renderer.shadowMap.enabled = true
+- THREE.Clock pour le delta time (clock.getDelta(), capped à 0.05)
+- AmbientLight (intensity 0.4-0.5) + DirectionalLight (intensity 0.8-1.0) obligatoires
+- Collisions via THREE.Box3.setFromObject() + box.intersectsBox()
+- Entités = { mesh: THREE.Mesh, hp, speed, active, box: new THREE.Box3() }
+- HUD = divs HTML positionnés en fixed par-dessus le canvas Three.js (jamais canvas 2D)
+- Restart = scene.remove() pour chaque mesh + reset arrays (.length = 0)
+- Particules = THREE.Points avec BufferGeometry et PointsMaterial
+- JAMAIS de data:URI pour les textures
+
+TYPES DE CAMÉRA selon le genre :
+- FPS: PerspectiveCamera(75, ...) + pointer lock + pitch/yaw
+- TPS/platformer 3D: camera suit le joueur avec lerp, lookAt(player.position)
+- Top-down: camera.position.set(0, 20, 0); camera.lookAt(sceneCenter)
+- Fixed/isométrique: caméra fixe angled, pas de movement
+
+Tu réponds UNIQUEMENT en JSON valide."""
+
+
+def run(genre_profile: GenreProfile, gdd: dict) -> dict:
+    phase2_log.agent_start("Tech Architect", f"Architecture pour {genre_profile.genre_principal}")
+
+    # Détecter si le jeu doit être en 3D
+    _sg = (genre_profile.sous_genre or "").lower()
+    _sv = (genre_profile.style_visuel or "").lower()
+    _pu = (genre_profile.prompt_utilisateur_original or "").lower()
+    est_3d = (
+        genre_profile.technologie_rendu == "threejs"
+        or "3d" in _sv
+        or "3d" in _sg
+        or "3d" in _pu
+        or "three" in _pu
+        or "fps" in _sg
+        or "first-person" in _sg
+    )
+    techno_hint = (
+        "three.js via CDN (https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js)"
+        if est_3d else "HTML5 Canvas 2D API, JavaScript vanilla"
+    )
+
+    prompt = f"""Définis l'architecture technique complète pour ce jeu HTML5.
+
+GENRE : {genre_profile.genre_principal} / {genre_profile.sous_genre}
+TITRE : {gdd.get('titre', '?')}
+CONCEPT : {gdd.get('concept', '')}
+NOTES TECHNIQUES DU GENRE : {genre_profile.notes_techniques}
+PROMPT TECHNIQUE : {genre_profile.prompt_technique}
+MODE 3D : {"OUI — utiliser Three.js" if est_3d else "NON — Canvas 2D"}
+
+SYSTÈMES DU JEU :
+{json.dumps(gdd.get('systemes_principaux', []), ensure_ascii=False)}
+
+CONTRAINTES :
+- Un seul fichier HTML (tout inline)
+- Technologie de rendu : {techno_hint}
+- Doit fonctionner dans un navigateur moderne sans serveur
+- {"Three.js r128 via CDN obligatoire — tout le code dans DOMContentLoaded" if est_3d else "Canvas 2D API vanilla — pas de bibliothèques externes"}
+
+Définis précisément :
+
+1. GAME LOOP : comment structurer la boucle de jeu (requestAnimationFrame, delta time, etc.)
+2. STATE MACHINE : les états du jeu et transitions
+3. PHYSIQUE : gravité, collisions, vélocité — adapté au genre
+4. RENDU : layers de rendu, caméra, effets, optimisations
+5. INPUTS : clavier, souris, mobile (touch) selon le genre
+6. ENTITÉS : structure des objets de jeu (joueur, ennemis, etc.)
+7. PERFORMANCE : optimisations importantes pour ce genre
+8. ARCHITECTURE GLOBALE : organisation du code JS recommandée
+
+Réponds en JSON :
+{{
+  "game_loop": {{
+    "pattern": "requestAnimationFrame avec delta time",
+    "target_fps": 60,
+    "delta_time": true,
+    "description": "..."
+  }},
+  "state_machine": {{
+    "etats": ["menu", "playing", "paused", "gameover", "..."],
+    "transitions": [{{"de": "menu", "vers": "playing", "trigger": "appui touche"}}],
+    "gestion": "variable globale gameState"
+  }},
+  "physique": {{
+    "gravite": true,
+    "valeur_gravite": 0.5,
+    "collisions": "AABB / cercle / pixel-perfect",
+    "velocite": true,
+    "friction": false,
+    "description": "..."
+  }},
+  "rendu": {{
+    "layers": ["background", "entities", "ui"],
+    "camera": "statique / suivante / libre",
+    "effets": ["parallax", "particles", "screen shake", "..."],
+    "canvas_size": {{"width": 800, "height": 600}},
+    "responsive": true
+  }},
+  "inputs": {{
+    "clavier": {{"fleches": true, "wasd": true, "espace": true, "autres": []}},
+    "souris": false,
+    "touch": true,
+    "description": "..."
+  }},
+  "entites": [
+    {{
+      "nom": "Player",
+      "proprietes": ["x", "y", "width", "height", "vitesse", "vie"],
+      "methodes": ["update(dt)", "draw(ctx)", "handleInput()"]
+    }}
+  ],
+  "performance": {{
+    "object_pooling": false,
+    "culling": false,
+    "optimisations": ["...", "..."]
+  }},
+  "architecture_code": {{
+    "organisation": "description de l'organisation du code",
+    "variables_globales": ["gameState", "score", "..."],
+    "fonctions_cles": ["init()", "gameLoop()", "update(dt)", "draw()", "handleInput()"],
+    "patterns": ["game loop pattern", "object pooling si nécessaire", "..."]
+  }},
+  "technologie_rendu": "canvas2d",
+  "recommandations_specifiques": "Conseils techniques spécifiques à ce genre",
+  "camera_type": "fps | tps | top-down | fixed | isometrique (3D seulement)",
+  "collision_strategy": "AABB/Box3 (3D), cercle ou rect (2D)",
+  "entity_pattern": "description du pattern objet+mesh ou objet+coords pour les entités"
+}}"""
+
+    result = _call(prompt)
+    # Forcer la technologie si 3D détecté
+    if est_3d:
+        result["technologie_rendu"] = "threejs"
+    elif "technologie_rendu" not in result:
+        result["technologie_rendu"] = "canvas2d"
+    phase2_log.agent_done("Tech Architect", f"Rendu: {result.get('technologie_rendu', 'canvas2d')}, Camera: {result.get('rendu', {}).get('camera', '?')}")
+    return result
+
+
+@with_fallback({
+    "game_loop": {"pattern": "requestAnimationFrame", "target_fps": 60, "delta_time": True},
+    "state_machine": {"etats": ["menu", "playing", "gameover"]},
+    "physique": {"gravite": False, "collisions": "AABB"},
+    "rendu": {"layers": ["background", "entities", "ui"], "camera": "statique"},
+    "inputs": {"clavier": {"fleches": True, "wasd": True, "espace": True}},
+    "entites": [],
+    "performance": {"optimisations": []},
+    "architecture_code": {"fonctions_cles": ["init", "gameLoop", "update", "draw"]},
+})
+def _call(prompt: str) -> dict:
+    return call_gemini_json(prompt, temperature=0.3, system_instruction=SYSTEM)

@@ -1,0 +1,16 @@
+rag_database/
+jeux_sauvegardes/
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.log
+failures_log.json
+memory.json
+patterns_reussis.json
+session_report.json
+SESSION_REPORT.md
+.pytest_cache/
+*.egg-info/
+dist/
+build/

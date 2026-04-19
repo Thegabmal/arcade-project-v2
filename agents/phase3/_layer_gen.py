@@ -2320,6 +2320,12 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     layer1_schema = ""
     layer1_js = ""
 
+    # Q3 — Templates de prompts par genre
+    try:
+        from agents.phase3._layer_prompts_genre import get_layer_extra as _genre_extra
+    except Exception:
+        def _genre_extra(g, n): return ""
+
     # Q2 — Extraire les constantes numériques de game_logics pour injection dans L1
     def _extract_logics_constants(gl: str) -> str:
         """
@@ -2396,6 +2402,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '  var highScore = 0; try { highScore = parseInt(localStorage.getItem("hs") || "0"); } catch(e) {}\n'
         '- I4 : constantes limites obligatoires : var MAX_ENEMIES = 60; var MAX_BULLETS = 80;\n'
         '  Ces constantes servent à écrêter les tableaux dans updateEnemies/updateBullets.\n'
+        f'{_genre_extra(genre, 1)}'
         'INTERDIT : fonctions, gameLoop, init, addEventListener, requestAnimationFrame, new Audio(), new Image()\n'
         'Output : JS pur uniquement.'
     )
@@ -2588,6 +2595,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '- Distance sécurisée : const dist=Math.hypot(dx,dy)||0.001;\n'
         '- Timers : timer-=dt; if(timer<=0){...;timer=intervalle;}\n'
         '- INTERDIT : modifier score, lives, gameState, splice direct sans itération inverse\n\n'
+        f'{_genre_extra(genre, 3)}'
         'INTERDIT : gameLoop, draw*, addEventListener, checkCollisions, spawnExplosion dans update\n'
         f'{_no_redecl_note}'
         'Output : JS pur uniquement.'
@@ -2764,6 +2772,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '  boss.x+=(player.x-boss.x)*dt*1.2; boss.y+=(player.y-boss.y)*dt*0.8;\n'
         '- triggerShake(mag, dur) : shakeMag=mag; shakeTimer=dur;\n'
         '- triggerFlash(col, alpha) : flashColor=col; flashAlpha=alpha;\n\n'
+        f'{_genre_extra(genre, 5)}'
         f'{enrichment_targets[:600]}\n\n'
         '- Q8 — SYSTÈME DE PROGRESSION JOUEUR (obligatoire) :\n'
         '  function offerUpgrade() — appelée à la fin de chaque vague (après wave++) :\n'

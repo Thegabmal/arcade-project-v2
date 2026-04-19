@@ -13,29 +13,46 @@ MODEL_NAME = "gemini-2.5-flash"
 MODEL_NAME_PRO = os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro")
 MAX_RETRIES = 2  # RPD=20/clé — 5 retries × 9 clés = 45 appels brûlés pour UN seul appel raté
 
-# ── Rotation de clés API ──────────────────────────────────────────────────────
-# Charge toutes les clés disponibles : GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3...
+# ── Clé payante (créateur) ────────────────────────────────────────────────────
+# GEMINI_PAID_KEY : clé payante dédiée à l'agent créateur (génération 9 couches).
+# Si absente, utilise GEMINI_API_KEY comme clé payante (comportement avant).
+# RPD illimité sur la clé payante — pas de comptage journalier.
+_PAID_KEY_RAW = os.getenv("GEMINI_PAID_KEY") or os.getenv("GEMINI_API_KEY")
+if not _PAID_KEY_RAW:
+    raise RuntimeError("Aucune clé payante trouvée (GEMINI_PAID_KEY ou GEMINI_API_KEY requis dans .env)")
+
+import httpx as _httpx
+_http_timeout = _httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=30.0)
+
+_paid_client = genai.Client(
+    api_key=_PAID_KEY_RAW,
+    http_options=types.HttpOptions(httpxClient=_httpx.Client(timeout=_http_timeout))
+)
+_paid_key_lock = threading.Lock()
+_paid_timestamps: list = []  # RPM tracking pour la clé payante
+MAX_CALLS_PER_MINUTE_PAID = int(os.getenv("GEMINI_RPM_LIMIT_PAID", "200"))
+
+# ── Rotation de clés gratuites ────────────────────────────────────────────────
+# GEMINI_API_KEY (si pas de GEMINI_PAID_KEY) + GEMINI_API_KEY_1..N = clés gratuites
 # Quand une clé fait 429, on passe à la suivante automatiquement.
+# Quand TOUTES les clés gratuites sont épuisées → fallback automatique sur clé payante.
 def _load_api_keys() -> list[str]:
     keys = []
-    # Clé principale
-    k = os.getenv("GEMINI_API_KEY")
-    if k:
-        keys.append(k)
-    # Clés supplémentaires numérotées (1 à 20)
+    # Si GEMINI_PAID_KEY est défini, GEMINI_API_KEY est une clé gratuite aussi
+    # Si GEMINI_PAID_KEY absent, GEMINI_API_KEY est payante — on ne la met PAS dans les clés gratuites
+    if os.getenv("GEMINI_PAID_KEY"):
+        k = os.getenv("GEMINI_API_KEY")
+        if k:
+            keys.append(k)
+    # Clés gratuites numérotées (1 à 20)
     for i in range(1, 20):
         k = os.getenv(f"GEMINI_API_KEY_{i}")
         if k:
             keys.append(k)
-    if not keys:
-        raise RuntimeError("Aucune clé GEMINI_API_KEY trouvée dans .env")
+    # Si aucune clé gratuite trouvée → on utilisera la clé payante comme fallback universel
     return keys
 
 _api_keys = _load_api_keys()
-# Timeout connect/write de 30s — détecte les connexions mortes sans bloquer les longues générations
-# read=300s : 5 minutes max par réponse (couvre Pro 55k tokens) — évite les hangs infinis sur connexion bloquée
-import httpx as _httpx
-_http_timeout = _httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=30.0)
 _clients = [
     genai.Client(
         api_key=k,
@@ -115,13 +132,10 @@ def get_quota_status() -> dict:
     return status
 
 # Compat : client global (utilisé par quelques imports directs)
-client = _clients[0]
+client = _paid_client if not _clients else _clients[0]
 
-MAX_CALLS_PER_MINUTE = int(os.getenv("GEMINI_RPM_LIMIT", "4"))        # Free: 5 RPM/clé | Paid: monter à 50+
-MAX_CALLS_PER_DAY = int(os.getenv("GEMINI_RPD_LIMIT", "19"))          # Free: 20 RPD/clé | Paid: mettre 9999
-# La clé payante (index 0 = GEMINI_API_KEY) a une limite RPM bien plus haute (Flash ~1000 RPM)
-# On lui donne une limite interne séparée pour ne pas la bloquer après les appels Pro de Phase 3.
-MAX_CALLS_PER_MINUTE_PAID = int(os.getenv("GEMINI_RPM_LIMIT_PAID", "200"))
+MAX_CALLS_PER_MINUTE = int(os.getenv("GEMINI_RPM_LIMIT", "4"))        # Free: 5 RPM/clé
+MAX_CALLS_PER_DAY = int(os.getenv("GEMINI_RPD_LIMIT", "19"))          # Free: 20 RPD/clé
 WINDOW_SECONDS = 60        # Fenêtre RPM = 1 minute
 
 # Pause globale partagée entre tous les threads — quand une clé déclenche la pause,
@@ -152,28 +166,31 @@ def _rotate_key(failed_idx: int) -> tuple[int, object]:
 
 def _get_available_client() -> tuple[int, object]:
     """
-    Retourne (idx, client) de la première clé ayant de la capacité disponible.
+    Retourne (idx, client) de la première clé GRATUITE ayant de la capacité disponible.
     Respecte RPM (4/min) ET RPD (19/jour) par clé.
-    Si toutes les clés sont saturées en RPM, attend la fenêtre la plus proche.
-    Si toutes les clés sont épuisées en RPD, lève une RuntimeError immédiatement.
+    Si toutes les clés gratuites sont épuisées en RPD → raise _AllFreeKeysExhausted
+      (l'appelant (call_gemini) bascule alors sur la clé payante).
+    Si toutes les clés gratuites sont saturées en RPM → attend la fenêtre la plus proche.
+    Si aucune clé gratuite disponible → raise _AllFreeKeysExhausted immédiatement.
     """
     global _current_key_idx, _key_timestamps
+    n = len(_api_keys)
+    if n == 0:
+        raise _AllFreeKeysExhausted("Aucune clé gratuite configurée")
+
     with _key_lock:
         _reset_daily_counts_if_needed()
         now = time.time()
-        n = len(_api_keys)
 
         # Nettoyer les timestamps RPM de toutes les clés
         for i in range(n):
             _key_timestamps[i] = [t for t in _key_timestamps.get(i, []) if now - t < WINDOW_SECONDS]
 
-        # Chercher une clé disponible (RPM ET RPD)
+        # Chercher une clé gratuite disponible (RPM ET RPD)
         for offset in range(n):
             idx = (_current_key_idx + offset) % n
             rpd_ok = _key_daily_counts.get(idx, 0) < MAX_CALLS_PER_DAY
-            # La clé payante (index 0) a une limite RPM interne plus élevée
-            rpm_limit = MAX_CALLS_PER_MINUTE_PAID if idx == 0 else MAX_CALLS_PER_MINUTE
-            rpm_ok = len(_key_timestamps[idx]) < rpm_limit
+            rpm_ok = len(_key_timestamps[idx]) < MAX_CALLS_PER_MINUTE
             if rpd_ok and rpm_ok:
                 _current_key_idx = idx
                 _key_timestamps[idx].append(time.time())
@@ -181,30 +198,51 @@ def _get_available_client() -> tuple[int, object]:
                 _save_daily_counts()
                 return idx, _clients[idx]
 
-        # Vérifier si toutes les clés sont épuisées en RPD (quota journalier)
+        # Vérifier si toutes les clés gratuites sont épuisées en RPD
         all_rpd_exhausted = all(
             _key_daily_counts.get(i, 0) >= MAX_CALLS_PER_DAY for i in range(n)
         )
         if all_rpd_exhausted:
             used = sum(_key_daily_counts.get(i, 0) for i in range(n))
-            raise RuntimeError(
-                f"Quota journalier épuisé sur toutes les clés ({used}/{n * MAX_CALLS_PER_DAY} appels utilisés aujourd'hui). "
-                f"Reset à minuit UTC."
+            raise _AllFreeKeysExhausted(
+                f"Quota journalier épuisé sur toutes les clés gratuites "
+                f"({used}/{n * MAX_CALLS_PER_DAY} appels) — fallback clé payante"
             )
 
-        # Toutes les clés disponibles en RPD sont saturées en RPM — attendre
-        # Chercher la clé RPD-ok dont la fenêtre RPM se libère le plus tôt
+        # Toutes les clés gratuites en RPD sont saturées en RPM — attendre
         rpd_ok_keys = [i for i in range(n) if _key_daily_counts.get(i, 0) < MAX_CALLS_PER_DAY]
         best_idx = min(rpd_ok_keys, key=lambda i: _key_timestamps[i][0] if _key_timestamps[i] else 0)
         oldest = _key_timestamps[best_idx][0] if _key_timestamps[best_idx] else now
         wait = WINDOW_SECONDS - (now - oldest) + 0.5
 
     # Attente hors du lock pour ne pas bloquer les autres threads
-    print(f"  [Rate limit] Toutes les clés saturées — attente {wait:.1f}s", flush=True)
+    print(f"  [Rate limit] Clés gratuites saturées — attente {wait:.1f}s", flush=True)
     time.sleep(max(wait, 1.0))
-
-    # Réappel récursif après l'attente
     return _get_available_client()
+
+
+class _AllFreeKeysExhausted(Exception):
+    """Toutes les clés gratuites sont épuisées — l'appelant doit basculer sur la clé payante."""
+    pass
+
+
+def _get_paid_client_rate_limited():
+    """
+    Retourne le client payant en respectant son RPM.
+    Attends si la fenêtre RPM est pleine.
+    """
+    global _paid_timestamps
+    while True:
+        with _paid_key_lock:
+            now = time.time()
+            _paid_timestamps = [t for t in _paid_timestamps if now - t < WINDOW_SECONDS]
+            if len(_paid_timestamps) < MAX_CALLS_PER_MINUTE_PAID:
+                _paid_timestamps.append(time.time())
+                return _paid_client
+            oldest = _paid_timestamps[0]
+            wait = WINDOW_SECONDS - (now - oldest) + 0.5
+        print(f"  [Paid RPM] Clé payante saturée — attente {wait:.1f}s", flush=True)
+        time.sleep(max(wait, 1.0))
 
 
 def _rate_limit_for_key(key_idx: int):
@@ -229,27 +267,8 @@ def _claude_rate_limit():
         _claude_last_call_time = time.time()
 
 
-def call_gemini(
-    prompt: str,
-    temperature: float = 0.3,
-    system_instruction: str = None,
-    json_mode: bool = False,
-    max_tokens: int = 16384,
-    disable_thinking: bool = False,
-    model: str = None,
-) -> str:
-    """
-    Appel Gemini avec retry exponentiel sur les erreurs 429/503.
-    Rate-limité globalement entre tous les threads.
-    Retourne le texte de la réponse.
-
-    disable_thinking=True : désactive le thinking de Gemini 2.5-Flash pour préserver
-    le budget de tokens pour la génération de code (évite les troncatures).
-    """
-    # I6 : Alerte si prompt très long (risque de troncature côté input)
-    if len(prompt) > 120000:
-        print(f"  [I6] Prompt très long : {len(prompt)} chars — risque de troncature input", flush=True)
-
+def _make_generation_config(temperature, max_tokens, system_instruction, json_mode, disable_thinking):
+    """Construit le GenerateContentConfig commun à call_gemini et call_gemini_paid."""
     config_params = {
         "temperature": temperature,
         "max_output_tokens": max_tokens,
@@ -260,99 +279,174 @@ def call_gemini(
         config_params["response_mime_type"] = "application/json"
     if disable_thinking:
         config_params["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+    return types.GenerateContentConfig(**config_params)
 
-    generation_config = types.GenerateContentConfig(**config_params)
+
+def _extract_text_from_response(response) -> str:
+    """Extrait le texte d'une réponse Gemini (gère thinking tokens)."""
+    try:
+        text = response.text
+    except Exception:
+        text = None
+    if not text:
+        text = ""
+        for candidate in (response.candidates or []):
+            for part in (candidate.content.parts if candidate.content else []):
+                if hasattr(part, "text") and part.text:
+                    text += part.text
+    # A6 : Détecter finish_reason == MAX_TOKENS
+    try:
+        for candidate in (response.candidates or []):
+            _finish = str(getattr(candidate, 'finish_reason', '') or '')
+            if 'MAX_TOKENS' in _finish.upper() or _finish == '2':
+                print(f"  [A6] finish_reason=MAX_TOKENS — réponse potentiellement tronquée ({len(text)} chars)", flush=True)
+                break
+    except Exception:
+        pass
+    return text or ""
+
+
+def call_gemini_paid(
+    prompt: str,
+    temperature: float = 0.3,
+    system_instruction: str = None,
+    json_mode: bool = False,
+    max_tokens: int = 16384,
+    disable_thinking: bool = False,
+    model: str = None,
+) -> str:
+    """
+    Appel Gemini sur la clé PAYANTE exclusivement (agent créateur — 9 couches).
+    Pas de fallback sur clés gratuites, pas de RPD cap.
+    Rate-limité sur son propre compteur RPM (MAX_CALLS_PER_MINUTE_PAID).
+    """
+    if len(prompt) > 120000:
+        print(f"  [I6] Prompt très long : {len(prompt)} chars — risque de troncature input", flush=True)
+
+    generation_config = _make_generation_config(temperature, max_tokens, system_instruction, json_mode, disable_thinking)
 
     import re as _re
-    # Nombre de tentatives = MAX_RETRIES × nombre de clés disponibles
-    total_attempts = MAX_RETRIES * len(_api_keys)
-    # Compteur LOCAL — mais la PAUSE est globale (partagée entre tous les threads via _api_pause_until)
-    _consecutive_429 = 0
-    for attempt in range(total_attempts):
-        # ── Respecter la pause globale déclenchée par n'importe quel thread ──
+    for attempt in range(MAX_RETRIES * 2):
         global _api_pause_until
         with _key_lock:
             pause_end = _api_pause_until
         remaining = pause_end - time.time()
         if remaining > 0:
-            print(f"  [Pause globale] Attente {remaining:.0f}s (rate limit partagé entre threads)", flush=True)
             time.sleep(remaining)
 
-        key_idx, current_client = _get_available_client()
+        current_paid = _get_paid_client_rate_limited()
         try:
-            response = current_client.models.generate_content(
+            response = current_paid.models.generate_content(
                 model=model or MODEL_NAME,
                 contents=prompt,
                 config=generation_config,
             )
-            # gemini-2.5-flash peut avoir des thinking tokens — extraire uniquement le texte output
-            try:
-                text = response.text
-            except Exception:
-                text = None
-            # Fallback si response.text est None ou a planté (réponse bloquée / thinking-only)
-            if not text:
-                text = ""
-                for candidate in (response.candidates or []):
-                    for part in (candidate.content.parts if candidate.content else []):
-                        if hasattr(part, "text") and part.text:
-                            text += part.text
-
-            # A6 : Détecter finish_reason == MAX_TOKENS (troncature silencieuse)
-            try:
-                for candidate in (response.candidates or []):
-                    _finish = str(getattr(candidate, 'finish_reason', '') or '')
-                    if 'MAX_TOKENS' in _finish.upper() or _finish == '2':
-                        print(f"  [A6] finish_reason=MAX_TOKENS — réponse potentiellement tronquée ({len(text)} chars)", flush=True)
-                        # Ne pas rejeter — le code tronqué est géré par _autocomplete_truncated_js
-                        break
-            except Exception:
-                pass
-
-            # Succès : reset du compteur local
-            _consecutive_429 = 0
-            return text or ""
-
+            return _extract_text_from_response(response)
         except Exception as e:
             error_str = str(e).lower()
-            # Quota journalier épuisé → erreur fatale, ne jamais retenter
-            if "quota journalier" in error_str:
-                raise
             if "429" in error_str or "quota" in error_str or "resource exhausted" in error_str:
-                # Extraire le délai suggéré par l'API ("retry in X.Xs")
                 _retry_match = _re.search(r"retry in ([0-9]+(?:\.[0-9]+)?)s", str(e), _re.IGNORECASE)
-                _api_wait = float(_retry_match.group(1)) + 1.0 if _retry_match else None
-
-                _consecutive_429 += 1
-                if len(_api_keys) > 1:
-                    _rotate_key(key_idx)
-                    # Toutes les clés du cycle épuisées → pause globale (tous les threads attendent)
-                    if _consecutive_429 >= len(_api_keys):
-                        wait = _api_wait if _api_wait else 90
-                        with _key_lock:
-                            # Ne jamais raccourcir une pause déjà en cours
-                            _api_pause_until = max(_api_pause_until, time.time() + wait)
-                        print(
-                            f"  [Quota] Toutes les clés rate-limitées — pause globale {wait:.0f}s",
-                            flush=True,
-                        )
-                        time.sleep(wait)
-                        _consecutive_429 = 0
-                else:
-                    # Une seule clé → utiliser le délai API si disponible
-                    wait = _api_wait if _api_wait else min(15 * (attempt + 1), 90)
-                    time.sleep(wait)
-            elif "503" in error_str or "unavailable" in error_str:
-                _consecutive_429 = 0
-                wait = min((2 ** (attempt % MAX_RETRIES)) * 2, 30)  # max 30s par tentative
+                wait = float(_retry_match.group(1)) + 1.0 if _retry_match else min(30 * (attempt + 1), 120)
+                print(f"  [Paid 429] Attente {wait:.0f}s avant retry", flush=True)
                 time.sleep(wait)
+            elif "503" in error_str or "unavailable" in error_str:
+                time.sleep(min((2 ** attempt) * 2, 30))
             else:
-                _consecutive_429 = 0
-                if attempt == total_attempts - 1:
+                if attempt >= MAX_RETRIES * 2 - 1:
                     raise
                 time.sleep(5)
 
-    raise RuntimeError(f"Échec après {total_attempts} tentatives ({len(_api_keys)} clé(s))")
+    raise RuntimeError(f"call_gemini_paid : échec après {MAX_RETRIES * 2} tentatives")
+
+
+def call_gemini(
+    prompt: str,
+    temperature: float = 0.3,
+    system_instruction: str = None,
+    json_mode: bool = False,
+    max_tokens: int = 16384,
+    disable_thinking: bool = False,
+    model: str = None,
+) -> str:
+    """
+    Appel Gemini sur les clés GRATUITES d'abord, fallback automatique sur clé payante.
+    Utilisé par tous les agents SAUF l'agent créateur (qui utilise call_gemini_paid).
+
+    disable_thinking=True : désactive le thinking de Gemini 2.5-Flash pour préserver
+    le budget de tokens pour la génération de code (évite les troncatures).
+    """
+    if len(prompt) > 120000:
+        print(f"  [I6] Prompt très long : {len(prompt)} chars — risque de troncature input", flush=True)
+
+    generation_config = _make_generation_config(temperature, max_tokens, system_instruction, json_mode, disable_thinking)
+
+    import re as _re
+    global _api_pause_until
+    _consecutive_429 = 0
+
+    # ── Tentatives sur clés gratuites ──
+    if _api_keys:
+        total_free_attempts = MAX_RETRIES * len(_api_keys)
+        for attempt in range(total_free_attempts):
+            with _key_lock:
+                pause_end = _api_pause_until
+            remaining = pause_end - time.time()
+            if remaining > 0:
+                print(f"  [Pause globale] Attente {remaining:.0f}s", flush=True)
+                time.sleep(remaining)
+
+            try:
+                key_idx, current_client = _get_available_client()
+            except _AllFreeKeysExhausted as exc:
+                print(f"  [Clés gratuites] {exc} — fallback clé payante", flush=True)
+                break  # Sortir de la boucle gratuite → tomber dans le fallback payant
+
+            try:
+                response = current_client.models.generate_content(
+                    model=model or MODEL_NAME,
+                    contents=prompt,
+                    config=generation_config,
+                )
+                _consecutive_429 = 0
+                return _extract_text_from_response(response)
+
+            except Exception as e:
+                error_str = str(e).lower()
+                if "quota journalier épuisé" in error_str:
+                    # Toutes les clés gratuites épuisées → fallback payant
+                    print(f"  [Quota gratuit] RPD épuisé — fallback clé payante", flush=True)
+                    break
+                if "429" in error_str or "quota" in error_str or "resource exhausted" in error_str:
+                    _retry_match = _re.search(r"retry in ([0-9]+(?:\.[0-9]+)?)s", str(e), _re.IGNORECASE)
+                    _api_wait = float(_retry_match.group(1)) + 1.0 if _retry_match else None
+                    _consecutive_429 += 1
+                    if len(_api_keys) > 1:
+                        _rotate_key(key_idx)
+                        if _consecutive_429 >= len(_api_keys):
+                            wait = _api_wait if _api_wait else 90
+                            with _key_lock:
+                                _api_pause_until = max(_api_pause_until, time.time() + wait)
+                            print(f"  [Quota] Clés gratuites rate-limitées — fallback payant", flush=True)
+                            break  # Fallback payant plutôt qu'attendre
+                    else:
+                        wait = _api_wait if _api_wait else min(15 * (attempt + 1), 90)
+                        time.sleep(wait)
+                elif "503" in error_str or "unavailable" in error_str:
+                    _consecutive_429 = 0
+                    time.sleep(min((2 ** (attempt % MAX_RETRIES)) * 2, 30))
+                else:
+                    _consecutive_429 = 0
+                    if attempt == total_free_attempts - 1:
+                        break  # Fallback payant
+                    time.sleep(5)
+
+    # ── Fallback sur clé payante ──
+    print(f"  [Fallback payant] Utilisation clé payante pour appel non-créateur", flush=True)
+    return call_gemini_paid(
+        prompt=prompt, temperature=temperature, system_instruction=system_instruction,
+        json_mode=json_mode, max_tokens=max_tokens, disable_thinking=disable_thinking,
+        model=model,
+    )
 
 
 def call_gemini_json(prompt: str, temperature: float = 0.2, system_instruction: str = None, max_tokens: int = 24000, disable_thinking: bool = True) -> dict:

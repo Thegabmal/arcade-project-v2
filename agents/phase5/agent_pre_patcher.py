@@ -937,6 +937,10 @@ def run(html: str, issues: list) -> str:
             'gameLoop', 'gameloop', 'animate', 'loop', 'tick', 'mainLoop',
             'update', 'draw', 'render', 'initGame', 'startGame', 'resetGame',
             'restartGame', 'init', 'start', 'reset',
+            # Fonctions CSS/DOM — jamais à stubber (leur "appel" est en fait une string CSS)
+            'rgba', 'rgb', 'hsl', 'hsla',
+            # Fonctions d'UI générées par Q9 — doivent être implémentées en L7/L9, pas stubbées
+            'drawPauseMenu', 'drawUpgradeUI', 'drawUpgradeSelect', 'drawInstructions',
         }
         _STOP_WORDS = {'function', 'const', 'let', 'var', 'return', 'this', 'true',
                        'false', 'null', 'undefined', 'NaN', 'typeof', 'instanceof',

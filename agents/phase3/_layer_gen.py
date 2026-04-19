@@ -14,7 +14,7 @@ import re
 import os
 import subprocess
 import tempfile
-from config import call_gemini
+from config import call_gemini, call_gemini_paid
 from logger import phase3_log
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1271,14 +1271,15 @@ def _validate_layer(new_js: str, accumulated_js: str, layer_name: str) -> tuple:
 
 def _call_layer(system: str, prompt: str, max_tokens: int = 6000,
                 temperature: float = 0.1, disable_thinking: bool = True) -> str:
-    """Appelle Gemini pour une couche, nettoie le résultat.
+    """Appelle Gemini (clé PAYANTE) pour une couche, nettoie le résultat.
 
     J1 — thinking par couche : L4/L7/L9 disable_thinking=False (raisonnement profond)
          L1/L2/L3/L5/L6/L8 disable_thinking=True (vitesse + évite troncature)
     J2 — température par couche : L1-L4/L7=0.1, L5/L6=0.2, L8=0.35, L9=0.45
+    Utilise call_gemini_paid — clé payante exclusive pour la génération de code critique.
     """
-    raw = call_gemini(prompt, temperature=temperature, system_instruction=system,
-                      max_tokens=max_tokens, disable_thinking=disable_thinking)
+    raw = call_gemini_paid(prompt, temperature=temperature, system_instruction=system,
+                           max_tokens=max_tokens, disable_thinking=disable_thinking)
     if not raw:
         return ""
     # Retirer les balises markdown / script / html

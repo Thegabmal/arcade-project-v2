@@ -269,7 +269,7 @@ from agents.support import agent_verdict_final, agent_sauvegarde, agent_auto_lea
 # ─────────────────────────────────────────────
 # CONFIGURATION
 # ─────────────────────────────────────────────
-MAX_ITERATIONS = 4          # E4 : 4 itérations max (si score < 7.0 après 2, on continue)
+MAX_ITERATIONS = 2          # E4 : 2 itérations max (coût API réduit)
 SCORE_SEUIL_SAUVEGARDE = 7.0   # Score minimum pour marquer "approuvé"
 SCORE_SORTIE_ANTICIPEE = 8.0   # Score pour sortir sans itérer
 SCORE_STAGNATION_DELTA = 0.2   # Si le score progresse de moins de ça → stagnation

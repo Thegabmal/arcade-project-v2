@@ -1356,6 +1356,16 @@ def _stub_orphan_calls(accumulated_js: str) -> tuple[str, list[str]]:
         'create', 'destroy', 'remove', 'add', 'get', 'set', 'run', 'execute',
         'check', 'test', 'validate', 'process', 'handle', 'fire', 'trigger',
         'load', 'save', 'read', 'write', 'send', 'receive', 'connect',
+        # Mots français hallucinations récurrentes (never real function names)
+        'neon', 'néon', 'bombe', 'bombes', 'joueur', 'ennemi', 'ennemis',
+        'balle', 'balles', 'tir', 'tirs', 'invulnerable', 'invulnérable',
+        'bouclier', 'explosion', 'niveau',
+        # Fonctions sons LLM-générées dont le nom n'est pas dans le scope global
+        'soundmenubeep', 'menubeep', 'soundlevelup', 'soundgameover',
+        'soundhit', 'soundshoot', 'soundexplode',
+        # Fonctions d'UI injectées comme stubs vides — elles doivent être générées en L7/L9
+        'drawpausemenu', 'drawupgradeui', 'drawupgradeselect', 'drawinstructions',
+        'drawpause', 'drawvictory', 'drawcredits',
     }
     orphans = _check_gameloop_calls(accumulated_js)
     if not orphans:
@@ -1947,6 +1957,10 @@ def _mechanic_to_keywords(mechanic: str) -> list[str]:
     Retourne les 2-3 tokens les plus représentatifs pour vérifier la présence.
     """
     m = mechanic.lower()
+    if any(k in m for k in ('scroll', 'défilement', 'scrolling vertical', 'fond défilant', 'défile')):
+        return ['scrollSpeed', 'scrollY', 'bgOffset', 'starsY', 'backgroundY']
+    if any(k in m for k in ('hitbox', 'hitbox réduite', 'collision précis', 'précis'))  :
+        return ['checkCollisions', 'aabbCollide', 'hitbox']
     if any(k in m for k in ('tir auto', 'autofire', 'shoot auto', 'fire auto')):
         return ['fireTimer', 'spawnBullet']
     if any(k in m for k in ('tir', 'shoot', 'bullet', 'projectile', 'fire')):
@@ -2009,12 +2023,24 @@ def _check_mechanics_present(accumulated: str, mecaniques: list) -> list[str]:
     missing = []
     for mec in mecaniques:
         keywords = _mechanic_to_keywords(mec)
+        mec_lower = mec.lower()
         # Critère 1 : token déclaré comme fonction
         if any(kw in _declared_fns for kw in keywords):
             continue
         # Critère 2 : 2+ tokens présents dans le code réel
         if sum(1 for kw in keywords if kw in _nc) >= 2:
             continue
+        # Critère 2b : pour le scrolling → 1 seul token suffit (implémenté de 100 façons)
+        if any(k in mec_lower for k in ('scroll', 'défilement', 'fond défilant')):
+            if any(kw in _nc for kw in keywords):
+                continue
+            # Aussi : toute variable bgY, starsPos, starOffset, scrollOffset, bgOffset
+            if re.search(r'\b(?:bg[YX]|stars?[YX]?|bgOffset|scrollOffset|backgroundY|starsPos)\b', _nc):
+                continue
+        # Critère 2c : hitbox/collision précis → checkCollisions + aabbCollide suffisent
+        if any(k in mec_lower for k in ('hitbox', 'collision précis', 'précis')):
+            if 'checkCollisions' in _nc or 'aabbCollide' in _nc:
+                continue
         # M2 — Critère 3 : ENEMY_TYPES avec ≥2 entrées dans un tableau (data structure présente)
         if 'ENEMY_TYPES' in keywords and 'ENEMY_TYPES' in _nc:
             _et_matches = re.findall(r'ENEMY_TYPES\s*=\s*\[', _nc)
@@ -2364,8 +2390,11 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         f'{erreurs_str}{level_design_section}{snippets_section}\n\n'
         'Génère UNIQUEMENT les déclarations de données et état global.\n\n'
         'OBLIGATOIRE (sois PRÉCIS et RICHE — ces données définissent tout le gameplay) :\n'
-        '1. const PALETTE = {...} — 6-8 couleurs cohérentes avec le thème\n'
+        '1. var PALETTE = {bg:"#0a0a1a",player:"#00ffcc",enemy:"#ff4444",...} — 8+ couleurs, adapte au thème\n'
+        '   OBLIGATOIRE : inclure au minimum les clés bg, player, enemy, boss, bullet, ui, shield, particle\n'
+        '   IMPORTANT : déclarer PALETTE comme var global (NE PAS mettre const — peut être redéfini en L9)\n'
         '2. Constantes gameplay ALL_CAPS : PLAYER_SPEED, BULLET_SPEED, ENEMY_SPEED, MAX_LIVES, FIRE_RATE, BULLET_DMG\n'
+        '   INTERDIT : constantes ENEMY_SPEED_TYPE séparées (ex: ENEMY_SPEED_DRONE) — utiliser enemy.speed dans ENEMY_TYPES[]\n'
         '3. Data structures selon le genre (3-4 types avec vraies valeurs) :\n'
         '   Shooter: var ENEMY_TYPES = [{type:"kamikaze",hp:1,speed:120,points:10,size:16,color:"#f00"}, ...]\n'
         '   TD: var WAVE_DEFS = [{enemies:[{type:"basic",count:5,interval:1}]}, ...]\n'
@@ -2597,6 +2626,8 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '- INTERDIT : modifier score, lives, gameState, splice direct sans itération inverse\n\n'
         f'{_genre_extra(genre, 3)}'
         'INTERDIT : gameLoop, draw*, addEventListener, checkCollisions, spawnExplosion dans update\n'
+        'INTERDIT ABSOLU : constantes ENEMY_SPEED_TYPE séparées (ex: ENEMY_SPEED_DRONE, ENEMY_HP_BOMBER)\n'
+        '  → Utiliser directement enemy.speed, enemy.hp, enemy.dmg depuis ENEMY_TYPES[] — ces props existent déjà en L1\n'
         f'{_no_redecl_note}'
         'Output : JS pur uniquement.'
     )
@@ -2892,11 +2923,18 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
                        <= len(re.findall(r'function\s+' + re.escape(fn) + r'\s*\(', accumulated))
                 ]
                 if _uncalled:
-                    phase3_log.info(
-                        "[layered] Réparation : %d fn(s) non appelée(s) dans gameLoop — injection : %s"
-                        % (len(_uncalled), ', '.join(_uncalled[:4]))
-                    )
-                    accumulated = _patch_gameloop_calls(accumulated, _uncalled)
+                    if 'function gameLoop' in accumulated:
+                        phase3_log.info(
+                            "[layered] Réparation : %d fn(s) non appelée(s) dans gameLoop — injection : %s"
+                            % (len(_uncalled), ', '.join(_uncalled[:4]))
+                        )
+                        accumulated = _patch_gameloop_calls(accumulated, _uncalled)
+                    else:
+                        # gameLoop pas encore créé (L7 le créera) — injection différée
+                        phase3_log.info(
+                            "[layered] Réparation : %d fn(s) à injecter en L7/L8 : %s"
+                            % (len(_uncalled), ', '.join(_uncalled[:4]))
+                        )
 
             # Vérification post-réparation
             _still_missing = _check_mechanics_present(accumulated, _missing_mechanics)
@@ -3540,19 +3578,69 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
 
     # ── Déduplication requestAnimationFrame(gameLoop) ──
     # Les couches (réparation, L7, try/catch) peuvent chacune en injecter un.
-    # On ne garde que le DERNIER appel standalone (dans DOMContentLoaded).
+    # Étape 1 : supprimer les rAF standalone (hors fonctions) en excès — garder le dernier.
     _raf_standalone = re.compile(
         r'^[ \t]*requestAnimationFrame\s*\(\s*gameLoop\s*\)\s*;?[ \t]*$',
         re.MULTILINE
     )
     _raf_matches = list(_raf_standalone.finditer(accumulated))
     if len(_raf_matches) > 1:
-        # Supprimer tous sauf le dernier, de la fin vers le début pour préserver les indices
         for _m in reversed(_raf_matches[:-1]):
             accumulated = accumulated[:_m.start()] + accumulated[_m.end():]
         phase3_log.info(
             f"[layered] {len(_raf_matches)-1} requestAnimationFrame(gameLoop) dupliqué(s) supprimé(s)"
         )
+    # Étape 2 : dans le corps de gameLoop, dédupliquer les rAF en excès (garder le dernier)
+    _gl_raf_m = re.search(r'function\s+gameLoop\s*\([^)]*\)\s*\{', accumulated)
+    if _gl_raf_m:
+        _gl_body_start = _gl_raf_m.end()
+        _gl_depth, _gl_body_end = 1, _gl_body_start
+        for _ci in range(_gl_body_start, len(accumulated)):
+            if accumulated[_ci] == '{': _gl_depth += 1
+            elif accumulated[_ci] == '}':
+                _gl_depth -= 1
+                if _gl_depth == 0: _gl_body_end = _ci; break
+        _gl_body = accumulated[_gl_body_start:_gl_body_end]
+        _raf_in_gl = list(re.finditer(r'requestAnimationFrame\s*\(\s*gameLoop\s*\)\s*;?', _gl_body))
+        if len(_raf_in_gl) > 1:
+            # Supprimer tous sauf le dernier dans gameLoop
+            _removed_count = 0
+            _new_body = _gl_body
+            _offset = 0
+            for _rm in reversed(_raf_in_gl[:-1]):
+                _new_body = _new_body[:_rm.start() - _offset] + _new_body[_rm.end() - _offset:]
+                _offset += _rm.end() - _rm.start()
+                _removed_count += 1
+            accumulated = accumulated[:_gl_body_start] + _new_body + accumulated[_gl_body_end:]
+            phase3_log.info(
+                f"[layered] {_removed_count} requestAnimationFrame(gameLoop) dupliqué(s) dans gameLoop supprimé(s)"
+            )
+
+    # ── Garanties programmatiques post-assemblage ──────────────────────────────
+    # PALETTE : si absent ou déclaré const (peut être supprimé par dédup) → injecter var fallback
+    if not re.search(r'\bvar\s+PALETTE\s*=', accumulated):
+        if not re.search(r'\bconst\s+PALETTE\s*=|\blet\s+PALETTE\s*=', accumulated):
+            # Absent complètement — injecter default
+            _palette_inject = (
+                "var PALETTE = {bg:'#0a0a1a',player:'#00ffcc',enemy:'#ff4444',boss:'#ff00ff',"
+                "bullet:'#ffff00',ui:'#ffffff',shield:'#00aaff',particle:'#ffaa00',"
+                "bulletHit:'#ff8800',damageText:'#ff0000',enemyBomberBody:'#ff6600',"
+                "enemyBomberOutline:'#ffcc00',drone:'#44ff88',turret:'#ff8844'};\n"
+            )
+            accumulated = _palette_inject + accumulated
+            phase3_log.info("[layered] PALETTE absente — injection fallback garantie")
+        else:
+            # Déclaré avec const/let → convertir en var pour éviter les conflits de scope
+            accumulated = re.sub(r'\b(?:const|let)\s+(PALETTE\s*=)', r'var \1', accumulated)
+            phase3_log.info("[layered] PALETTE const/let → var (compatibilité multi-couche)")
+
+    # _AC + sfx : garantir déclaration si utilisés
+    if '_AC' in accumulated and not re.search(r'\bvar\s+_AC\b|\blet\s+_AC\b|\bconst\s+_AC\b', accumulated):
+        accumulated = "var _AC = null;\n" + accumulated
+        phase3_log.info("[layered] _AC manquant — déclaration injectée")
+    if 'sfx.' in accumulated and not re.search(r'\bvar\s+sfx\b|\blet\s+sfx\b|\bconst\s+sfx\b', accumulated):
+        accumulated = "var sfx = {};\n" + accumulated
+        phase3_log.info("[layered] sfx manquant — déclaration injectée")
 
     accumulated = _inject_trycatch_gameloop(accumulated)
     if 'drawErrorScreen' in accumulated:

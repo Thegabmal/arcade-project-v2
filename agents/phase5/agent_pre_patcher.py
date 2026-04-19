@@ -522,6 +522,15 @@ def run(html: str, issues: list) -> str:
 
     issues_sorted = sorted(issues, key=_issue_priority)
 
+    # Cap issues LLM : trop d'issues → MAX_TOKENS sur les snippets → on garde les 12 plus critiques
+    _MAX_ISSUES_CAP = 12
+    if len(issues_sorted) > _MAX_ISSUES_CAP:
+        phase3_log.info(
+            "Pre-Patcher : %d issues — cap à %d (priorité descendante pour éviter MAX_TOKENS)"
+            % (len(issues_sorted), _MAX_ISSUES_CAP)
+        )
+        issues_sorted = issues_sorted[:_MAX_ISSUES_CAP]
+
     # S5 — Vérifier syntaxe AVANT la boucle issue
     # Si le code est déjà cassé, skip tous les appels LLM snippet (inutiles + lents)
     # Les corrections programmatiques (injections) s'appliquent quand même
@@ -643,6 +652,14 @@ def run(html: str, issues: list) -> str:
             'combo': '0', 'paused': 'false', 'gameOver': 'false',
             'angle': '0', 'dist': '0', 'dx': '0', 'dy': '0',
             'animId': 'null', 'sfx': '{}',
+            # Vars fréquemment oubliées — auto-détectées par auto-learner
+            'life': '0', 'closest': 'null', 'hit': 'false', 'invincible': 'false',
+            'grid': '[]', 'gravity': '900', 'current': 'null', 'power': '0',
+            'option': 'null', 'selected': 'null', 'state': 'null',
+            'waveAnnouncetimer': '0', 'wavetimer': '3',
+            'activepowerups': '[]', 'currentupgrades': '[]',
+            'down': 'false', 'firerate': '0.2', 'multiplier': '1',
+            'upgrades': '[]', 'upgrade': 'null',
         }
         _matched_common = None
         for cv_name, cv_default in _COMMON_VARS_DEFAULTS.items():
@@ -677,6 +694,46 @@ def run(html: str, issues: list) -> str:
                 script = _inject_before_domready(script, inject)
                 applied.append(f"{cv_name} déclaré globalement (common_vars)")
             continue  # toujours skip — même si déjà déclaré
+
+        # ── PALETTE non définie — injection objet de couleurs complet ──
+        if 'palette' in issue_lower and ('not defined' in issue_lower or 'déclaré' in issue_lower or 'défini' in issue_lower):
+            if not re.search(r'\b(?:var|let|const)\s+PALETTE\s*=', script):
+                inject = (
+                    "var PALETTE = {bg:'#0a0a1a',player:'#00ffcc',enemy:'#ff4444',boss:'#ff00ff',"
+                    "bullet:'#ffff00',ui:'#ffffff',shield:'#00aaff',particle:'#ffaa00',"
+                    "bulletHit:'#ff8800',damageText:'#ff0000',enemyBomberBody:'#ff6600',"
+                    "enemyBomberOutline:'#ffcc00',drone:'#44ff88',turret:'#ff8844'};\n"
+                )
+                script = _inject_before_domready(script, inject)
+                applied.append("PALETTE injectée (objet de couleurs default)")
+            continue
+
+        # ── _AC (AudioContext) non défini ──
+        if '_ac' in issue_lower and ('not defined' in issue_lower or 'déclaré' in issue_lower):
+            if not re.search(r'\b_AC\b', script):
+                inject = "var _AC = null; try { _AC = new (window.AudioContext||window.webkitAudioContext)(); } catch(e) {}\n"
+                script = _inject_before_domready(script, inject)
+                applied.append("_AC (AudioContext) injecté")
+            continue
+
+        # ── ENEMY_SPEED_TYPE, ENEMY_HP_TYPE, ENEMY_*_* non définis ──
+        _enemy_const_m = re.search(r'\b(enemy_\w+)\b.*(?:not defined|déclaré|défini)', issue_lower)
+        if _enemy_const_m:
+            const_name = _enemy_const_m.group(1).upper()
+            if not re.search(rf'\b(?:var|let|const)\s+{re.escape(const_name)}\b', script):
+                default_val = '100' if 'speed' in const_name.lower() else ('1' if 'hp' in const_name.lower() or 'dmg' in const_name.lower() else '100')
+                inject = f"var {const_name} = {default_val}; /* valeur par défaut auto-injectée */\n"
+                script = _inject_before_domready(script, inject)
+                applied.append(f"{const_name} injecté (constante ALL_CAPS manquante)")
+            continue
+
+        # ── waveAnnounceTimer non déclaré ──
+        if 'waveannouncetimer' in issue_lower and ('not defined' in issue_lower or 'déclaré' in issue_lower):
+            if not re.search(r'\bwaveAnnounceTimer\b', script):
+                inject = "var waveAnnounceTimer = 0; var waveAnnounceTxt = '';\n"
+                script = _inject_before_domready(script, inject)
+                applied.append("waveAnnounceTimer injecté")
+            continue
 
         # ── Constantes ALL_CAPS manquantes (BOSS_DEFS, spawnPatterns, etc.) ──
         # Ces constantes sont utilisées par Gemini mais pas toujours déclarées.

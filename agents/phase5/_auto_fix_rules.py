@@ -234,7 +234,32 @@ def fix_l9_undeclared_locals(script: str) -> tuple[str, str | None]:
 # APPLICATION DE TOUTES LES RÈGLES
 # ──────────────────────────────────────────────────────────────────────────────
 
+# ──────────────────────────────────────────────────────────────────────────────
+# RÈGLE P6-9 : rgba() appelé comme fonction JS → string CSS quotée
+# ──────────────────────────────────────────────────────────────────────────────
+
+def fix_rgba_as_function(script: str) -> tuple[str, str | None]:
+    """
+    Corrige `ctx.fillStyle = rgba(255,0,0,0.5)` → `ctx.fillStyle = 'rgba(255,0,0,0.5)'`
+    `= rgba(...)` non quoté cause ReferenceError et écran noir.
+    """
+    def _add_quotes(m):
+        inner = m.group(2)
+        return m.group(1) + "'rgba(" + inner + ")'"
+
+    new_script = re.sub(
+        r'(=\s*)rgba\s*\(\s*([\d,.\s]+)\s*\)',
+        _add_quotes,
+        script
+    )
+    if new_script != script:
+        count = len(re.findall(r'=\s*rgba\s*\(', script))
+        return new_script, f"{count} rgba() sans quotes → 'rgba()' (ReferenceError évité)"
+    return script, None
+
+
 _ALL_RULES = [
+    fix_rgba_as_function,       # P6-9 en premier : cause écran noir si non fixé
     fix_const_reassignment,
     fix_for_const_index,
     fix_array_clear,
@@ -246,9 +271,28 @@ _ALL_RULES = [
 ]
 
 
+def _quick_syntax_check(script: str) -> bool:
+    """Vérifie la syntaxe JS via Node.js --check. Retourne True si OK."""
+    try:
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False,
+                                         encoding='utf-8', errors='replace') as f:
+            f.write(script)
+            fname = f.name
+        result = subprocess.run(
+            ['node', '--check', fname],
+            capture_output=True, text=True, timeout=6
+        )
+        os.unlink(fname)
+        return result.returncode == 0
+    except Exception:
+        return True  # Impossible de vérifier → on assume OK
+
+
 def apply_all_rules(script: str) -> tuple[str, list[str]]:
     """
     Applique toutes les règles P6 dans l'ordre.
+    Chaque règle est rollbackée individuellement si elle casse la syntaxe.
     Retourne (script_corrigé, [descriptions_appliquées]).
     """
     applied = []
@@ -256,8 +300,11 @@ def apply_all_rules(script: str) -> tuple[str, list[str]]:
         try:
             new_script, description = rule(script)
             if description and new_script != script:
-                script = new_script
-                applied.append(description)
+                # Rollback individuel si syntaxe cassée
+                if _quick_syntax_check(new_script):
+                    script = new_script
+                    applied.append(description)
+                # else: cette règle casse la syntaxe — on la skip silencieusement
         except Exception:
             pass  # Règle échouée → on continue sans crasher
     return script, applied

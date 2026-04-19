@@ -165,4 +165,4 @@ Réponds en JSON :
     "architecture_code": {"fonctions_cles": ["init", "gameLoop", "update", "draw"]},
 })
 def _call(prompt: str) -> dict:
-    return call_gemini_json(prompt, temperature=0.3, system_instruction=SYSTEM)
+    return call_gemini_json(prompt, temperature=0.3, system_instruction=SYSTEM, max_tokens=32000)

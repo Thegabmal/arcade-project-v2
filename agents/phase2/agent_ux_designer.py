@@ -170,4 +170,4 @@ Reponds en JSON :
     "lisibilite": {},
 })
 def _call(prompt: str) -> dict:
-    return call_gemini_json(prompt, temperature=0.5, system_instruction=SYSTEM)
+    return call_gemini_json(prompt, temperature=0.5, system_instruction=SYSTEM, max_tokens=32000)

@@ -48,7 +48,7 @@ def cmd_save(description: str = ""):
         return
 
     _run(['git', 'tag', tag])
-    print(f"[snapshot] ✓ Snapshot créé : {tag}")
+    print(f"[snapshot] OK Snapshot cree : {tag}")
     if description:
         print(f"[snapshot]   Description : {description}")
 

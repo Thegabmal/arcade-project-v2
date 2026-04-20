@@ -454,6 +454,53 @@ def _run_playwright(code: str, genre_profile: GenreProfile) -> EvaluationResult:
                 tests_echoues.append({"nom": "Stabilité", "score": 0,
                                       "commentaire": f"{new_count} nouvelle(s) erreur(s) critique(s) après interactions"})
 
+            # C2 — Test player.hp accessible et positif
+            try:
+                _hp_val = page.evaluate("""() => {
+                    if (typeof player !== 'undefined' && player !== null) {
+                        if (typeof player.hp === 'number') return player.hp;
+                        if (typeof player.lives === 'number') return player.lives;
+                        if (typeof player.health === 'number') return player.health;
+                    }
+                    if (typeof lives !== 'undefined' && typeof lives === 'number') return lives;
+                    return -1;
+                }""")
+                if _hp_val > 0:
+                    tests_passes.append({"nom": "Santé joueur", "score": 0.5,
+                                         "commentaire": f"player hp/lives = {_hp_val} (positif et accessible)"})
+                elif _hp_val == 0:
+                    tests_echoues.append({"nom": "Santé joueur", "score": 0,
+                                          "commentaire": "player.hp = 0 dès le début (game over immédiat ou init incorrecte)"})
+            except Exception:
+                pass
+
+            # C5 — Test HUD : score visible dans la zone haute du canvas
+            try:
+                _hud_ok = page.evaluate("""() => {
+                    const canvas = document.querySelector('canvas');
+                    if (!canvas || canvas.width === 0) return -1;
+                    try {
+                        const ctx = canvas.getContext('2d');
+                        if (!ctx) return -1;
+                        // Échantillonner la zone HUD (top 10% du canvas)
+                        const hudH = Math.max(1, Math.floor(canvas.height * 0.10));
+                        const d = ctx.getImageData(0, 0, canvas.width, hudH).data;
+                        let bright = 0;
+                        for (let i = 0; i < d.length; i += 4) {
+                            if (d[i] > 30 || d[i+1] > 30 || d[i+2] > 30) bright++;
+                        }
+                        return bright / (d.length / 4);
+                    } catch(e) { return -1; }
+                }""")
+                if _hud_ok > 0.01:
+                    tests_passes.append({"nom": "HUD visible", "score": 0.5,
+                                         "commentaire": f"Zone HUD (top 10%) non vide ({_hud_ok*100:.0f}% pixels)"})
+                elif _hud_ok >= 0:
+                    tests_echoues.append({"nom": "HUD visible", "score": 0,
+                                          "commentaire": "Zone HUD noire — score/vies probablement non affichés"})
+            except Exception:
+                pass
+
             browser.close()
 
     finally:
@@ -462,15 +509,16 @@ def _run_playwright(code: str, genre_profile: GenreProfile) -> EvaluationResult:
     # Calcul du score (normalisé sur max_score ajusté)
     # max_score : 1.5 (canvas) + 1.5 (JS load) + 2.5 (visible) + 2.0 (loop) + 1.0 (FPS)
     #           + 1.5 (démarrage jeu) + 1.5 (joueur réactif) + 2.0 (score s'incrémente)
-    #           + 1.0 (inputs sans crash) + 0.5 (localStorage) + 1.5 (stabilité) = 16.0
-    # Sans hooks : 1.5+1.5+2.5+2.0+1.0+1.5+1.5+1.0+0.5+1.5 = 14.0
+    #           + 1.0 (inputs sans crash) + 0.5 (localStorage) + 1.5 (stabilité)
+    #           + 0.5 (santé joueur C2) + 0.5 (HUD visible C5) = 17.0
+    # Sans hooks : 1.5+1.5+2.5+2.0+1.0+1.5+1.5+1.0+0.5+1.5+0.5+0.5 = 15.0
     score_brut = sum(t["score"] for t in tests_passes)
     webgl_partial = any("score partiel" in t.get("commentaire", "") for t in tests_passes if t.get("nom") == "Contenu visible")
     _with_hooks_tests = any(t.get("nom") in ("Joueur réactif", "Score s'incrémente") for t in tests_passes + tests_echoues)
     if webgl_partial:
-        max_score = 12.0 if _with_hooks_tests else 11.5
+        max_score = 13.0 if _with_hooks_tests else 12.5
     else:
-        max_score = 16.0 if _with_hooks_tests else 14.0
+        max_score = 17.0 if _with_hooks_tests else 15.0
     ev.score = min(10.0, (score_brut / max_score) * 10)
 
     # Pénalité dure : écran noir = score plafonné à 3.0 quel que soit le reste

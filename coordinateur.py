@@ -633,6 +633,13 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
 
     code, erreurs_passees = _post_generation_cleanup(code, erreurs_passees)
 
+    # E1 — Live preview : stocker le code généré pour /api/preview
+    try:
+        from logger import store_code_preview
+        store_code_preview(code)
+    except Exception:
+        pass
+
     # G2 : Cohérence technologie_rendu — si le code contient THREE mais genre_profile dit canvas2d
     _code_has_three = 'THREE.' in code or 'new THREE.' in code
     if _code_has_three and genre_profile.technologie_rendu != "threejs":

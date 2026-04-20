@@ -966,6 +966,133 @@ def _extract_object_schemas(js: str) -> str:
     return "SCHÉMA EXACT des objets de L1 (utilise CES propriétés, n'en invente pas d'autres) :\n" + "\n".join(schemas[:10])
 
 
+# ── Symbol Table A+B+C — anti-hallucination de constantes ──────────────────
+
+_JS_ALLCAPS_BUILTINS = frozenset({
+    'NaN', 'Infinity', 'Math', 'JSON', 'Object', 'Array', 'String', 'Number',
+    'Boolean', 'Date', 'RegExp', 'Error', 'TypeError', 'RangeError', 'SyntaxError',
+    'Promise', 'Symbol', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Proxy', 'Reflect',
+    'console', 'undefined', 'null', 'true', 'false', 'this', 'arguments',
+    'PI', 'E', 'LN2', 'LN10', 'LOG2E', 'LOG10E', 'SQRT2',
+    'MAX_SAFE_INTEGER', 'MIN_SAFE_INTEGER', 'MAX_VALUE', 'MIN_VALUE',
+    'POSITIVE_INFINITY', 'NEGATIVE_INFINITY', 'EPSILON',
+    'W', 'H', 'INT8', 'UINT8', 'INT16', 'UINT16', 'INT32', 'UINT32',
+    'FLOAT32', 'FLOAT64', 'BYTES_PER_ELEMENT',
+    'KEYDOWN', 'KEYUP', 'KEYPRESS', 'MOUSEDOWN', 'MOUSEUP', 'MOUSEMOVE',
+    'CLICK', 'CONTEXTMENU', 'TOUCHSTART', 'TOUCHEND', 'TOUCHMOVE',
+})
+
+
+def _build_symbol_table(l1_js: str) -> dict:
+    """Extract declared symbols from L1 to prevent ALLCAPS hallucination in L2-L9."""
+    table: dict = {
+        "allcaps": {},      # NAME -> value snippet (≤80 chars)
+        "type_keys": {},    # arr_name -> set of type string values
+        "functions": set(),
+        "all_names": set(),
+    }
+
+    # Top-level var/let/const declarations
+    for m in re.finditer(r'^(?:var|let|const)\s+([\w$]+)\s*=\s*(.{0,200})', l1_js, re.MULTILINE):
+        name = m.group(1)
+        val = m.group(2).strip().rstrip(';,')
+        table["all_names"].add(name)
+        if name == name.upper() and len(name) > 1 and not name.isdigit():
+            table["allcaps"][name] = val[:80]
+
+    # Function declarations
+    for m in re.finditer(r'(?:^|\n)\s*function\s+([\w$]+)\s*\(', l1_js):
+        fn = m.group(1)
+        table["functions"].add(fn)
+        table["all_names"].add(fn)
+
+    # ALLCAPS arrays with {type:'xxx'} entries → extract type values
+    for m in re.finditer(r'\b([A-Z_][A-Z0-9_]{2,})\s*=\s*\[', l1_js):
+        arr_name = m.group(1)
+        start = m.end()
+        depth, end = 1, start
+        while end < len(l1_js) and depth > 0:
+            c = l1_js[end]
+            if c == '[':
+                depth += 1
+            elif c == ']':
+                depth -= 1
+            end += 1
+        arr_body = l1_js[start:end - 1]
+        type_vals = re.findall(r'\btype\s*:\s*[\'"](\w+)[\'"]', arr_body)
+        if type_vals:
+            table["type_keys"][arr_name] = set(type_vals)
+
+    return table
+
+
+def _format_global_contract(table: dict) -> str:
+    """Format symbol table as a compact injection block for L2-L9 prompts."""
+    lines: list = []
+    if table["allcaps"]:
+        lines.append("CONTRAT GLOBAL — constantes déclarées en L1 (N'EN INVENTER AUCUNE AUTRE) :")
+        for name, val in sorted(table["allcaps"].items())[:30]:
+            lines.append(f"  {name} = {val[:60]}")
+    if table["type_keys"]:
+        lines.append("TYPES D'ENTITÉS — lire depuis le tableau, NE PAS créer ALLCAPS_TYPE dérivés :")
+        for arr_name, keys in sorted(table["type_keys"].items()):
+            types_str = ', '.join(sorted(keys)[:10])
+            singular = arr_name.rstrip('S') if arr_name.endswith('S') else arr_name
+            lines.append(
+                f"  {arr_name}: types=[{types_str}]"
+                f" → accéder via entite.speed/.hp/.dmg — JAMAIS {singular}_SPEED_DRONE etc."
+            )
+    return '\n'.join(lines) if lines else ""
+
+
+def _derive_constant_value(name: str) -> str:
+    """Heuristic numeric value for an undeclared ALLCAPS symbol."""
+    nl = name.lower()
+    if 'speed' in nl:
+        return '150'
+    if 'rate' in nl or 'interval' in nl or 'delay' in nl:
+        return '0.5'
+    if 'hp' in nl or 'health' in nl or 'life' in nl:
+        return '3'
+    if 'size' in nl or 'radius' in nl or 'width' in nl or 'height' in nl:
+        return '24'
+    if 'dmg' in nl or 'damage' in nl or 'power' in nl:
+        return '1'
+    if 'max' in nl:
+        return '100'
+    if 'score' in nl or 'point' in nl:
+        return '10'
+    if 'time' in nl or 'timer' in nl or 'dur' in nl:
+        return '2'
+    if 'alpha' in nl or 'opacity' in nl:
+        return '1'
+    return '1'
+
+
+def _resolve_undeclared_symbols(fragment_js: str, table: dict, accumulated: str) -> tuple:
+    """Scan a generated layer, inject var declarations for undefined ALLCAPS."""
+    # Collect all declared names: symbol table + accumulated + fragment itself
+    all_declared: set = set(table["all_names"]) | _JS_ALLCAPS_BUILTINS
+    for m in re.finditer(r'(?:var|let|const|function)\s+([\w$]+)', accumulated):
+        all_declared.add(m.group(1))
+    for m in re.finditer(r'(?:var|let|const|function)\s+([\w$]+)', fragment_js):
+        all_declared.add(m.group(1))
+
+    # Find ALLCAPS identifiers used but not declared
+    used_caps = set(re.findall(r'\b([A-Z][A-Z0-9_]{2,})\b', fragment_js))
+    undefined_caps = used_caps - all_declared
+    if not undefined_caps:
+        return fragment_js, []
+
+    inject_lines = []
+    for name in sorted(undefined_caps):
+        val = _derive_constant_value(name)
+        inject_lines.append(f"var {name} = {val}; // auto-resolved: not in L1")
+
+    header = "// [symbol-table] auto-resolved undefined constants\n" + "\n".join(inject_lines) + "\n\n"
+    return header + fragment_js, sorted(undefined_caps)
+
+
 def _layer_declared_str(accumulated_js: str) -> str:
     """Retourne la chaîne 'INTERDIT de redéclarer' avec hints de type pour les tableaux.
     Ex: 'enemies (Array), score (Number)' — évite enemies.x au lieu de enemies[i].x.
@@ -1904,16 +2031,20 @@ def _build_layer_context(
     accumulated: str,
     layer1_schema: str,
     accumulated_signatures: str,
-    tail_lines: int = 400
+    tail_lines: int = 400,
+    global_contract: str = ""
 ) -> str:
     """
-    Contexte anti-hallucination pour chaque couche — 3 parties :
+    Contexte anti-hallucination pour chaque couche — 4 parties :
+    0. Contrat global (symbol table L1 — empêche les constantes ALLCAPS hallucinées)
     1. Schéma typé L1 (contrat de propriétés — zéro hallucination de player.health si schéma dit player.hp)
     2. Signatures de toutes les fonctions définies (le LLM ne peut appeler que celles-là)
     3. Queue du code accumulé (cohérence de style, référence locale)
     Jamais le code brut intégral — évite le "lost in the middle".
     """
     parts = []
+    if global_contract:
+        parts.append(global_contract)
     if layer1_schema:
         parts.append(layer1_schema)
     if accumulated_signatures:
@@ -2472,6 +2603,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '  Ces constantes servent à écrêter les tableaux dans updateEnemies/updateBullets.\n'
         f'{_genre_extra(genre, 1)}'
         'INTERDIT : fonctions, gameLoop, init, addEventListener, requestAnimationFrame, new Audio(), new Image()\n'
+        '// @GLOBALS: liste toutes tes constantes ALLCAPS sur UNE ligne en commentaire à la fin (ex: // @GLOBALS: PLAYER_SPEED, BULLET_SPEED, ENEMY_TYPES, WAVE_DEFS)\n'
         'Output : JS pur uniquement.'
     )
 
@@ -2504,6 +2636,15 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         schemas_dict = _parse_object_schemas_dict(layer1_js)
         phase3_log.info("[layered] Schéma L1 extrait : %d objet(s)" % len(schemas_dict))
 
+    # ── Symbol Table A+B+C — construit après L1 ──
+    _symbol_table = _build_symbol_table(layer1_js)
+    _global_contract = _format_global_contract(_symbol_table)
+    if _global_contract:
+        phase3_log.info(
+            "[layered] Symbol table: %d constantes ALLCAPS, %d type-arrays"
+            % (len(_symbol_table["allcaps"]), len(_symbol_table["type_keys"]))
+        )
+
     # ── Extraction des clés PALETTE réellement déclarées en L1 ──
     # Permet d'injecter dans L6/L9 la liste exacte des clés disponibles → évite PALETTE.neonXxx undefined
     _palette_keys_declared: list[str] = []
@@ -2529,7 +2670,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     # ─────────────────────────────────────────────────────────────
     phase3_log.info("[layered] Couche 2 — spawn et initialisation")
     accumulated_signatures = _extract_function_signatures(accumulated)
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=300)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=300, global_contract=_global_contract)
 
     layer2_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n'
@@ -2632,6 +2773,9 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         if _critical_stub_count >= 2:
             return _run_compact_fallback(context, erreurs_passees=erreurs_passees)
 
+    layer2_js, _resolved2 = _resolve_undeclared_symbols(layer2_js, _symbol_table, accumulated)
+    if _resolved2:
+        phase3_log.info("[layered] L2 auto-resolved: %s" % ', '.join(_resolved2[:6]))
     accumulated += '\n\n' + layer2_js
     phase3_log.info("[layered] Couche 2 OK — %d chars" % len(layer2_js))
 
@@ -2640,7 +2784,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     # ─────────────────────────────────────────────────────────────
     phase3_log.info("[layered] Couche 3 — physique pure")
     accumulated_signatures = _extract_function_signatures(accumulated)
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=350)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=350, global_contract=_global_contract)
 
     layer3_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n'
@@ -2714,6 +2858,9 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         if _critical_stub_count >= 2:
             return _run_compact_fallback(context, erreurs_passees=erreurs_passees)
 
+    layer3_js, _resolved3 = _resolve_undeclared_symbols(layer3_js, _symbol_table, accumulated)
+    if _resolved3:
+        phase3_log.info("[layered] L3 auto-resolved: %s" % ', '.join(_resolved3[:6]))
     accumulated += '\n\n' + layer3_js
     phase3_log.info("[layered] Couche 3 OK — %d chars" % len(layer3_js))
 
@@ -2727,7 +2874,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     # ─────────────────────────────────────────────────────────────
     phase3_log.info("[layered] Couche 4 — collisions et conséquences")
     accumulated_signatures = _extract_function_signatures(accumulated)
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400, global_contract=_global_contract)
 
     layer4_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n\n'
@@ -2806,6 +2953,9 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         layer4_js = _make_hardcoded_collisions(decls4)
         _record_layer_event('layer4', False, reason="stub hardcoded collisions")
 
+    layer4_js, _resolved4 = _resolve_undeclared_symbols(layer4_js, _symbol_table, accumulated)
+    if _resolved4:
+        phase3_log.info("[layered] L4 auto-resolved: %s" % ', '.join(_resolved4[:6]))
     accumulated += '\n\n' + layer4_js
     phase3_log.info("[layered] Couche 4 OK — %d chars" % len(layer4_js))
 
@@ -2814,7 +2964,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     # ─────────────────────────────────────────────────────────────
     phase3_log.info("[layered] Couche 5 — boss et vagues")
     accumulated_signatures = _extract_function_signatures(accumulated)
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400, global_contract=_global_contract)
 
     layer5_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n\n'
@@ -2912,6 +3062,9 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         )
         _record_layer_event('layer5', False, reason="stub urgence")
 
+    layer5_js, _resolved5 = _resolve_undeclared_symbols(layer5_js, _symbol_table, accumulated)
+    if _resolved5:
+        phase3_log.info("[layered] L5 auto-resolved: %s" % ', '.join(_resolved5[:6]))
     accumulated += '\n\n' + layer5_js
     phase3_log.info("[layered] Couche 5 OK — %d chars" % len(layer5_js))
 
@@ -2931,7 +3084,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         _repair_sigs = _extract_function_signatures(accumulated)
         _repair_prompt = (
             f'Jeu : "{titre}" — genre : {genre}\n\n'
-            f'{_build_layer_context(accumulated, layer1_schema, _repair_sigs, tail_lines=250)}\n\n'
+            f'{_build_layer_context(accumulated, layer1_schema, _repair_sigs, tail_lines=250, global_contract=_global_contract)}\n\n'
             'MÉCANIQUES OBLIGATOIRES NON ENCORE IMPLÉMENTÉES — génère-les maintenant.\n'
             'RÈGLE ABSOLUE : ne redéclare AUCUNE fonction ou variable déjà présente ci-dessus.\n'
             'Ajoute UNIQUEMENT les systèmes manquants listés ci-dessous.\n\n'
@@ -3000,7 +3153,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     # ─────────────────────────────────────────────────────────────
     phase3_log.info("[layered] Couche 6 — rendu")
     accumulated_signatures = _extract_function_signatures(accumulated)
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400, global_contract=_global_contract)
 
     layer6_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n'
@@ -3077,6 +3230,9 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         layer6_js = _get_emergency_stub(3, genre, decls6)
         _record_layer_event('layer6', False, reason="stub urgence")
 
+    layer6_js, _resolved6 = _resolve_undeclared_symbols(layer6_js, _symbol_table, accumulated)
+    if _resolved6:
+        phase3_log.info("[layered] L6 auto-resolved: %s" % ', '.join(_resolved6[:6]))
     accumulated += '\n\n' + layer6_js
     phase3_log.info("[layered] Couche 6 OK — %d chars" % len(layer6_js))
 
@@ -3086,6 +3242,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     phase3_log.info("[layered] Couche 7 — boucle de jeu et contrôles")
     accumulated_signatures = _extract_function_signatures(accumulated)
     decls7 = _extract_js_declarations(accumulated)
+
     # H2 — Extraction complète des fonctions update/draw depuis le code accumulé
     # Inclure toutes les fonctions qui doivent être appelées dans gameLoop
     _update_prefixes = ('update', 'handle', 'tick', 'manage', 'process', 'run', 'step')
@@ -3117,7 +3274,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     )
     _init_call_lines = '\n   '.join(fn + '();' for fn in init_fns) if init_fns else 'initGame();'
 
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400, global_contract=_global_contract)
 
     # Variables déclarées dans L1/L2 — NE PAS les appeler comme fonctions
     _declared_vars = decls7['vars']
@@ -3250,6 +3407,9 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         if _critical_stub_count >= 2:
             return _run_compact_fallback(context, erreurs_passees=erreurs_passees)
 
+    layer7_js, _resolved7 = _resolve_undeclared_symbols(layer7_js, _symbol_table, accumulated)
+    if _resolved7:
+        phase3_log.info("[layered] L7 auto-resolved: %s" % ', '.join(_resolved7[:6]))
     accumulated += '\n\n' + layer7_js
     phase3_log.info("[layered] Couche 7 OK — %d chars" % len(layer7_js))
 
@@ -3323,7 +3483,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     phase3_log.info("[layered] Couche 8 — polish système")
     accumulated_signatures = _extract_function_signatures(accumulated)
     existing_fns_8 = set(_extract_js_declarations(accumulated)['funcs'])
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=350)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=350, global_contract=_global_contract)
 
     layer8_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n\n'
@@ -3452,6 +3612,9 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         decls_after_8 = _extract_js_declarations(layer8_js)
         new_fns_from_8 = [fn for fn in decls_after_8['funcs'] if fn not in decls_before_8 and fn != 'gameLoop']
 
+        layer8_js, _resolved8 = _resolve_undeclared_symbols(layer8_js, _symbol_table, accumulated)
+        if _resolved8:
+            phase3_log.info("[layered] L8 auto-resolved: %s" % ', '.join(_resolved8[:6]))
         accumulated += '\n\n' + layer8_js
         phase3_log.info("[layered] Couche 8 OK — %d chars" % len(layer8_js))
 
@@ -3617,6 +3780,9 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
             _record_layer_event('layer9', False, reason="accolades déséquilibrées")
             layer9_js = ""
         if layer9_js:
+            layer9_js, _resolved9 = _resolve_undeclared_symbols(layer9_js, _symbol_table, accumulated)
+            if _resolved9:
+                phase3_log.info("[layered] L9 auto-resolved: %s" % ', '.join(_resolved9[:6]))
             accumulated += '\n\n' + layer9_js
         # Runtime check L9 — rollback si L9 casse quelque chose de critique
         _rt9 = _validate_layer_runtime(_HTML_TEMPLATE.format(title="test", js_body=accumulated))
@@ -3734,6 +3900,21 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if 'sfx.' in accumulated and not re.search(r'\bvar\s+sfx\b|\blet\s+sfx\b|\bconst\s+sfx\b', accumulated):
         accumulated = "var sfx = {};\n" + accumulated
         phase3_log.info("[layered] sfx manquant — déclaration injectée")
+
+    # C1 — Garantie programmatique : handleBulletEnemyHit incrémente toujours score
+    _hit_m = re.search(r'function\s+handleBulletEnemyHit\s*\([^)]*\)\s*\{', accumulated)
+    if _hit_m:
+        _hit_start = _hit_m.end()
+        _hit_depth, _hit_end = 1, _hit_start
+        while _hit_end < len(accumulated) and _hit_depth > 0:
+            if accumulated[_hit_end] == '{': _hit_depth += 1
+            elif accumulated[_hit_end] == '}': _hit_depth -= 1
+            _hit_end += 1
+        _hit_body = accumulated[_hit_start:_hit_end - 1]
+        if 'score' not in _hit_body:
+            _score_patch = '\n  if(e && e.hp<=0){ score+=(e.points||10); }'
+            accumulated = accumulated[:_hit_end - 1] + _score_patch + accumulated[_hit_end - 1:]
+            phase3_log.info("[layered] C1 : score+= injecté dans handleBulletEnemyHit")
 
     accumulated = _inject_trycatch_gameloop(accumulated)
     if 'drawErrorScreen' in accumulated:

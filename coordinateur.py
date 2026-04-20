@@ -204,12 +204,14 @@ requestAnimationFrame(gameLoop);
 </script></body></html>"""
 
 
-def _parallel(tasks: list, max_workers: int = 4) -> dict:
+def _parallel(tasks: list, max_workers: int = 4, stagger_seconds: float = 3.0) -> dict:
     """
     Exécute des tâches en parallèle en propageant la queue SSE aux sous-threads.
     tasks = [(nom, fn, [args...]), ...]
+    stagger_seconds : délai entre chaque soumission pour éviter les spikes RPM.
     Retourne {nom: résultat}.
     """
+    import time as _time
     current_queue = get_thread_event_queue()
     results = {}
 
@@ -219,7 +221,11 @@ def _parallel(tasks: list, max_workers: int = 4) -> dict:
         return name, fn(*args)
 
     with ThreadPoolExecutor(max_workers=min(max_workers, len(tasks))) as ex:
-        futures = {ex.submit(_run, name, fn, args): name for name, fn, args in tasks}
+        futures = {}
+        for i, (name, fn, args) in enumerate(tasks):
+            if i > 0 and stagger_seconds > 0:
+                _time.sleep(stagger_seconds)
+            futures[ex.submit(_run, name, fn, args)] = name
         for future in as_completed(futures):
             try:
                 name, result = future.result()

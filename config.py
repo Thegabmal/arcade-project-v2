@@ -369,14 +369,11 @@ def call_gemini(
     max_tokens: int = 16384,
     disable_thinking: bool = False,
     model: str = None,
-    paid_fallback: bool = False,
 ) -> str:
     """
-    Appel Gemini sur les clés GRATUITES uniquement.
-    paid_fallback=False (défaut) : si toutes les clés gratuites sont épuisées, lève
-    _AllFreeKeysExhausted — la clé payante N'EST PAS utilisée.
-    paid_fallback=True : comportement legacy — fallback sur call_gemini_paid.
-    L'agent créateur (Phase 3) appelle call_gemini_paid directement, pas cette fonction.
+    Appel Gemini sur les clés GRATUITES d'abord.
+    Si épuisées → fallback clé payante en MODE CLASSIQUE (disable_thinking=True forcé).
+    Le mode pro (thinking activé) est réservé à call_gemini_paid() utilisé par le créateur.
 
     disable_thinking=True : désactive le thinking de Gemini 2.5-Flash pour préserver
     le budget de tokens pour la génération de code (évite les troncatures).
@@ -446,15 +443,12 @@ def call_gemini(
                         break  # Fallback payant
                     time.sleep(5)
 
-    # ── Fallback sur clé payante (uniquement si autorisé) ──
-    if not paid_fallback:
-        raise _AllFreeKeysExhausted(
-            "Toutes les clés gratuites épuisées — clé payante réservée au créateur (paid_fallback=False)"
-        )
-    print(f"  [Fallback payant] Utilisation clé payante pour appel non-créateur", flush=True)
+    # ── Fallback sur clé payante en MODE CLASSIQUE (thinking désactivé) ──
+    # Le mode pro (thinking) est réservé à call_gemini_paid() utilisé par le créateur.
+    print(f"  [Fallback payant] Clé payante mode classique (non-créateur)", flush=True)
     return call_gemini_paid(
         prompt=prompt, temperature=temperature, system_instruction=system_instruction,
-        json_mode=json_mode, max_tokens=max_tokens, disable_thinking=disable_thinking,
+        json_mode=json_mode, max_tokens=max_tokens, disable_thinking=True,
         model=model,
     )
 

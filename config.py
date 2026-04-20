@@ -326,14 +326,11 @@ def call_gemini_paid(
     generation_config = _make_generation_config(temperature, max_tokens, system_instruction, json_mode, disable_thinking)
 
     import re as _re
+    import random as _rand_d3
+    _last_error = None
     for attempt in range(MAX_RETRIES * 2):
-        global _api_pause_until
-        with _key_lock:
-            pause_end = _api_pause_until
-        remaining = pause_end - time.time()
-        if remaining > 0:
-            time.sleep(remaining)
-
+        # Pas de _api_pause_until ici — ce lock est pour les clés gratuites uniquement.
+        # La clé payante est indépendante et ne doit pas attendre leur cooldown.
         current_paid = _get_paid_client_rate_limited()
         try:
             response = current_paid.models.generate_content(
@@ -343,11 +340,12 @@ def call_gemini_paid(
             )
             return _extract_text_from_response(response)
         except Exception as e:
+            _last_error = e
             error_str = str(e).lower()
+            print(f"  [Paid erreur tentative {attempt+1}] {str(e)[:120]}", flush=True)
             if "429" in error_str or "quota" in error_str or "resource exhausted" in error_str:
                 _retry_match = _re.search(r"retry in ([0-9]+(?:\.[0-9]+)?)s", str(e), _re.IGNORECASE)
                 # D3 : backoff exponentiel — 5s, 10s, 20s, 40s... plafonné à 120s
-                import random as _rand_d3
                 wait = float(_retry_match.group(1)) + 1.0 if _retry_match else min(5 * (2 ** attempt) + _rand_d3.uniform(0, 3), 120)
                 print(f"  [Paid 429] Attente {wait:.0f}s avant retry", flush=True)
                 time.sleep(wait)
@@ -358,7 +356,7 @@ def call_gemini_paid(
                     raise
                 time.sleep(5)
 
-    raise RuntimeError(f"call_gemini_paid : échec après {MAX_RETRIES * 2} tentatives")
+    raise RuntimeError(f"call_gemini_paid : échec après {MAX_RETRIES * 2} tentatives — dernière erreur : {_last_error}")
 
 
 def call_gemini(
@@ -395,8 +393,16 @@ def call_gemini(
                 pause_end = _api_pause_until
             remaining = pause_end - time.time()
             if remaining > 0:
-                print(f"  [Pause globale] Attente {remaining:.0f}s", flush=True)
-                time.sleep(remaining)
+                # Vérifier si des clés ont encore du RPD avant d'attendre
+                try:
+                    _get_available_client()
+                    # Clés dispo → pause légitime (RPM), attendre
+                    print(f"  [Pause globale] Attente {remaining:.0f}s", flush=True)
+                    time.sleep(remaining)
+                except _AllFreeKeysExhausted:
+                    # Toutes épuisées en RPD → inutile d'attendre, fallback payant immédiat
+                    print(f"  [Pause globale] Clés RPD épuisées — skip pause, fallback payant", flush=True)
+                    break
 
             try:
                 key_idx, current_client = _get_available_client()

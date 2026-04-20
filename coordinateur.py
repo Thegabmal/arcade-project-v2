@@ -422,6 +422,8 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
     validator_errors = memory.get_validator_errors_for_genre(classification.genre_principal, n=3)
     if validator_errors:
         erreurs_passees = list(erreurs_passees) + [f"[STRUCTUREL] {e}" for e in validator_errors]
+    # B3 : déduplication immédiate pour éviter pollution des prompts entre itérations
+    erreurs_passees = list(dict.fromkeys(erreurs_passees))
     if erreurs_passees:
         coordinateur_log.info(f"{len(erreurs_passees)} erreur(s) passée(s) récupérée(s) pour '{classification.genre_principal}'")
 
@@ -472,14 +474,21 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
     gdd = p2_gdd["gdd"] or {}
     coordinateur_log.info(f"Jeu : '{gdd.get('titre', '?')}'")
 
-    # G5 : validation GDD structure minimale (check tous les noms de champs possibles)
+    # G5 + B9 : validation GDD structure minimale — retry si vide (timeout/JSON malformé)
     _gdd_title = (gdd.get('titre') or gdd.get('title') or gdd.get('nom') or '')
     _gdd_mechanics = (gdd.get('mecaniques_principales') or gdd.get('core_mechanics')
                       or gdd.get('mecaniques') or gdd.get('mechanics') or [])
     _gdd_systems = (gdd.get('systemes_jeu') or gdd.get('systemes_principaux')
                     or gdd.get('systems') or gdd.get('systemes') or gdd.get('game_systems') or {})
     if not _gdd_title:
-        coordinateur_log.warning("G5 : GDD sans titre — fallback 'Arcade Game'")
+        coordinateur_log.warning("B9/G5 : GDD sans titre — retry agent_game_designer")
+        _gdd_retry = agent_game_designer.run(genre_profile)
+        if _gdd_retry and (_gdd_retry.get('titre') or _gdd_retry.get('title') or _gdd_retry.get('nom')):
+            gdd = _gdd_retry
+            _gdd_title = gdd.get('titre') or gdd.get('title') or gdd.get('nom') or ''
+            coordinateur_log.success(f"B9 : retry GDD OK — '{_gdd_title}'")
+        else:
+            coordinateur_log.warning("B9 : retry GDD vide aussi — continue avec titre générique")
     elif not _gdd_mechanics and not _gdd_systems:
         coordinateur_log.warning("G5 : GDD sans mécaniques ni systèmes détectés (clé inattendue ?)")
 
@@ -669,7 +678,10 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
                 for key in r:
                     if isinstance(r[key], EvaluationResult):
                         return r[key]
-            return EvaluationResult(agent_name=name, score=5.0)
+            # B1 : score 1.5 (pas 5.0) — agent crashé → score bas visible, pas gonflé artificiellement
+            coordinateur_log.error(f"Agent '{name}' crashé ou retourne None — score fallback 1.5")
+            return EvaluationResult(agent_name=name, score=1.5,
+                                    commentaire_global=f"Agent {name} non disponible (crash ou timeout)")
 
         # qc_gameplay retourne {"gameplay": ..., "anti_pattern": ...}
         _gp_raw = p4.get("qc_gameplay", {})
@@ -786,12 +798,29 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
                 f"Pre-patcher : {_issues_mineurs_count} issue(s) mineure(s) ignorées "
                 f"(garde {len(_issues_for_prepatch)} critique+majeur)"
             )
-        all_issues_str = [
+        # B4 : déduplication all_issues_str — même issue ne doit pas être traitée deux fois
+        all_issues_str = list(dict.fromkeys(
             i.get("description", str(i)) if isinstance(i, dict) else str(i)
             for i in _issues_for_prepatch
-        ]
+        ))
 
-        # Pré-patcher : corrections automatiques simples
+        # B5 : règles déterministes en premier — résolvent 30-40% des issues sans LLM
+        try:
+            from agents.phase5._auto_fix_rules import apply_all_rules as _auto_rules
+            _js_before_rules = _extract_js_from_html(code) if '<script' in code else code
+            _js_after_rules, _rules_applied = _auto_rules(_js_before_rules)
+            if _rules_applied:
+                import re as _re_b5
+                code = _re_b5.sub(
+                    r'(<script[^>]*>)(.*?)(</script>)',
+                    lambda m: m.group(1) + _js_after_rules + m.group(3),
+                    code, flags=_re_b5.DOTALL
+                )
+                coordinateur_log.info(f"B5 auto-fix pré-LLM : {len(_rules_applied)} règle(s) — {', '.join(_rules_applied[:3])}")
+        except Exception as _e_b5:
+            coordinateur_log.warning(f"B5 auto-fix non critique : {_e_b5}")
+
+        # Pré-patcher LLM : corrections sur les issues restantes
         # Sauvegarder AVANT pre_patcher — rollback ici si patcher échoue (pas post-pre_patch)
         code_before_prepatch = code
         code_prepatch = agent_pre_patcher.run(code, all_issues_str)

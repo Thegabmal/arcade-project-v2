@@ -134,8 +134,8 @@ def get_quota_status() -> dict:
 # Compat : client global (utilisé par quelques imports directs)
 client = _paid_client if not _clients else _clients[0]
 
-MAX_CALLS_PER_MINUTE = int(os.getenv("GEMINI_RPM_LIMIT", "4"))        # Free: 5 RPM/clé
-MAX_CALLS_PER_DAY = int(os.getenv("GEMINI_RPD_LIMIT", "19"))          # Free: 20 RPD/clé
+MAX_CALLS_PER_MINUTE = int(os.getenv("GEMINI_RPM_LIMIT", "4"))        # Free: 5 RPM/clé (source: ai.google.dev/pricing)
+MAX_CALLS_PER_DAY = int(os.getenv("GEMINI_RPD_LIMIT", "19"))          # Free: 20 RPD/clé — payant: GEMINI_RPD_LIMIT=9999
 WINDOW_SECONDS = 60        # Fenêtre RPM = 1 minute
 
 # Pause globale partagée entre tous les threads — quand une clé déclenche la pause,

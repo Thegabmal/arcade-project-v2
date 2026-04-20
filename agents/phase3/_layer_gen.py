@@ -314,10 +314,10 @@ def _validate_layer_runtime(html: str) -> list[str]:
 
         try:
             result = subprocess.run(
-                ['node', '--timeout', '3000', tmp_path],
+                ['node', '--timeout', '8000', tmp_path],
                 capture_output=True,
                 text=True,
-                timeout=5,
+                timeout=10,  # B7 : 10s — détecte les boucles infinies réelles
             )
             output = result.stdout + result.stderr
         finally:

@@ -241,17 +241,42 @@ def fix_l9_undeclared_locals(script: str) -> tuple[str, str | None]:
 def fix_rgba_as_function(script: str) -> tuple[str, str | None]:
     """
     Corrige `ctx.fillStyle = rgba(255,0,0,0.5)` → `ctx.fillStyle = 'rgba(255,0,0,0.5)'`
+    Corrige aussi `= rgba(r,g,b,alpha)` avec des variables comme arguments.
     `= rgba(...)` non quoté cause ReferenceError et écran noir.
     """
+    # Règle : = rgba(...) non précédé d'une quote ouverte (donc pas déjà dans une string)
+    # On exclut les cas où rgba est déjà dans une chaîne : '...' ou "..."
+    # Le lookahead négatif (?<!['"]) vérifie que le = n'est pas suivi d'une quote AVANT rgba
     def _add_quotes(m):
         inner = m.group(2)
         return m.group(1) + "'rgba(" + inner + ")'"
 
+    # Match = rgba(...) avec n'importe quel contenu (variables, nombres, expressions simples)
+    # Exclusions : déjà entre guillemets → pas de match si rgba est précédé de ' ou "
     new_script = re.sub(
-        r'(=\s*)rgba\s*\(\s*([\d,.\s]+)\s*\)',
+        r'''(=\s*)(?<!['"=])rgba\s*\(([^'")\n]{1,120})\)(?!\s*['"])''',
         _add_quotes,
         script
     )
+    # Cas supplémentaire : = rgba(...) sur propriétés Canvas connues
+    if new_script == script:
+        new_script = re.sub(
+            r'((?:fillStyle|strokeStyle|shadowColor|color|background)\s*=\s*)rgba\s*\(([^)]{1,120})\)(?!\s*[\'"])',
+            lambda m: m.group(1) + "'rgba(" + m.group(2) + ")'",
+            script
+        )
+
+    # Cas template literal : ctx.fillStyle = `rgba(${r},${g},${b},0.5)` → ctx.fillStyle = 'rgba('+r+','+g+','+b+',0.5)'
+    # Ces template literals sont valides JS mais le contenu `rgba(` est parfois généré sans guillemets autour
+    # → ici on les laisse intacts (ce sont de vraies strings), mais on corrige rgba() sans backtick NI guillemet
+    # Cas bare : assignation directe sans quote NI backtick (le LLM oublie les guillemets)
+    if new_script == script:
+        new_script = re.sub(
+            r'(=\s*)(?<![\'\"`])rgba\s*\(([^)]{1,120})\)(?![\'\"`])',
+            lambda m: m.group(1) + "'rgba(" + m.group(2) + ")'",
+            new_script
+        )
+
     if new_script != script:
         count = len(re.findall(r'=\s*rgba\s*\(', script))
         return new_script, f"{count} rgba() sans quotes → 'rgba()' (ReferenceError évité)"

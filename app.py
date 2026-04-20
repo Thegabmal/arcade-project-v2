@@ -1476,7 +1476,7 @@ def api_health():
     health["checks"]["save_dir"] = {"ok": True, "game_files": game_count}
 
     # Check active sessions
-    health["checks"]["active_sessions"] = {"count": len(generation_sessions)}
+    health["checks"]["active_sessions"] = {"count": len(_sessions)}
 
     # Global status
     critical_failed = [k for k, v in health["checks"].items() if not v.get("ok") and k in ("gemini_api_key", "playwright")]

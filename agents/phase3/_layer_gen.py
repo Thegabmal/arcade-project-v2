@@ -93,6 +93,12 @@ _LAYER_SYSTEM_GRAPHIQUE = (
     "- Chaque fonction redefinite doit etre COMPLETE et auto-suffisante\n"
     "- Jamais de new Image(), fetch(), import()\n"
     "- Pas de limite de lignes — la beaute prend du temps\n"
+    "- INTERDIT ABSOLU : rgba() appelee comme une fonction JavaScript — cause ReferenceError et ecran noir.\n"
+    "  FAUX : ctx.fillStyle = rgba(255, 0, 0, 0.5)          ← CRASH\n"
+    "  FAUX : ctx.fillStyle = rgba(r, g, b, alpha)           ← CRASH\n"
+    "  VRAI : ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';        ← string CSS directe OK\n"
+    "  VRAI : ctx.globalAlpha = 0.5; ctx.fillStyle = '#f00'; ← alpha separe OK\n"
+    "  Meme regle pour rgb(), hsl(), hsla() — toujours entre guillemets simples ou doubles.\n"
 )
 
 # Canvas mock pour la validation Node.js (Axe 2)
@@ -110,11 +116,25 @@ var localStorage={getItem:function(){return null;},setItem:function(){},removeIt
 var performance={now:function(){return Date.now();}};
 var Image=function(){this.src='';this.onload=null;};
 var Audio=function(){this.src='';this.play=function(){return Promise.resolve();};this.pause=function(){};this.volume=1;};
+// Pièges LLM — ces fonctions CSS ne sont PAS des fonctions JS
+// Les définir comme undefined force un ReferenceError explicite si appelées sans guillemets
+// (au lieu d'un crash silencieux ou d'un bad string)
+// NON défini intentionnellement : rgba, rgb, hsl, hsla — ils doivent être des strings CSS
 """
 
 _NODE_RUNNER_SUFFIX = """\
+// Simuler quelques frames pour attraper les erreurs de rendu/update
 try { if(typeof init==='function') init(); } catch(e){ process.stdout.write('RUNTIME_ERROR:init:'+e.message+'\\n'); }
-try { if(typeof gameLoop==='function') gameLoop(16.7); } catch(e){ process.stdout.write('RUNTIME_ERROR:gameLoop:'+e.message+'\\n'); }
+// Frame 1 : menu
+try { if(typeof gameLoop==='function') gameLoop(16.7); } catch(e){ process.stdout.write('RUNTIME_ERROR:gameLoop(menu):'+e.message+'\\n'); }
+// Frame 2 : playing
+try { gameState='playing'; dt=0.016; if(typeof gameLoop==='function') gameLoop(33.4); } catch(e){ process.stdout.write('RUNTIME_ERROR:gameLoop(playing):'+e.message+'\\n'); }
+// Frame 3 : gameover
+try { gameState='gameover'; if(typeof gameLoop==='function') gameLoop(50.1); } catch(e){ process.stdout.write('RUNTIME_ERROR:gameLoop(gameover):'+e.message+'\\n'); }
+// Tester les fonctions draw séparément (détecte les rgba() non-quotés)
+try { if(typeof drawBackground==='function') drawBackground(); } catch(e){ process.stdout.write('RUNTIME_ERROR:drawBackground:'+e.message+'\\n'); }
+try { if(typeof drawHUD==='function') drawHUD(); } catch(e){ process.stdout.write('RUNTIME_ERROR:drawHUD:'+e.message+'\\n'); }
+try { if(typeof drawMenu==='function') drawMenu(); } catch(e){ process.stdout.write('RUNTIME_ERROR:drawMenu:'+e.message+'\\n'); }
 process.stdout.write('RUNTIME_OK\\n');
 """
 
@@ -1367,6 +1387,11 @@ def _stub_orphan_calls(accumulated_js: str) -> tuple[str, list[str]]:
         # Fonctions d'UI injectées comme stubs vides — elles doivent être générées en L7/L9
         'drawpausemenu', 'drawupgradeui', 'drawupgradeselect', 'drawinstructions',
         'drawpause', 'drawvictory', 'drawcredits',
+        # Noms génériques simples souvent hallucinations CSS/DOM
+        'effect', 'bar', 'panel', 'overlay', 'badge', 'tag', 'slot',
+        'frame', 'icon', 'label', 'button', 'menu', 'popup', 'modal',
+        # Fonctions CSS appelées comme JS (traitées par P6-9)
+        'rgba', 'rgb', 'hsl', 'hsla',
     }
     orphans = _check_gameloop_calls(accumulated_js)
     if not orphans:
@@ -1721,6 +1746,12 @@ def coherence_check(html: str) -> list:
             'indexOf', 'includes', 'join', 'split', 'toString', 'length',
             # Autres
             'performance', 'JSON', 'Object', 'Array', 'String', 'Number',
+            # Fonctions UI optionnelles — déclarées conditionnellement ou en L9
+            # Ne pas les signaler comme manquantes : elles sont appelées via typeof guard
+            'drawPauseMenu', 'drawUpgradeUI', 'drawUpgradeSelect', 'drawInstructions',
+            'drawPause', 'drawVictory', 'drawCredits', 'drawHUD', 'drawOverlay',
+            # Fonctions CSS natifs appelés comme JS par erreur — traités par P6-9
+            'rgba', 'rgb', 'hsl', 'hsla',
         }
         for fn in called:
             if fn not in declared and fn not in _excluded:
@@ -2391,8 +2422,12 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         f'{erreurs_str}{level_design_section}{snippets_section}\n\n'
         'Génère UNIQUEMENT les déclarations de données et état global.\n\n'
         'OBLIGATOIRE (sois PRÉCIS et RICHE — ces données définissent tout le gameplay) :\n'
-        '1. var PALETTE = {bg:"#0a0a1a",player:"#00ffcc",enemy:"#ff4444",...} — 8+ couleurs, adapte au thème\n'
-        '   OBLIGATOIRE : inclure au minimum les clés bg, player, enemy, boss, bullet, ui, shield, particle\n'
+        '1. var PALETTE = {bg:"#0a0a1a",player:"#00ffcc",enemy:"#ff4444",...} — 15+ couleurs, adapte au thème\n'
+        '   OBLIGATOIRE : inclure AU MINIMUM ces clés :\n'
+        '   bg, player, enemy, boss, bullet, ui, shield, particle,\n'
+        '   neonCyan, neonMagenta, neonOrange, neonYellow, neonGreen, neonPink, neonBlue,\n'
+        '   neonRed, neonWhite, neonPurple, neonTeal, neonGold,\n'
+        '   dark, darkGray, blue, cyan, green, red, white, gray, orange, purple, yellow, pink\n'
         '   IMPORTANT : déclarer PALETTE comme var global (NE PAS mettre const — peut être redéfini en L9)\n'
         '2. Constantes gameplay ALL_CAPS : PLAYER_SPEED, BULLET_SPEED, ENEMY_SPEED, MAX_LIVES, FIRE_RATE, BULLET_DMG\n'
         '   INTERDIT : constantes ENEMY_SPEED_TYPE séparées (ex: ENEMY_SPEED_DRONE) — utiliser enemy.speed dans ENEMY_TYPES[]\n'
@@ -2465,6 +2500,16 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if layer1_schema:
         schemas_dict = _parse_object_schemas_dict(layer1_js)
         phase3_log.info("[layered] Schéma L1 extrait : %d objet(s)" % len(schemas_dict))
+
+    # ── Extraction des clés PALETTE réellement déclarées en L1 ──
+    # Permet d'injecter dans L6/L9 la liste exacte des clés disponibles → évite PALETTE.neonXxx undefined
+    _palette_keys_declared: list[str] = []
+    _palette_raw_m = re.search(r'\bvar\s+PALETTE\s*=\s*\{([^}]+)\}', layer1_js, re.DOTALL)
+    if _palette_raw_m:
+        _palette_keys_declared = re.findall(r'(\w+)\s*:', _palette_raw_m.group(1))
+    if _palette_keys_declared:
+        phase3_log.info("[layered] PALETTE L1 : %d clé(s) : %s" % (len(_palette_keys_declared), ', '.join(_palette_keys_declared[:10])))
+    _palette_keys_hint = ', '.join(_palette_keys_declared) if _palette_keys_declared else 'bg, player, enemy, boss, bullet, ui, shield, particle, neonCyan, neonMagenta'
 
     # K5 — Extraire toutes les déclarations globales de L1 pour éviter les redéclarations dans L2-L9
     _l1_global_vars = re.findall(r'^(?:var|let|const)\s+([a-zA-Z_$]\w*)', layer1_js, re.MULTILINE)
@@ -2976,12 +3021,19 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '  + waveAnnounce : si waveAnnounce>0 { texte centré animé "VAGUE X!" }\n'
         '- drawMenu() : titre en grand, sous-titre, instructions "ESPACE pour jouer", high score\n'
         '- drawGameOver() : "GAME OVER", score final, high score, "ESPACE pour rejouer"\n\n'
+        f'PALETTE disponible — clés déclarées en L1 : {_palette_keys_hint}\n'
+        '   Utilise UNIQUEMENT ces clés — ne jamais inventer PALETTE.neonXxx si la clé n\'est pas dans la liste.\n\n'
         'RÈGLES VISUELLES :\n'
         '- ctx.save()/ctx.restore() pour TOUTE transformation\n'
         '- ctx.shadowColor + ctx.shadowBlur pour les éléments importants\n'
         '- Utilise PALETTE si déclaré, sinon couleurs directes cohérentes\n'
         '- Utilise UNIQUEMENT les propriétés du SCHÉMA L1\n'
-        '- NE PAS appliquer shakeX/shakeY dans AUCUNE fonction draw* — la game loop gère déjà ctx.translate(shakeX,shakeY) globalement avant tout dessin\n\n'
+        '- NE PAS appliquer shakeX/shakeY dans AUCUNE fonction draw* — la game loop gère déjà ctx.translate(shakeX,shakeY) globalement avant tout dessin\n'
+        '- INTERDIT ABSOLU : rgba() appelé comme une fonction JS — cela cause ReferenceError et écran noir.\n'
+        '  FAUX : ctx.fillStyle = rgba(r, g, b, 0.5)   ← ReferenceError\n'
+        '  VRAI : ctx.fillStyle = \'rgba(\' + r + \',\' + g + \',\' + b + \',0.5)\';\n'
+        '  VRAI : ctx.fillStyle = \'rgba(255, 0, 0, 0.5)\';   ← string directe\n'
+        '  VRAI : ctx.fillStyle = PALETTE.enemy;   ← clé PALETTE\n\n'
         'INTERDIT : gameLoop, logique de jeu, addEventListener, modification d\'état global\n'
         f'{_no_redecl_note}'
         'Output : JS pur uniquement — chaque fonction DOIT commencer par "draw".'
@@ -3508,10 +3560,18 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '   waveAnnounce si waveAnnounce>0.\n\n'
         '6. drawMenu() — titre avec glow, meilleur score, instruction clignotante.\n\n'
         '7. drawGameOver() — "GAME OVER" en rouge avec glow, score vs high score, instruction rejouer.\n\n'
+        f'PALETTE disponible — clés déclarées en L1 : {_palette_keys_hint}\n'
+        '   IMPORTANT : utilise UNIQUEMENT les clés listées ci-dessus — ne jamais inventer PALETTE.neonXxx, PALETTE.glow, PALETTE.accent si absents de la liste.\n'
+        '   Si une couleur n\'est pas dans PALETTE, utilise une string CSS directe (ex: \'#00ffcc\').\n\n'
         'RÈGLES ABSOLUES :\n'
         '- ctx.save()/ctx.restore() pour CHAQUE transformation — jamais de translate sans save/restore\n'
         '- Code COMPLET, pas de TODO ni de "/* comme avant */"\n'
-        '- Commence par les var declarations (typeof guard), puis les fonctions\n\n'
+        '- Commence par les var declarations (typeof guard), puis les fonctions\n'
+        '- INTERDIT ABSOLU : rgba() appelé comme une fonction JS — cause ReferenceError et écran noir.\n'
+        '  FAUX : ctx.fillStyle = rgba(0, 0, 0, 0.5)         ← ReferenceError\n'
+        '  FAUX : ctx.fillStyle = `rgba(${r},${g},${b},0.5)` ← template literal problématique\n'
+        '  VRAI : ctx.fillStyle = \'rgba(0,0,0,0.5)\';          ← string directe\n'
+        '  VRAI : ctx.globalAlpha = 0.5; ctx.fillStyle = \'#000\'; ← alpha séparé\n\n'
         f'{_no_redecl_note}'
         'Output : JS pur uniquement.'
     )
@@ -3626,7 +3686,15 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
                 "var PALETTE = {bg:'#0a0a1a',player:'#00ffcc',enemy:'#ff4444',boss:'#ff00ff',"
                 "bullet:'#ffff00',ui:'#ffffff',shield:'#00aaff',particle:'#ffaa00',"
                 "bulletHit:'#ff8800',damageText:'#ff0000',enemyBomberBody:'#ff6600',"
-                "enemyBomberOutline:'#ffcc00',drone:'#44ff88',turret:'#ff8844'};\n"
+                "enemyBomberOutline:'#ffcc00',drone:'#44ff88',turret:'#ff8844',"
+                # Clés neon générées par L9 — évite les undefined sur PALETTE.neonCyan etc.
+                "neonCyan:'#00ffff',neonMagenta:'#ff00ff',neonOrange:'#ff6600',"
+                "neonYellow:'#ffff00',neonGreen:'#00ff44',neonPink:'#ff0088',"
+                "neonBlue:'#0088ff',neonRed:'#ff2200',neonWhite:'#ffffff',"
+                "neonPurple:'#cc00ff',neonTeal:'#00ffcc',neonGold:'#ffd700',"
+                "dark:'#0a0a1a',darkGray:'#222244',blue:'#0066cc',cyan:'#00ccff',"
+                "green:'#00cc44',red:'#ff2200',white:'#ffffff',gray:'#888888',"
+                "orange:'#ff6600',purple:'#8800ff',yellow:'#ffdd00',pink:'#ff44aa'};\n"
             )
             accumulated = _palette_inject + accumulated
             phase3_log.info("[layered] PALETTE absente — injection fallback garantie")
@@ -3673,14 +3741,100 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
 
     rt_final = _validate_layer_runtime(final_html)
     if rt_final:
-        critical_final = [e for e in rt_final
+        critical_fatal = [e for e in rt_final
                           if 'init is not a function' in e or 'gameLoop is not a function' in e]
-        if critical_final:
+        if critical_fatal:
             phase3_log.warning(
-                "[layered] Erreur runtime critique finale : %s — fallback compact" % critical_final[0]
+                "[layered] Erreur runtime critique finale : %s — fallback compact" % critical_fatal[0]
             )
             return _run_compact_fallback(context, erreurs_passees=erreurs_passees)
-        phase3_log.info("[layered] Runtime final hints : %s" % '; '.join(rt_final[:3]))
+
+        # ── Réparation runtime ciblée (boucle 2 tentatives) ──────────────────────
+        # Si des erreurs `is not defined` / `Cannot read` subsistent après assemblage,
+        # on tente d'abord les règles auto-fix, puis un appel LLM chirurgical.
+        _rt_errors = [e for e in rt_final
+                      if any(kw in e for kw in ('is not defined', 'Cannot read', 'Unexpected token', 'SyntaxError'))]
+        if _rt_errors:
+            phase3_log.warning(
+                "[layered] %d erreur(s) runtime post-assemblage — tentative réparation : %s"
+                % (len(_rt_errors), _rt_errors[0][:80])
+            )
+            # Tentative 1 — règles déterministes (auto_fix_rules)
+            try:
+                from agents.phase5._auto_fix_rules import apply_all_rules as _apply_rules_repair
+                _js_repair = _extract_js_from_html(final_html)
+                _js_fixed, _rules_applied = _apply_rules_repair(_js_repair)
+                if _rules_applied:
+                    _html_repaired = re.sub(
+                        r'(<script[^>]*>)(.*?)(</script>)',
+                        lambda m: m.group(1) + _js_fixed + m.group(3),
+                        final_html, flags=re.DOTALL
+                    )
+                    _rt_after_rules = _validate_layer_runtime(_html_repaired)
+                    _rt_errors_after = [e for e in (_rt_after_rules or [])
+                                        if any(kw in e for kw in ('is not defined', 'Cannot read'))]
+                    if len(_rt_errors_after) < len(_rt_errors):
+                        final_html = _html_repaired
+                        phase3_log.info(
+                            "[layered] Réparation auto-fix : %d → %d erreur(s) : %s"
+                            % (len(_rt_errors), len(_rt_errors_after), ', '.join(_rules_applied[:3]))
+                        )
+                        _rt_errors = _rt_errors_after
+            except Exception as _e_repair_rules:
+                phase3_log.warning("[layered] Réparation auto-fix erreur : %s" % _e_repair_rules)
+
+            # Tentative 2 — LLM chirurgical si des erreurs subsistent
+            if _rt_errors:
+                try:
+                    _err_lines = '\n'.join('- ' + e for e in _rt_errors[:5])
+                    _js_to_repair = _extract_js_from_html(final_html)
+                    # Extraire les fonctions impliquées pour donner du contexte
+                    _implicated = []
+                    for _err in _rt_errors[:4]:
+                        _m_fn = re.search(r"'(\w+)' is not defined", _err)
+                        if _m_fn:
+                            _implicated.append(_m_fn.group(1))
+                    _ctx_fns = ""
+                    for _fn_name in _implicated[:3]:
+                        _fn_m = re.search(
+                            r'function\s+' + re.escape(_fn_name) + r'\s*\([^)]*\)\s*\{',
+                            _js_to_repair
+                        )
+                        if not _fn_m:
+                            _ctx_fns += f"\n// '{_fn_name}' est utilisé mais n'existe pas dans le code."
+                    _llm_repair_prompt = (
+                        f'Code JS d\'un jeu HTML5 Canvas 2D — erreurs runtime détectées :\n{_err_lines}\n\n'
+                        f'{_ctx_fns}\n\n'
+                        'MISSION : corrige UNIQUEMENT les erreurs listées ci-dessus.\n'
+                        '- Pour chaque variable "X is not defined" : ajoute "var X = [valeur_initiale];" en début de script\n'
+                        '- Pour chaque "rgba() is not a function" ou appel rgba(...) non quoté : remplace par une string CSS\n'
+                        '- Pour chaque propriété "Cannot read properties of undefined" : ajoute un guard "if(!obj) return;"\n'
+                        'NE MODIFIE PAS le reste du code — retourne UNIQUEMENT les lignes de correction à injecter en début de script.\n'
+                        'Format de retour : code JS pur (déclarations var + corrections), sans HTML ni markdown.'
+                    )
+                    _repair_code = _call_layer(_LAYER_SYSTEM, _llm_repair_prompt, max_tokens=4000, temperature=0.05, disable_thinking=True)
+                    if _repair_code and len(_repair_code) > 10:
+                        _js_with_repair = _repair_code.strip() + '\n\n' + _js_to_repair
+                        _html_llm_repaired = re.sub(
+                            r'(<script[^>]*>)(.*?)(</script>)',
+                            lambda m: m.group(1) + _js_with_repair + m.group(3),
+                            final_html, flags=re.DOTALL
+                        )
+                        _rt_after_llm = _validate_layer_runtime(_html_llm_repaired)
+                        _rt_errors_llm = [e for e in (_rt_after_llm or [])
+                                          if any(kw in e for kw in ('is not defined', 'Cannot read'))]
+                        if len(_rt_errors_llm) <= len(_rt_errors):
+                            final_html = _html_llm_repaired
+                            phase3_log.info(
+                                "[layered] Réparation LLM ciblée : %d → %d erreur(s)"
+                                % (len(_rt_errors), len(_rt_errors_llm))
+                            )
+                        else:
+                            phase3_log.warning("[layered] Réparation LLM aggravait les erreurs — ignorée")
+                except Exception as _e_repair_llm:
+                    phase3_log.warning("[layered] Réparation LLM erreur : %s" % _e_repair_llm)
+        else:
+            phase3_log.info("[layered] Runtime final hints : %s" % '; '.join(rt_final[:3]))
 
     # Q12 — Couche 10 : revue programmatique approfondie (deep review inter-couches)
     try:

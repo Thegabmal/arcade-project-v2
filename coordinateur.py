@@ -305,12 +305,14 @@ STYLE_GRAPHIQUE_MAP = {
     "3d_lowpoly":          "3D low-poly",
 }
 
-def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None) -> dict:
+def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
+        _max_iterations: int | None = None) -> dict:
     """
     Pipeline principale. Prend un prompt en entrée et retourne un dict avec :
     - genre_profile, gdd, code, scores, verdict, html_path
     style_graphique : clé optionnelle (ex: "pixel_art_gameboy") — écrase la détection auto.
     stop_event : threading.Event optionnel — si déclenché, la pipeline s'arrête proprement.
+    _max_iterations : override interne pour run_quick() (1 passe sans remediation).
     """
     def _check_stop():
         if stop_event and stop_event.is_set():
@@ -640,9 +642,10 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None) -> 
     bundle = None
     iterations_sans_progres = 0
 
-    for iteration in range(1, MAX_ITERATIONS + 1):
+    _iters = _max_iterations if _max_iterations is not None else MAX_ITERATIONS
+    for iteration in range(1, _iters + 1):
         _check_stop()
-        coordinateur_log.section(f"Iteration {iteration}/{MAX_ITERATIONS}")
+        coordinateur_log.section(f"Iteration {iteration}/{_iters}")
 
         # ── PHASE 4 : ÉVALUATION (5 agents en parallèle) ──
         coordinateur_log.section("PHASE 4 — Evaluation multi-dimensionnelle")
@@ -762,7 +765,7 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None) -> 
             break
 
         # Dernière itération → pas de patch
-        if iteration == MAX_ITERATIONS:
+        if iteration == _iters:
             coordinateur_log.info("Derniere iteration — pas de nouveau patch")
             break
 
@@ -1009,6 +1012,19 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None) -> 
         "html_basename": html_basename,
         "duree": duree,
     }
+
+
+def run_quick(prompt_utilisateur: str, style_graphique: str = "", stop_event=None) -> dict:
+    """
+    Pipeline allégée : Phase 1 + 2 + 3 complètes + Phase 4 une seule passe,
+    sans boucle diagnosticien/patcher. Retourne le même format que run().
+    Clé 'duree_secondes' incluse pour compatibilité avec /api/quick-generate.
+    """
+    result = run(prompt_utilisateur, style_graphique=style_graphique,
+                 stop_event=stop_event, _max_iterations=1)
+    if "duree" in result and "duree_secondes" not in result:
+        result["duree_secondes"] = result["duree"]
+    return result
 
 
 # ─────────────────────────────────────────────

@@ -807,7 +807,8 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
         # B5 : règles déterministes en premier — résolvent 30-40% des issues sans LLM
         try:
             from agents.phase5._auto_fix_rules import apply_all_rules as _auto_rules
-            _js_before_rules = _extract_js_from_html(code) if '<script' in code else code
+            from agents.phase3._layer_gen import _extract_js_from_html as _b5_extract
+            _js_before_rules = _b5_extract(code) if '<script' in code else code
             _js_after_rules, _rules_applied = _auto_rules(_js_before_rules)
             if _rules_applied:
                 import re as _re_b5

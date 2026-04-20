@@ -21,12 +21,14 @@ SAVE_DIR = "jeux_sauvegardes"
 GENERATION_TIMEOUT = 900   # 15 minutes en secondes
 MAX_PROMPT_LENGTH = 500
 SESSION_TTL = 1800         # 30 minutes — purge les sessions terminées après ce délai
+MAX_CONCURRENT_GENERATIONS = 3  # F3 : limiter les générations simultanées (coût API)
 
 # ─────────────────────────────────────────────
 # GESTION DES SESSIONS
 # ─────────────────────────────────────────────
 _sessions: dict = {}
 _sessions_lock = threading.Lock()
+_generation_semaphore = threading.Semaphore(MAX_CONCURRENT_GENERATIONS)
 
 
 def _new_session(session_id: str) -> dict:
@@ -242,6 +244,13 @@ def api_generate():
         from logger import set_thread_event_queue, clear_thread_event_queue, clear_code_preview, set_preview_session_id
         set_thread_event_queue(session["queue"])
         set_preview_session_id(session_id)
+        # F3 : sémaphore — bloquer si MAX_CONCURRENT_GENERATIONS atteint
+        if not _generation_semaphore.acquire(blocking=True, timeout=5):
+            session["queue"].put({"type": "error", "data": {
+                "message": f"Serveur occupé ({MAX_CONCURRENT_GENERATIONS} générations en cours). Réessayez dans quelques minutes."
+            }})
+            session["queue"].put(None)
+            return
         try:
             import coordinateur
             result = coordinateur.run(full_prompt, style_graphique=graphic_style, stop_event=stop_event)
@@ -301,6 +310,7 @@ def api_generate():
                     _sessions[session_id]["status"] = "error"
             session["queue"].put({"type": "error", "data": {"message": err_msg}})
         finally:
+            _generation_semaphore.release()
             clear_thread_event_queue()
             clear_code_preview()
             session["queue"].put(None)  # sentinelle de fin

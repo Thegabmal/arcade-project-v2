@@ -495,6 +495,45 @@ def call_gemini_json(prompt: str, temperature: float = 0.2, system_instruction: 
         raise
 
 
+def call_gemini_paid_json(
+    prompt: str,
+    temperature: float = 0.2,
+    system_instruction: str = None,
+    max_tokens: int = 24000,
+    disable_thinking: bool = True,
+    model: str = None,
+) -> dict:
+    """
+    Appel clé PAYANTE avec retour JSON — pour Diagnosticien et agents critiques Phase 5.
+    Garantit la qualité même si les clés gratuites sont épuisées.
+    """
+    raw = call_gemini_paid(
+        prompt=prompt,
+        temperature=temperature,
+        system_instruction=system_instruction,
+        json_mode=True,
+        max_tokens=max_tokens,
+        disable_thinking=disable_thinking,
+        model=model,
+    )
+    if not raw or not raw.strip():
+        raise ValueError("call_gemini_paid_json: réponse vide")
+    raw = raw.strip()
+    if raw.startswith("```"):
+        lines = raw.split("\n", 1)
+        raw = lines[1] if len(lines) > 1 else ""
+        if raw.rstrip().endswith("```"):
+            raw = raw.rstrip()[:-3]
+    raw = raw.strip()
+    if not raw:
+        raise ValueError("call_gemini_paid_json: JSON vide après nettoyage")
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"  [Paid JSON parse erreur] {e} — raw[:200]: {raw[:200]}", flush=True)
+        raise
+
+
 # ─────────────────────────────────────────────
 # CLAUDE API (Anthropic) — pour l'agent Game Logics
 # ─────────────────────────────────────────────

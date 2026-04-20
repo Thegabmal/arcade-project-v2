@@ -14,7 +14,7 @@ import re
 import os
 import subprocess
 import tempfile
-from config import call_gemini, call_gemini_paid
+from config import call_gemini, call_gemini_paid, MODEL_NAME_PRO
 from logger import phase3_log
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1420,16 +1420,19 @@ def _validate_layer(new_js: str, accumulated_js: str, layer_name: str) -> tuple:
 
 
 def _call_layer(system: str, prompt: str, max_tokens: int = 6000,
-                temperature: float = 0.1, disable_thinking: bool = True) -> str:
+                temperature: float = 0.1, disable_thinking: bool = True,
+                model: str = None) -> str:
     """Appelle Gemini (clé PAYANTE) pour une couche, nettoie le résultat.
 
     J1 — thinking par couche : L4/L7/L9 disable_thinking=False (raisonnement profond)
          L1/L2/L3/L5/L6/L8 disable_thinking=True (vitesse + évite troncature)
     J2 — température par couche : L1-L4/L7=0.1, L5/L6=0.2, L8=0.35, L9=0.45
     Utilise call_gemini_paid — clé payante exclusive pour la génération de code critique.
+    model=MODEL_NAME_PRO pour L4/L7 (couches les plus complexes).
     """
     raw = call_gemini_paid(prompt, temperature=temperature, system_instruction=system,
-                           max_tokens=max_tokens, disable_thinking=disable_thinking)
+                           max_tokens=max_tokens, disable_thinking=disable_thinking,
+                           model=model)
     if not raw:
         return ""
     # Retirer les balises markdown / script / html
@@ -2924,8 +2927,8 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
 
     layer4_js = ""
     for attempt in range(3):
-        # J1 : thinking activé pour L4 (collisions critiques — raisonnement profond)
-        raw = _call_layer(_LAYER_SYSTEM, layer4_prompt, max_tokens=20000, temperature=0.1, disable_thinking=False)
+        # J1 : thinking activé + Pro model pour L4 (collisions critiques)
+        raw = _call_layer(_LAYER_SYSTEM, layer4_prompt, max_tokens=20000, temperature=0.1, disable_thinking=False, model=MODEL_NAME_PRO)
         quality_ok, quality_reason = _check_layer_quality(raw, "Couche 4")
         if not quality_ok:
             phase3_log.warning("[layered] Couche 4 tentative %d rejetée (%s)" % (attempt + 1, quality_reason))
@@ -3375,8 +3378,8 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
             ("\n\nCORRIGE :\n" + "\n".join("- " + e for e in _l7_gate_errors))
             if _l7_gate_errors else ""
         )
-        # J1 : thinking activé pour L7 (boucle principale — câblage critique)
-        raw = _call_layer(_LAYER_SYSTEM, _prompt_7, max_tokens=16000, temperature=0.1, disable_thinking=False)
+        # J1 : thinking activé + Pro model pour L7 (boucle principale — câblage critique)
+        raw = _call_layer(_LAYER_SYSTEM, _prompt_7, max_tokens=16000, temperature=0.1, disable_thinking=False, model=MODEL_NAME_PRO)
         quality_ok, quality_reason = _check_layer_quality(raw, "Couche 7")
         if not quality_ok:
             phase3_log.warning("[layered] Couche 7 tentative %d rejetée (%s)" % (attempt + 1, quality_reason))

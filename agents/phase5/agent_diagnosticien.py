@@ -7,7 +7,7 @@ Agrège tous les résultats d'évaluation et produit un diagnostic précis :
 """
 
 import json
-from config import call_gemini_json, with_fallback
+from config import call_gemini_paid_json, with_fallback
 from genre_profile import GenreProfile, EvaluationBundle
 from logger import phase5_log
 
@@ -339,4 +339,5 @@ Réponds en JSON :
 })
 def _call(prompt: str) -> dict:
     # I12 : max_tokens élevé explicitement pour éviter JSON tronqué sur gros bundles d'issues
-    return call_gemini_json(prompt, temperature=0.3, system_instruction=SYSTEM, max_tokens=32000)
+    return call_gemini_paid_json(prompt, temperature=0.3, system_instruction=SYSTEM,
+                                 max_tokens=32000, disable_thinking=True)

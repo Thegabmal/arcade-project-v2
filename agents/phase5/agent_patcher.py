@@ -6,7 +6,7 @@ Préserve ce qui fonctionne bien.
 """
 
 import json
-from config import call_gemini, with_fallback
+from config import call_gemini_paid, with_fallback
 from genre_profile import GenreProfile
 from logger import phase5_log
 
@@ -321,7 +321,8 @@ def _clean_html(code: str) -> str:
 
 @with_fallback(None)  # None = on rendra le code original
 def _call(prompt: str, max_tokens: int = 16000) -> str:
-    return call_gemini(prompt, temperature=0.2, system_instruction=SYSTEM, max_tokens=max_tokens)
+    return call_gemini_paid(prompt, temperature=0.2, system_instruction=SYSTEM,
+                            max_tokens=max_tokens, disable_thinking=True)
 
 
 # ─────────────────────────────────────────────
@@ -713,4 +714,5 @@ Génère le code JavaScript corrigé du module. Ne génère QUE le code JS, sans
 
 @with_fallback(None)
 def _call_module_patch(prompt: str) -> str:
-    return call_gemini(prompt, temperature=0.2, system_instruction=SYSTEM_MODULE_PATCH, max_tokens=16000)
+    return call_gemini_paid(prompt, temperature=0.2, system_instruction=SYSTEM_MODULE_PATCH,
+                            max_tokens=16000, disable_thinking=True)

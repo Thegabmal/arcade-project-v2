@@ -218,7 +218,8 @@ def api_generate():
         prompt = prompt[:MAX_PROMPT_LENGTH]
 
     # Nettoyage minimal : pas d'injection de balises
-    prompt = prompt.replace("<", "").replace(">", "").replace("`", "")
+    # F2 : inclure les guillemets pour prévenir les injections dans les prompts LLM
+    prompt = prompt.replace("<", "").replace(">", "").replace("`", "").replace('"', "'").replace("\\", "")
 
     # Type de jeu optionnel
     game_type = str(data.get("game_type", "")).strip()
@@ -287,8 +288,14 @@ def api_generate():
             session["queue"].put({"type": "complete", "data": result_data})
 
         except Exception as exc:
-            import traceback
             err_msg = str(exc)
+            # E4 : message clair si quotas Gemini épuisés
+            _exc_lower = err_msg.lower()
+            if "allfreekeysexhausted" in type(exc).__name__.lower() or \
+               "allfreekeysexhausted" in _exc_lower or \
+               ("quota" in _exc_lower and "épuisé" in _exc_lower):
+                err_msg = ("Quotas API épuisés — toutes les clés gratuites ont atteint leur limite journalière. "
+                           "Réessayez demain ou configurez une clé payante (GEMINI_RPD_LIMIT=9999).")
             with _sessions_lock:
                 if session_id in _sessions:
                     _sessions[session_id]["status"] = "error"
@@ -761,7 +768,8 @@ def api_quick_generate():
         return jsonify({"error": "Le prompt est vide."}), 400
     if len(prompt) > MAX_PROMPT_LENGTH:
         prompt = prompt[:MAX_PROMPT_LENGTH]
-    prompt = prompt.replace("<", "").replace(">", "").replace("`", "")
+    # F2 : inclure les guillemets pour prévenir les injections dans les prompts LLM
+    prompt = prompt.replace("<", "").replace(">", "").replace("`", "").replace('"', "'").replace("\\", "")
 
     game_type = str(data.get("game_type", "")).strip()
     if game_type and game_type != "tout type":

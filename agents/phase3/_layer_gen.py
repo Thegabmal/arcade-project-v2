@@ -67,6 +67,9 @@ _LAYER_SYSTEM = (
     "- CRITIQUE : ta reponse DOIT se terminer sur une instruction complete "
     "(accolade fermante '}' ou point-virgule ';'). "
     "Si tu dois t'arreter, ferme proprement la fonction en cours avant.\n"
+    "- F1 localStorage : toujours entourer d'un try/catch "
+    "(ex: try { localStorage.setItem('score', score); } catch(e) {} )\n"
+    "  SecurityError en mode prive/iframe sinon.\n"
     "- INTERDIT ABSOLU : new Image(), img.src, Image(), fetch(), XMLHttpRequest, "
     "import(), require(), new Audio(), Audio() — tout doit etre dessine/joue en Canvas 2D pur "
     "sans ressources externes. Pour le son : utilise WebAudio API (AudioContext) uniquement.\n"
@@ -83,7 +86,7 @@ _LAYER_SYSTEM_GRAPHIQUE = (
     "- shadowBlur + shadowColor pour les effets glow (joueur, boss, bullets, particules)\n"
     "- createLinearGradient / createRadialGradient pour les entites importantes\n"
     "- globalAlpha pour la transparence, overlays, et effets de fondu\n"
-    "- Animations basees sur une variable timer globale (Date.now()*0.001 ou variable dediee)\n"
+    "- Animations basees sur une variable timer globale dediee avec +=dt (ex: _bgTimer+=dt) — JAMAIS Date.now() pour animer\n"
     "- Fond riche et anime : etoiles, grille, nebuleuse, parallaxe — jamais un fond uni\n"
     "- Boss visuellement exceptionnel : plus grand, aura, couleur unique par phase, barre HP stylisee\n"
     "- Particules belles : taille et opacite qui diminuent avec life, couleurs variees\n\n"
@@ -2824,8 +2827,9 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '    toutes les 3 vagues → spawnBoss(); sinon wave++; waveActive=false; waveTimer=4;\n'
         '    waveAnnounce=2; waveAnnounceTxt="VAGUE "+wave+" !";\n'
         '  waveAnnounce-=dt; (si>0)\n'
-        '- spawnWaveEnemies(waveIdx) : lit WAVE_DEFS[waveIdx % WAVE_DEFS.length],\n'
-        '  si pas de WAVE_DEFS : spawn 3+waveIdx ennemis aléatoires de ENEMY_TYPES\n'
+        '- spawnWaveEnemies(waveIdx) : OBLIGATOIRE lire WAVE_DEFS[waveIdx % WAVE_DEFS.length],\n'
+        '  NE JAMAIS faire spawnEnemy(0) directement — toujours utiliser WAVE_DEFS pour la variété\n'
+        '  si WAVE_DEFS absent ou vide : génère 3+waveIdx ennemis avec types alternés depuis ENEMY_TYPES\n'
         '- updateBoss(dt) : si !bossActive || !boss return;\n'
         '  boss.shootTimer-=dt;\n'
         '  checkBossPhase();\n'
@@ -3537,7 +3541,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         f'⚠️ RÈGLE N°2 — PROPRIÉTÉS D\'OBJETS :\n'
         f'Utilise UNIQUEMENT les propriétés du SCHÉMA : {_safe_props_hint}\n'
         'JAMAIS inventer player.angle, player.rot, enemy.frame, etc. si absent du schéma.\n'
-        'Pour une rotation visuelle : utilise une variable locale angle calculée avec Date.now() ou _bgTimer.\n\n'
+        'Pour une rotation visuelle : utilise une variable locale angle calculée avec _bgTimer UNIQUEMENT — jamais Date.now() (ignore le delta time).\n\n'
         'EXIGENCES VISUELLES (TOUTES obligatoires) :\n\n'
         '1. drawBackground() — fond animé riche :\n'
         '   var _bgTimer=(typeof _bgTimer!=="undefined")?_bgTimer:0; _bgTimer+=dt;\n'
@@ -3676,6 +3680,26 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
             phase3_log.info(
                 f"[layered] {_removed_count} requestAnimationFrame(gameLoop) dupliqué(s) dans gameLoop supprimé(s)"
             )
+
+    # C6 : supprimer les requestAnimationFrame(gameLoop) dans le corps de init()
+    # init() ne doit pas lancer la boucle — c'est au code de démarrage de le faire
+    _init_m = re.search(r'function\s+init\s*\(\s*\)\s*\{', accumulated)
+    if _init_m:
+        _init_body_start = _init_m.end()
+        _init_depth, _init_body_end = 1, _init_body_start
+        for _ci in range(_init_body_start, len(accumulated)):
+            if accumulated[_ci] == '{': _init_depth += 1
+            elif accumulated[_ci] == '}':
+                _init_depth -= 1
+                if _init_depth == 0: _init_body_end = _ci; break
+        _init_body = accumulated[_init_body_start:_init_body_end]
+        _raf_in_init = list(re.finditer(r'requestAnimationFrame\s*\(\s*gameLoop\s*\)\s*;?\n?', _init_body))
+        if _raf_in_init:
+            _new_init = _init_body
+            for _m in reversed(_raf_in_init):
+                _new_init = _new_init[:_m.start()] + _new_init[_m.end():]
+            accumulated = accumulated[:_init_body_start] + _new_init + accumulated[_init_body_end:]
+            phase3_log.info(f"[layered] C6 : {len(_raf_in_init)} RAF dans init() supprimé(s) — double boucle évitée")
 
     # ── Garanties programmatiques post-assemblage ──────────────────────────────
     # PALETTE : si absent ou déclaré const (peut être supprimé par dédup) → injecter var fallback

@@ -346,7 +346,9 @@ def call_gemini_paid(
             error_str = str(e).lower()
             if "429" in error_str or "quota" in error_str or "resource exhausted" in error_str:
                 _retry_match = _re.search(r"retry in ([0-9]+(?:\.[0-9]+)?)s", str(e), _re.IGNORECASE)
-                wait = float(_retry_match.group(1)) + 1.0 if _retry_match else min(30 * (attempt + 1), 120)
+                # D3 : backoff exponentiel — 5s, 10s, 20s, 40s... plafonné à 120s
+                import random as _rand_d3
+                wait = float(_retry_match.group(1)) + 1.0 if _retry_match else min(5 * (2 ** attempt) + _rand_d3.uniform(0, 3), 120)
                 print(f"  [Paid 429] Attente {wait:.0f}s avant retry", flush=True)
                 time.sleep(wait)
             elif "503" in error_str or "unavailable" in error_str:

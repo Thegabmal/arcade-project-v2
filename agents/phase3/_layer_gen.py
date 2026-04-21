@@ -1093,6 +1093,77 @@ def _resolve_undeclared_symbols(fragment_js: str, table: dict, accumulated: str)
     return header + fragment_js, sorted(undefined_caps)
 
 
+def _extract_layer_manifest(layer_js: str, layer_num: int) -> str:
+    """Compact manifest of all declarations in a validated layer (functions, vars, object shapes)."""
+    fn_lines, var_lines, shape_lines = [], [], []
+    seen_fns: set = set()
+    seen_vars: set = set()
+    seen_shapes: set = set()
+
+    for m in re.finditer(r'(?:^|\n)\s*function\s+([\w$]+)\s*\(([^)]*)\)', layer_js):
+        name, params = m.group(1), m.group(2).strip()
+        if name not in seen_fns:
+            fn_lines.append(f"  fn {name}({params})")
+            seen_fns.add(name)
+
+    for m in re.finditer(r'^(?:var|let|const)\s+([\w$]+)\s*=\s*(.{0,120})', layer_js, re.MULTILINE):
+        name, val = m.group(1), m.group(2).strip().rstrip(';, ')
+        if name in seen_vars:
+            continue
+        seen_vars.add(name)
+        if val.startswith('['):
+            var_lines.append(f"  {name}: Array")
+        elif val.startswith('{'):
+            keys = re.findall(r'(\w+)\s*:', val[:200])
+            var_lines.append(f"  {name}: {{{', '.join(keys[:8])}}}" if keys else f"  {name}: Object")
+        elif re.match(r'^-?\d', val):
+            var_lines.append(f"  {name}: Number={val[:20]}")
+        elif val[:1] in ("'", '"'):
+            var_lines.append(f"  {name}: String={val[:20]}")
+        elif val in ('true', 'false'):
+            var_lines.append(f"  {name}: Boolean={val}")
+        elif val in ('null', 'undefined'):
+            var_lines.append(f"  {name}: null")
+        else:
+            var_lines.append(f"  {name}: ?")
+
+    for m in re.finditer(r'(\w+)\.push\(\s*\{([^}]{0,400})\}', layer_js):
+        arr_name, body = m.group(1), m.group(2)
+        keys = re.findall(r'(\w+)\s*:', body)
+        if keys and arr_name not in seen_shapes:
+            seen_shapes.add(arr_name)
+            shape_lines.append(f"  {arr_name}[] items: {{{', '.join(keys[:12])}}}")
+
+    if not fn_lines and not var_lines and not shape_lines:
+        return ""
+    parts = [f"── MANIFEST L{layer_num} ──"]
+    parts.extend(fn_lines)
+    parts.extend(var_lines)
+    if shape_lines:
+        parts.append("  ·shapes·")
+        parts.extend(shape_lines)
+    return '\n'.join(parts)
+
+
+def _contract_reminder(global_contract: str, incremental_manifest: str) -> str:
+    """Short reminder block appended at end of each layer prompt (counter 'lost in middle')."""
+    parts = []
+    if global_contract:
+        names = re.findall(r'^\s{2}([A-Z_][A-Z0-9_]+)\s*=', global_contract, re.MULTILINE)
+        if names:
+            parts.append("RAPPEL CONSTANTES L1 (utiliser telles quelles, ne pas réinventer) : "
+                         + ', '.join(names[:20]))
+    if incremental_manifest:
+        fns = re.findall(r'\bfn ([\w$]+\([^)]*\))', incremental_manifest)
+        if fns:
+            parts.append("RAPPEL FONCTIONS EXISTANTES (appeler, jamais redéclarer) : "
+                         + ', '.join(fns[:25]))
+        shapes = re.findall(r'(\w+\[\] items: \{[^}]+\})', incremental_manifest)
+        if shapes:
+            parts.append("RAPPEL SHAPES OBJETS : " + ' | '.join(shapes[:8]))
+    return ('\n' + '\n'.join(parts) + '\n') if parts else ''
+
+
 def _layer_declared_str(accumulated_js: str) -> str:
     """Retourne la chaîne 'INTERDIT de redéclarer' avec hints de type pour les tableaux.
     Ex: 'enemies (Array), score (Number)' — évite enemies.x au lieu de enemies[i].x.
@@ -2035,25 +2106,33 @@ def _build_layer_context(
     layer1_schema: str,
     accumulated_signatures: str,
     tail_lines: int = 400,
-    global_contract: str = ""
+    global_contract: str = "",
+    incremental_manifest: str = "",
 ) -> str:
     """
-    Contexte anti-hallucination pour chaque couche — 4 parties :
+    Contexte anti-hallucination pour chaque couche — 5 parties :
     0. Contrat global (symbol table L1 — empêche les constantes ALLCAPS hallucinées)
-    1. Schéma typé L1 (contrat de propriétés — zéro hallucination de player.health si schéma dit player.hp)
-    2. Signatures de toutes les fonctions définies (le LLM ne peut appeler que celles-là)
-    3. Queue du code accumulé (cohérence de style, référence locale)
-    Jamais le code brut intégral — évite le "lost in the middle".
+    0b. Manifest incrémental (toutes déclarations L1-LN : fonctions, vars, shapes)
+    1. Schéma typé L1 (contrat de propriétés)
+    2. Signatures de toutes les fonctions définies
+    3. Code récent (80 lignes si manifest présent, tail_lines sinon)
+    Le manifest remplace la queue longue — contexte compact quelle que soit la profondeur.
     """
     parts = []
     if global_contract:
         parts.append(global_contract)
+    if incremental_manifest:
+        parts.append(incremental_manifest)
     if layer1_schema:
         parts.append(layer1_schema)
     if accumulated_signatures:
         parts.append(accumulated_signatures)
     code_lines = accumulated.split('\n')
-    if len(code_lines) > tail_lines:
+    if incremental_manifest:
+        # Manifest présent → seulement les 80 dernières lignes pour la continuité de style
+        tail = '\n'.join(code_lines[-80:])
+        parts.append(f"EXTRAIT RÉCENT — dernières 80 lignes (style/référence) :\n{tail}")
+    elif len(code_lines) > tail_lines:
         tail = '\n'.join(code_lines[-tail_lines:])
         parts.append(f"CODE ACCUMULÉ ({len(code_lines)} lignes — fin uniquement) :\n{tail}")
     else:
@@ -2648,6 +2727,10 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
             % (len(_symbol_table["allcaps"]), len(_symbol_table["type_keys"]))
         )
 
+    # ── Manifest incrémental — démarre avec L1, enrichi après chaque couche ──
+    _incremental_manifest = _extract_layer_manifest(layer1_js, 1)
+    phase3_log.info("[layered] Manifest L1 : %d lignes" % _incremental_manifest.count('\n'))
+
     # ── Extraction des clés PALETTE réellement déclarées en L1 ──
     # Permet d'injecter dans L6/L9 la liste exacte des clés disponibles → évite PALETTE.neonXxx undefined
     _palette_keys_declared: list[str] = []
@@ -2673,7 +2756,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     # ─────────────────────────────────────────────────────────────
     phase3_log.info("[layered] Couche 2 — spawn et initialisation")
     accumulated_signatures = _extract_function_signatures(accumulated)
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=300, global_contract=_global_contract)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=300, global_contract=_global_contract, incremental_manifest=_incremental_manifest)
 
     layer2_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n'
@@ -2702,6 +2785,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '- Toute propriété rajoutée sur un objet doit être cohérente avec le schéma\n\n'
         'INTERDIT : gameLoop, draw*, addEventListener, requestAnimationFrame, logique update/collision\n'
         f'{_no_redecl_note}'
+        f'{_contract_reminder(_global_contract, _incremental_manifest)}'
         'Output : JS pur uniquement.'
     )
 
@@ -2780,6 +2864,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if _resolved2:
         phase3_log.info("[layered] L2 auto-resolved: %s" % ', '.join(_resolved2[:6]))
     accumulated += '\n\n' + layer2_js
+    _incremental_manifest += '\n' + _extract_layer_manifest(layer2_js, 2)
     phase3_log.info("[layered] Couche 2 OK — %d chars" % len(layer2_js))
 
     # ─────────────────────────────────────────────────────────────
@@ -2787,7 +2872,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     # ─────────────────────────────────────────────────────────────
     phase3_log.info("[layered] Couche 3 — physique pure")
     accumulated_signatures = _extract_function_signatures(accumulated)
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=350, global_contract=_global_contract)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=350, global_contract=_global_contract, incremental_manifest=_incremental_manifest)
 
     layer3_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n'
@@ -2825,6 +2910,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         'INTERDIT ABSOLU : constantes ENEMY_SPEED_TYPE séparées (ex: ENEMY_SPEED_DRONE, ENEMY_HP_BOMBER)\n'
         '  → Utiliser directement enemy.speed, enemy.hp, enemy.dmg depuis ENEMY_TYPES[] — ces props existent déjà en L1\n'
         f'{_no_redecl_note}'
+        f'{_contract_reminder(_global_contract, _incremental_manifest)}'
         'Output : JS pur uniquement.'
     )
 
@@ -2865,6 +2951,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if _resolved3:
         phase3_log.info("[layered] L3 auto-resolved: %s" % ', '.join(_resolved3[:6]))
     accumulated += '\n\n' + layer3_js
+    _incremental_manifest += '\n' + _extract_layer_manifest(layer3_js, 3)
     phase3_log.info("[layered] Couche 3 OK — %d chars" % len(layer3_js))
 
     # Runtime check L3 (non-bloquant)
@@ -2877,7 +2964,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     # ─────────────────────────────────────────────────────────────
     phase3_log.info("[layered] Couche 4 — collisions et conséquences")
     accumulated_signatures = _extract_function_signatures(accumulated)
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400, global_contract=_global_contract)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400, global_contract=_global_contract, incremental_manifest=_incremental_manifest)
 
     layer4_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n\n'
@@ -2922,13 +3009,14 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
            if ('powerUps' in layer1_js or 'powerups' in layer1_js.lower()) else '')
         + 'INTERDIT : gameLoop, draw*, addEventListener, logique de déplacement\n'
         f'{_no_redecl_note}'
+        f'{_contract_reminder(_global_contract, _incremental_manifest)}'
         'Output : JS pur uniquement.'
     )
 
     layer4_js = ""
     for attempt in range(3):
-        # J1 : thinking activé + Pro model pour L4 (collisions critiques)
-        raw = _call_layer(_LAYER_SYSTEM, layer4_prompt, max_tokens=20000, temperature=0.1, disable_thinking=False, model=MODEL_NAME_PRO)
+        # J1 : thinking activé pour L4 (collisions critiques)
+        raw = _call_layer(_LAYER_SYSTEM, layer4_prompt, max_tokens=20000, temperature=0.1, disable_thinking=False)
         quality_ok, quality_reason = _check_layer_quality(raw, "Couche 4")
         if not quality_ok:
             phase3_log.warning("[layered] Couche 4 tentative %d rejetée (%s)" % (attempt + 1, quality_reason))
@@ -2960,6 +3048,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if _resolved4:
         phase3_log.info("[layered] L4 auto-resolved: %s" % ', '.join(_resolved4[:6]))
     accumulated += '\n\n' + layer4_js
+    _incremental_manifest += '\n' + _extract_layer_manifest(layer4_js, 4)
     phase3_log.info("[layered] Couche 4 OK — %d chars" % len(layer4_js))
 
     # ─────────────────────────────────────────────────────────────
@@ -2967,7 +3056,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     # ─────────────────────────────────────────────────────────────
     phase3_log.info("[layered] Couche 5 — boss et vagues")
     accumulated_signatures = _extract_function_signatures(accumulated)
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400, global_contract=_global_contract)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400, global_contract=_global_contract, incremental_manifest=_incremental_manifest)
 
     layer5_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n\n'
@@ -3026,6 +3115,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '- triggerShake/triggerFlash disponibles — appelle-les sur événements importants\n\n'
         'INTERDIT : draw*, addEventListener, gameLoop\n'
         f'{_no_redecl_note}'
+        f'{_contract_reminder(_global_contract, _incremental_manifest)}'
         'Output : JS pur uniquement.'
     )
 
@@ -3069,6 +3159,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if _resolved5:
         phase3_log.info("[layered] L5 auto-resolved: %s" % ', '.join(_resolved5[:6]))
     accumulated += '\n\n' + layer5_js
+    _incremental_manifest += '\n' + _extract_layer_manifest(layer5_js, 5)
     phase3_log.info("[layered] Couche 5 OK — %d chars" % len(layer5_js))
 
     # ── Gate check mécaniques obligatoires ───────────────────────────────────
@@ -3087,7 +3178,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         _repair_sigs = _extract_function_signatures(accumulated)
         _repair_prompt = (
             f'Jeu : "{titre}" — genre : {genre}\n\n'
-            f'{_build_layer_context(accumulated, layer1_schema, _repair_sigs, tail_lines=250, global_contract=_global_contract)}\n\n'
+            f'{_build_layer_context(accumulated, layer1_schema, _repair_sigs, tail_lines=250, global_contract=_global_contract, incremental_manifest=_incremental_manifest)}\n\n'
             'MÉCANIQUES OBLIGATOIRES NON ENCORE IMPLÉMENTÉES — génère-les maintenant.\n'
             'RÈGLE ABSOLUE : ne redéclare AUCUNE fonction ou variable déjà présente ci-dessus.\n'
             'Ajoute UNIQUEMENT les systèmes manquants listés ci-dessous.\n\n'
@@ -3156,7 +3247,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     # ─────────────────────────────────────────────────────────────
     phase3_log.info("[layered] Couche 6 — rendu")
     accumulated_signatures = _extract_function_signatures(accumulated)
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400, global_contract=_global_contract)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400, global_contract=_global_contract, incremental_manifest=_incremental_manifest)
 
     layer6_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n'
@@ -3196,6 +3287,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '  VRAI : ctx.fillStyle = PALETTE.enemy;   ← clé PALETTE\n\n'
         'INTERDIT : gameLoop, logique de jeu, addEventListener, modification d\'état global\n'
         f'{_no_redecl_note}'
+        f'{_contract_reminder(_global_contract, _incremental_manifest)}'
         'Output : JS pur uniquement — chaque fonction DOIT commencer par "draw".'
     )
 
@@ -3237,6 +3329,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if _resolved6:
         phase3_log.info("[layered] L6 auto-resolved: %s" % ', '.join(_resolved6[:6]))
     accumulated += '\n\n' + layer6_js
+    _incremental_manifest += '\n' + _extract_layer_manifest(layer6_js, 6)
     phase3_log.info("[layered] Couche 6 OK — %d chars" % len(layer6_js))
 
     # ─────────────────────────────────────────────────────────────
@@ -3277,7 +3370,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     )
     _init_call_lines = '\n   '.join(fn + '();' for fn in init_fns) if init_fns else 'initGame();'
 
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400, global_contract=_global_contract)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=400, global_contract=_global_contract, incremental_manifest=_incremental_manifest)
 
     # Variables déclarées dans L1/L2 — NE PAS les appeler comme fonctions
     _declared_vars = decls7['vars']
@@ -3368,6 +3461,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '    canvas.addEventListener("touchmove", function(e) { e.preventDefault(); var t=e.touches[0];\n'
         '      mouse.x=t.clientX; mouse.y=t.clientY; }, {passive:false});\n'
         f'{_no_redecl_note}'
+        f'{_contract_reminder(_global_contract, _incremental_manifest)}'
         'Output : JS pur uniquement — AUCUN commentaire à la place des vrais appels de fonctions.'
     )
 
@@ -3378,8 +3472,8 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
             ("\n\nCORRIGE :\n" + "\n".join("- " + e for e in _l7_gate_errors))
             if _l7_gate_errors else ""
         )
-        # J1 : thinking activé + Pro model pour L7 (boucle principale — câblage critique)
-        raw = _call_layer(_LAYER_SYSTEM, _prompt_7, max_tokens=16000, temperature=0.1, disable_thinking=False, model=MODEL_NAME_PRO)
+        # J1 : thinking activé pour L7 (boucle principale — câblage critique)
+        raw = _call_layer(_LAYER_SYSTEM, _prompt_7, max_tokens=16000, temperature=0.1, disable_thinking=False)
         quality_ok, quality_reason = _check_layer_quality(raw, "Couche 7")
         if not quality_ok:
             phase3_log.warning("[layered] Couche 7 tentative %d rejetée (%s)" % (attempt + 1, quality_reason))
@@ -3414,6 +3508,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if _resolved7:
         phase3_log.info("[layered] L7 auto-resolved: %s" % ', '.join(_resolved7[:6]))
     accumulated += '\n\n' + layer7_js
+    _incremental_manifest += '\n' + _extract_layer_manifest(layer7_js, 7)
     phase3_log.info("[layered] Couche 7 OK — %d chars" % len(layer7_js))
 
     # Runtime check L7 — critique
@@ -3486,7 +3581,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     phase3_log.info("[layered] Couche 8 — polish système")
     accumulated_signatures = _extract_function_signatures(accumulated)
     existing_fns_8 = set(_extract_js_declarations(accumulated)['funcs'])
-    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=350, global_contract=_global_contract)
+    layer_ctx = _build_layer_context(accumulated, layer1_schema, accumulated_signatures, tail_lines=350, global_contract=_global_contract, incremental_manifest=_incremental_manifest)
 
     layer8_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n\n'
@@ -3569,6 +3664,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         'INTERDIT ABSOLU : redéfinir gameLoop, init(), toute fonction update*() existante sauf spawnBullet/handleBulletEnemyHit/handlePowerUpCollect.\n'
         'NE PAS toucher à updatePlayer, updateEnemies, updateBullets, updateParticles, updateWave, updateBoss.\n'
         f'{_no_redecl_note}'
+        f'{_contract_reminder(_global_contract, _incremental_manifest)}'
         'Output : JS pur uniquement.'
     )
 
@@ -3619,6 +3715,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         if _resolved8:
             phase3_log.info("[layered] L8 auto-resolved: %s" % ', '.join(_resolved8[:6]))
         accumulated += '\n\n' + layer8_js
+        _incremental_manifest += '\n' + _extract_layer_manifest(layer8_js, 8)
         phase3_log.info("[layered] Couche 8 OK — %d chars" % len(layer8_js))
 
         if new_fns_from_8:
@@ -3743,6 +3840,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '  VRAI : ctx.fillStyle = \'rgba(0,0,0,0.5)\';          ← string directe\n'
         '  VRAI : ctx.globalAlpha = 0.5; ctx.fillStyle = \'#000\'; ← alpha séparé\n\n'
         f'{_no_redecl_note}'
+        f'{_contract_reminder(_global_contract, _incremental_manifest)}'
         'Output : JS pur uniquement.'
     )
 

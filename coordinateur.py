@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Imports fondamentaux
 from logger import coordinateur_log, init_session, get_thread_event_queue, set_thread_event_queue, get_session_log, push_event
-from genre_profile import GenreProfile, ConceptionContext, EvaluationBundle
+from genre_profile import GenreProfile, ConceptionContext, EvaluationBundle, EvaluationResult
 import memory
 
 
@@ -204,7 +204,7 @@ requestAnimationFrame(gameLoop);
 </script></body></html>"""
 
 
-def _parallel(tasks: list, max_workers: int = 4, stagger_seconds: float = 3.0) -> dict:
+def _parallel(tasks: list, max_workers: int = 4, stagger_seconds: float = 1.0) -> dict:
     """
     Exécute des tâches en parallèle en propageant la queue SSE aux sous-threads.
     tasks = [(nom, fn, [args...]), ...]
@@ -281,7 +281,7 @@ SCORE_SORTIE_ANTICIPEE = 8.0   # Score pour sortir sans itérer
 SCORE_STAGNATION_DELTA = 0.2   # Si le score progresse de moins de ça → stagnation
 SCORE_MIN_VIABLE_SAVE  = 2.0   # En dessous de ça, inutile de sauvegarder (code vide)
 # Nombre d'itérations consécutives sans progrès avant stagnation déclarée
-MAX_ITERATIONS_SANS_PROGRES = 2
+MAX_ITERATIONS_SANS_PROGRES = 1  # avec MAX_ITERATIONS=2, stagnation détectable dès l'iter 2
 # E4 : seuil pour autoriser les passes 3 et 4 (économie quota)
 SCORE_SEUIL_ITERATIONS_SUP = 7.0  # Au-dessus → 2 passes suffisent
 # C1 : seuils minimums par dimension (bloquer sauvegarde si non atteints)
@@ -297,8 +297,11 @@ def _js_check_quick(html: str) -> tuple:
         from js_syntax_checker import check_and_report as _chk
         issues, broken = _chk(html)
         return issues, broken
-    except Exception:
-        return [], False  # En cas d'erreur du checker, accepter par défaut
+    except ImportError:
+        return [], False  # checker non installé — accepter par défaut
+    except Exception as e:
+        coordinateur_log.warning(f"_js_check_quick erreur inattendue : {e} — patch accepté par défaut")
+        return [], False
 
 
 STYLE_GRAPHIQUE_MAP = {
@@ -538,19 +541,6 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
 
     CODE_MIN_VIABLE = 15000  # un vrai jeu 2D jouable fait >15K chars minimum
 
-    def _run_monolithic(reason: str) -> str:
-        """Gardé uniquement pour référence — NE JAMAIS appeler sur des jeux 2D."""
-        coordinateur_log.info(f"Génération monolithique ({reason})")
-        c = agent_createur.run(
-            context,
-            patterns_reussis=patterns_reussis,
-            tendances=tendances,
-            erreurs_passees=erreurs_passees,
-            game_logics=game_logics,
-        )
-        coordinateur_log.success(f"Code monolithique : {len(c)} caractères")
-        return c
-
     # ─────────────────────────────────────────────
     # GÉNÉRATION DU CODE
     # ─────────────────────────────────────────────
@@ -589,7 +579,6 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
     # Sanité de base : vérifier qu'on a du code viable
     titre_jeu = context.gdd.get("titre", "Arcade Game")
     genre_jeu = genre_profile.genre_principal
-    CODE_MIN_VIABLE = 15000
 
     if not code or len(code) < 1000:
         coordinateur_log.warning("Code trop court — fallback minimal garanti")
@@ -602,7 +591,6 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
     coordinateur_log.success(f"Phase 3 terminée : {len(code)} caractères")
 
     # K4 — Factorisation coherence_check + A1_linter en fonction réutilisable
-    # Appelée ici ET après chaque E1 (la régénération E1 bypassait ce bloc)
     def _post_generation_cleanup(html_code: str, ep: list) -> tuple[str, list]:
         """Cohérence check + A1 JS linter — s'applique après toute génération (init + E1)."""
         _ep = list(ep or [])
@@ -643,8 +631,8 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
     try:
         from logger import store_code_preview
         store_code_preview(code)
-    except Exception:
-        pass
+    except Exception as e:
+        coordinateur_log.warning(f"Code preview non stocké : {e}")
 
     # G2 : Cohérence technologie_rendu — si le code contient THREE mais genre_profile dit canvas2d
     _code_has_three = 'THREE.' in code or 'new THREE.' in code
@@ -664,6 +652,20 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
     bundle = None
     iterations_sans_progres = 0
 
+    def _safe_result(r, name: str) -> EvaluationResult:
+        """Extrait un EvaluationResult depuis une valeur brute (dict ou objet)."""
+        if isinstance(r, EvaluationResult):
+            return r
+        if isinstance(r, dict):
+            # Certains agents retournent {"gameplay": EvaluationResult, ...}
+            for key in r:
+                if isinstance(r[key], EvaluationResult):
+                    return r[key]
+        # B1 : score 1.5 (pas 5.0) — agent crashé → score bas visible, pas gonflé artificiellement
+        coordinateur_log.error(f"Agent '{name}' crashé ou retourne None — score fallback 1.5")
+        return EvaluationResult(agent_name=name, score=1.5,
+                                commentaire_global=f"Agent {name} non disponible (crash ou timeout)")
+
     _iters = _max_iterations if _max_iterations is not None else MAX_ITERATIONS
     for iteration in range(1, _iters + 1):
         _check_stop()
@@ -681,21 +683,6 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
             ("playtester",   agent_playtester.run,    [code, genre_profile, context.gdd]),
         ], max_workers=5)
 
-        from genre_profile import EvaluationResult
-        def _safe_result(r, name: str) -> "EvaluationResult":
-            """Extrait un EvaluationResult depuis une valeur brute (dict ou objet)."""
-            if isinstance(r, EvaluationResult):
-                return r
-            if isinstance(r, dict):
-                # Certains agents retournent {"gameplay": EvaluationResult, ...}
-                for key in r:
-                    if isinstance(r[key], EvaluationResult):
-                        return r[key]
-            # B1 : score 1.5 (pas 5.0) — agent crashé → score bas visible, pas gonflé artificiellement
-            coordinateur_log.error(f"Agent '{name}' crashé ou retourne None — score fallback 1.5")
-            return EvaluationResult(agent_name=name, score=1.5,
-                                    commentaire_global=f"Agent {name} non disponible (crash ou timeout)")
-
         # qc_gameplay retourne {"gameplay": ..., "anti_pattern": ...}
         _gp_raw = p4.get("qc_gameplay", {})
         _gp_result = _gp_raw if isinstance(_gp_raw, dict) else {}
@@ -712,16 +699,8 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
         score = bundle.score_global()
         exec_score = bundle.execution.score
 
-        # 1 — Plafonnement du score si le jeu ne s'exécute pas
-        if exec_score < 4.5:
-            score_before_cap = score
-            score = min(score, 5.0)
-            if score < score_before_cap:
-                coordinateur_log.warning(
-                    f"Score plafonné à 5.0 (exec={exec_score:.1f} < 4.5 — jeu non fonctionnel)"
-                )
-
         # C1 : seuils minimums par dimension — bloquer si non atteints
+        # (note : exec < 4.5 est toujours couvert ici car 4.5 < SCORE_MIN_EXECUTION=5.0)
         _tech_score = bundle.qc_technique.score
         if exec_score < SCORE_MIN_EXECUTION or _tech_score < SCORE_MIN_TECHNIQUE:
             _blocking_reasons = []
@@ -743,7 +722,8 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
             if not use_modular:
                 from agents.phase3._layer_gen import run_layered as _rl_e1
                 _regen_code = _rl_e1(context, patterns_reussis=patterns_reussis,
-                                     erreurs_passees=erreurs_passees, game_logics=game_logics)
+                                     erreurs_passees=erreurs_passees, game_logics=game_logics,
+                                     level_design=level_design)
                 if _regen_code and len(_regen_code) >= CODE_MIN_VIABLE:
                     code = _regen_code
                     coordinateur_log.success(f"E1 régénération terminée : {len(code)} chars")
@@ -870,6 +850,9 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
             else:
                 code = code_patche
                 coordinateur_log.success(f"Code patche : {len(code)} caracteres")
+                # H3 — Marquer les issues patchées comme corrigées dans le tracker Q13
+                for _pi in _issues_for_prepatch:
+                    _mark_error_fixed(_pi.get("description", "") if isinstance(_pi, dict) else str(_pi))
                 # P4 — Re-run pre-patcher après agent_patcher
                 # agent_patcher (LLM sur tout le code) peut introduire de nouvelles erreurs syntaxiques
                 _p4_issues, _p4_broken = _js_check_quick(code)
@@ -922,10 +905,12 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
                     patterns_reussis=patterns_reussis,
                     erreurs_passees=erreurs_passees,
                     game_logics=game_logics,
+                    level_design=level_design,
                 )
                 if nouveau_code and len(nouveau_code) >= CODE_MIN_VIABLE:
                     code = nouveau_code
                     coordinateur_log.success(f"Regeneration layered : {len(code)} caracteres")
+                    code, erreurs_passees = _post_generation_cleanup(code, erreurs_passees)
 
     # ─────────────────────────────────────────────
     # PHASE 5 : FINALISATION
@@ -933,20 +918,23 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
     coordinateur_log.section("PHASE 5 — Finalisation")
 
     duree = time.time() - start_time
-    score_final = bundle.score_global() if bundle else 0.0
     exec_score_final = bundle.execution.score if bundle else 0.0
     all_issues_final = bundle.all_issues() if bundle else []
 
-    # Verdict final
+    # Verdict final — doit tourner avant score_final pour que bundle.benchmark soit peuplé
     verdict_full = agent_verdict_final.run(genre_profile, context.gdd, bundle) if bundle else {}
     # verdict_full = {"evaluation": EvaluationResult, "verdict": dict}
     if bundle and verdict_full:
         bundle.benchmark = verdict_full.get("evaluation", bundle.benchmark)
     verdict = verdict_full.get("verdict", {}) if verdict_full else {}
+
+    # H1 — score_final calculé APRÈS injection benchmark (sinon benchmark=0 → score sous-estimé)
+    score_final = bundle.score_global() if bundle else 0.0
     approuve = score_final >= SCORE_SEUIL_SAUVEGARDE
 
     # C2 : Veto si le verdict final déclare le jeu "non jouable" ou "ne se lance pas"
-    _veto_kws = ["non jouable", "injouable", "ne se lance pas", "écran noir", "crash au démarrage", "unplayable"]
+    _veto_kws = ["non jouable", "injouable", "ne se lance pas", "écran noir", "crash au démarrage",
+                 "unplayable", "black screen", "doesn't launch", "does not launch", "broken game", "crashes on"]
     _vd_text = ((verdict.get("justification", "") or "") + " " + (verdict.get("recommandation", "") or "")).lower()
     if approuve and any(kw in _vd_text for kw in _veto_kws):
         approuve = False
@@ -980,7 +968,7 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
                                 break
                     snippets.append(js_body[start:end])
                 if snippets:
-                    combined = '\n\n'.join(snippets[:3])[:500]
+                    combined = '\n\n'.join(snippets[:3])[:3000]
                     memory.save_pattern(genre_profile, score_final, combined, notes="auto-extrait score>=8")
                     coordinateur_log.success(f"Snippet réussi mémorisé ({len(snippets)} fonctions extraites)")
         except Exception as e:
@@ -998,9 +986,9 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
         )
 
     # Sauvegarder
+    log_content = "\n".join(get_session_log())
     html_path = ""
     if score_final >= SCORE_MIN_VIABLE_SAVE:
-        log_content = "\n".join(get_session_log())
         html_path = agent_sauvegarde.run(
             code=code,
             genre_profile=genre_profile,
@@ -1022,7 +1010,6 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
 
     # Auto-learner (asynchrone)
     try:
-        log_content = "\n".join(get_session_log())
         agent_auto_learner.run(
             html=code,
             score=score_final,

@@ -593,7 +593,7 @@ def _run_simulated(code: str) -> EvaluationResult:
             ("requestAnimationFrame",         "Game loop RAF",            2.5, "critique"),
             ("DOMContentLoaded",              "DOMContentLoaded wrap",    1.5, "critique"),
             ("WebGLRenderer",                 "Renderer WebGL",           2.0, "critique"),
-            ("AmbientLight",                  "Éclairage ambient",        1.0, "critique"),
+            ("AmbientLight",                  "Éclairage ambient",        1.0, "majeur"),
             ("DirectionalLight",              "Éclairage directionnel",   0.5, "majeur"),
             ("THREE.Clock",                   "Delta time (Clock)",       1.0, "majeur"),
             ("scene.background",              "Fond scène défini",        0.5, "majeur"),

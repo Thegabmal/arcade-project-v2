@@ -91,9 +91,9 @@ jeux_sauvegardes/<nom>.html + metadata.json
 | `agent_qc_gameplay` | 25% | Mécaniques, équilibre, fun |
 | `agent_qc_visuel` | 15% | Cohérence visuelle, animations |
 | `agent_executeur` | 20% | Test navigateur headless (Playwright) |
-| `agent_playtester` | 10% | Simulation expérience joueur |
-| `agent_anti_pattern` | 5% | Détection anti-patterns |
-| `agent_benchmark` | 5% | Comparaison standards du genre |
+| `agent_playtester` | 15% | Simulation expérience joueur |
+| `agent_anti_pattern` | 3% | Détection anti-patterns (fusionné dans qc_gameplay) |
+| `agent_benchmark` | 2% | Comparaison standards du genre (via agent_verdict_final) |
 
 ### Phase 5 — Finalisation
 | Agent | Rôle |

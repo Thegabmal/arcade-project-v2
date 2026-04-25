@@ -2479,7 +2479,7 @@ def _inject_arcade_test_hooks(js: str) -> str:
 
 def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logics="", level_design=None) -> str:
     """
-    Génération en 9 couches JS — architecture sans troncature.
+    Génération en 8 couches JS — architecture sans troncature.
 
     L1 DONNÉES        : constantes, data structures, état global
     L2 SPAWN & INIT   : factories d'entités, initGame(), resetGame()
@@ -2488,8 +2488,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     L5 BOSS & VAGUES  : updateWave(), updateBoss(), checkBossPhase(), bossPattern*()
     L6 RENDU          : fonctions draw* fonctionnelles
     L7 BOUCLE         : init(), gameLoop(), event listeners
-    L8 POLISH         : screen shake, sons WebAudio, combo, floating texts
-    L9 GRAPHISME      : réécriture artistique de tous les draw* (directeur artistique)
+    L8 POLISH         : screen shake, sons WebAudio, combo, floating texts + réécriture draw* artistique
 
     Garanties :
     - Aucune troncature d'output (zéro limite de lignes)
@@ -2864,7 +2863,10 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if _resolved2:
         phase3_log.info("[layered] L2 auto-resolved: %s" % ', '.join(_resolved2[:6]))
     accumulated += '\n\n' + layer2_js
-    _incremental_manifest += '\n' + _extract_layer_manifest(layer2_js, 2)
+    _l2_manifest = _extract_layer_manifest(layer2_js, 2)
+    if not _l2_manifest.strip():
+        phase3_log.warning("[layered] L2 manifest vide — couche probablement tronquée")
+    _incremental_manifest += '\n' + _l2_manifest
     phase3_log.info("[layered] Couche 2 OK — %d chars" % len(layer2_js))
 
     # ─────────────────────────────────────────────────────────────
@@ -2951,7 +2953,10 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if _resolved3:
         phase3_log.info("[layered] L3 auto-resolved: %s" % ', '.join(_resolved3[:6]))
     accumulated += '\n\n' + layer3_js
-    _incremental_manifest += '\n' + _extract_layer_manifest(layer3_js, 3)
+    _l3_manifest = _extract_layer_manifest(layer3_js, 3)
+    if not _l3_manifest.strip():
+        phase3_log.warning("[layered] L3 manifest vide — couche probablement tronquée")
+    _incremental_manifest += '\n' + _l3_manifest
     phase3_log.info("[layered] Couche 3 OK — %d chars" % len(layer3_js))
 
     # Runtime check L3 (non-bloquant)
@@ -3048,7 +3053,10 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if _resolved4:
         phase3_log.info("[layered] L4 auto-resolved: %s" % ', '.join(_resolved4[:6]))
     accumulated += '\n\n' + layer4_js
-    _incremental_manifest += '\n' + _extract_layer_manifest(layer4_js, 4)
+    _l4_manifest = _extract_layer_manifest(layer4_js, 4)
+    if not _l4_manifest.strip():
+        phase3_log.warning("[layered] L4 manifest vide — couche probablement tronquée")
+    _incremental_manifest += '\n' + _l4_manifest
     phase3_log.info("[layered] Couche 4 OK — %d chars" % len(layer4_js))
 
     # ─────────────────────────────────────────────────────────────
@@ -3159,7 +3167,10 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if _resolved5:
         phase3_log.info("[layered] L5 auto-resolved: %s" % ', '.join(_resolved5[:6]))
     accumulated += '\n\n' + layer5_js
-    _incremental_manifest += '\n' + _extract_layer_manifest(layer5_js, 5)
+    _l5_manifest = _extract_layer_manifest(layer5_js, 5)
+    if not _l5_manifest.strip():
+        phase3_log.warning("[layered] L5 manifest vide — couche probablement tronquée")
+    _incremental_manifest += '\n' + _l5_manifest
     phase3_log.info("[layered] Couche 5 OK — %d chars" % len(layer5_js))
 
     # ── Gate check mécaniques obligatoires ───────────────────────────────────
@@ -3329,7 +3340,10 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if _resolved6:
         phase3_log.info("[layered] L6 auto-resolved: %s" % ', '.join(_resolved6[:6]))
     accumulated += '\n\n' + layer6_js
-    _incremental_manifest += '\n' + _extract_layer_manifest(layer6_js, 6)
+    _l6_manifest = _extract_layer_manifest(layer6_js, 6)
+    if not _l6_manifest.strip():
+        phase3_log.warning("[layered] L6 manifest vide — couche probablement tronquée")
+    _incremental_manifest += '\n' + _l6_manifest
     phase3_log.info("[layered] Couche 6 OK — %d chars" % len(layer6_js))
 
     # ─────────────────────────────────────────────────────────────
@@ -3508,7 +3522,10 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if _resolved7:
         phase3_log.info("[layered] L7 auto-resolved: %s" % ', '.join(_resolved7[:6]))
     accumulated += '\n\n' + layer7_js
-    _incremental_manifest += '\n' + _extract_layer_manifest(layer7_js, 7)
+    _l7_manifest = _extract_layer_manifest(layer7_js, 7)
+    if not _l7_manifest.strip():
+        phase3_log.warning("[layered] L7 manifest vide — couche probablement tronquée")
+    _incremental_manifest += '\n' + _l7_manifest
     phase3_log.info("[layered] Couche 7 OK — %d chars" % len(layer7_js))
 
     # Runtime check L7 — critique
@@ -3715,7 +3732,10 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         if _resolved8:
             phase3_log.info("[layered] L8 auto-resolved: %s" % ', '.join(_resolved8[:6]))
         accumulated += '\n\n' + layer8_js
-        _incremental_manifest += '\n' + _extract_layer_manifest(layer8_js, 8)
+        _l8_manifest = _extract_layer_manifest(layer8_js, 8)
+        if not _l8_manifest.strip():
+            phase3_log.warning("[layered] L8 manifest vide — couche probablement tronquée")
+        _incremental_manifest += '\n' + _l8_manifest
         phase3_log.info("[layered] Couche 8 OK — %d chars" % len(layer8_js))
 
         if new_fns_from_8:

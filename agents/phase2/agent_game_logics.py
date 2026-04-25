@@ -6,7 +6,7 @@ Adapte selon le genre : boss, ennemis, power-ups, classes, quêtes, PNJ, formule
 """
 
 import json
-from config import call_claude, with_fallback
+from config import call_gemini, with_fallback
 from genre_profile import GenreProfile
 from logger import phase2_log
 
@@ -854,4 +854,4 @@ GAME FEEL :
 @with_fallback(None)
 def _call_section(prompt: str) -> str:
     """Appel focalisé sur une seule section — prompt court, réponse ciblée."""
-    return call_claude(prompt, system=SYSTEM, max_tokens=4000, temperature=0.5)
+    return call_gemini(prompt, system_instruction=SYSTEM, max_tokens=4000, temperature=0.5)

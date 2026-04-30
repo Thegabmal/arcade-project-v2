@@ -45,6 +45,10 @@ def run(
     import utils_dev_console
     code = utils_dev_console.inject(code)
 
+    # Nettoyage post-injection : corrige les éventuels sauts de ligne littéraux dans strings JS
+    from js_syntax_checker import fix_literal_newlines_in_strings as _fix_nl
+    code, _nl_fixed, _ = _fix_nl(code)
+
     # Sauvegarder le HTML
     html_path = os.path.join(SAVE_DIR, f"{filename_base}.html")
     with open(html_path, "w", encoding="utf-8") as f:

@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arcade AI — Library</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { overflow: auto; }
+    .log-modal-overlay {
+      display: none; position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(6px);
+      align-items: center; justify-content: center;
+    }
+    .log-modal-overlay.open { display: flex; }
+    .log-modal {
+      background: #0c0c0c; border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px; width: 90%; max-width: 820px; max-height: 80vh;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .log-modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.07);
+      font-size: 12px; color: rgba(255,255,255,0.5); font-weight: 500;
+    }
+    .log-modal-close {
+      background: none; border: none; color: rgba(255,255,255,0.4);
+      cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 6px;
+    }
+    .log-modal-close:hover { color: #fff; }
+    .log-modal-body {
+      overflow-y: auto; padding: 16px 20px; flex: 1;
+      font-family: 'Courier New', monospace; font-size: 11px;
+      line-height: 1.6; color: rgba(255,255,255,0.55);
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .log-modal-body .log-success { color: rgba(100,220,100,0.9); }
+    .log-modal-body .log-warn    { color: rgba(220,180,50,0.9); }
+    .log-modal-body .log-error   { color: rgba(220,80,80,0.9); }
+    .log-modal-body .log-section { color: rgba(100,180,255,0.9); font-weight: bold; }
+    .btn-log-sm {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px; background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 6px;
+      color: rgba(255,255,255,0.5); font-size: 11px; cursor: pointer;
+      text-decoration: none; transition: background 0.15s;
+    }
+    .btn-log-sm:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    .btn-reeval-sm {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px; background: rgba(80,140,255,0.08);
+      border: 1px solid rgba(80,140,255,0.2); border-radius: 6px;
+      color: rgba(120,170,255,0.7); font-size: 11px; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-reeval-sm:hover { background: rgba(80,140,255,0.18); color: #fff; }
+    .reeval-overlay {
+      display: none; position: fixed; inset: 0; z-index: 9000;
+      background: rgba(0,0,0,0.75); backdrop-filter: blur(6px);
+      align-items: center; justify-content: center;
+    }
+    .reeval-overlay.open { display: flex; }
+    .reeval-card {
+      background: #0d0d14; border: 1px solid rgba(80,140,255,0.2);
+      border-radius: 14px; padding: 28px 32px; min-width: 300px;
+      text-align: center; font-family: 'Inter', sans-serif;
+    }
+    .reeval-card h3 { color: rgba(255,255,255,0.8); font-size: 14px; margin-bottom: 8px; }
+    .reeval-card p  { color: rgba(255,255,255,0.35); font-size: 11px; margin-bottom: 20px; }
+    .reeval-progress { height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; margin-bottom: 16px; }
+    .reeval-progress-bar { height: 100%; background: rgba(80,140,255,0.7); border-radius: 2px; animation: reeval-slide 1.4s ease-in-out infinite; }
+    @keyframes reeval-slide { 0%{width:0%;margin-left:0} 50%{width:60%;margin-left:20%} 100%{width:0%;margin-left:100%} }
+    .reeval-status { font-size: 11px; color: rgba(255,255,255,0.3); min-height: 16px; }
+    .reeval-score-big { font-size: 36px; font-weight: 700; margin: 10px 0 4px; display: none; }
+    .reeval-close {
+      margin-top: 18px; padding: 7px 20px;
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 100px; color: rgba(255,255,255,0.5);
+      font-size: 12px; cursor: pointer; display: none;
+    }
+    .reeval-close:hover { background: rgba(255,255,255,0.12); color: #fff; }
+    .game-duration {
+      font-size: 10px; color: rgba(255,255,255,0.3);
+      margin-left: 6px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Nav -->
+  <nav class="nav">
+    <a href="/" class="nav-logo">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <path d="M9 1.5L16.5 5.75V14.25L9 18.5L1.5 14.25V5.75L9 1.5Z" fill="white" opacity="0.9"/>
+        <path d="M9 5.5L13.5 8V13L9 15.5L4.5 13V8L9 5.5Z" fill="black"/>
+      </svg>
+      Arcade AI
+    </a>
+    <div class="nav-right">
+      <a href="/" class="nav-link">Generator</a>
+      <a href="/history" class="nav-link active">Library</a>
+    </div>
+  </nav>
+
+  <div class="page-container">
+    <div class="page-header">
+      <h1 class="page-title">Game Library</h1>
+      <p class="page-subtitle">All your AI-generated games</p>
+    </div>
+
+    <div class="stats-row" id="history-stats">
+      <div class="stat-item">
+        <span class="stat-value" id="stat-total">—</span>
+        <span class="stat-label">Generated</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value" id="stat-saved">—</span>
+        <span class="stat-label">Approved</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value" id="stat-avg">—</span>
+        <span class="stat-label">Avg score</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value" id="stat-best">—</span>
+        <span class="stat-label">Best score</span>
+      </div>
+    </div>
+
+    <div class="chart-card hidden" id="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">Score progression</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="scores-chart"></canvas>
+      </div>
+    </div>
+
+    <div class="section-header">
+      <span class="section-title">Saved games</span>
+      <span class="section-count" id="history-count">0 games</span>
+    </div>
+
+    <div id="games-grid" class="games-grid">
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <span>Loading...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overlay réévaluation -->
+  <div id="reeval-overlay" class="reeval-overlay">
+    <div class="reeval-card">
+      <h3 id="reeval-title">Réévaluation en cours</h3>
+      <p>Les agents analysent le code actuel du jeu…</p>
+      <div class="reeval-progress"><div class="reeval-progress-bar" id="reeval-bar"></div></div>
+      <div class="reeval-status" id="reeval-status">Initialisation…</div>
+      <div class="reeval-score-big" id="reeval-score-big">—</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:4px;display:none" id="reeval-score-label">Score global / 10</div>
+      <button class="reeval-close" id="reeval-close" onclick="closeReevalOverlay()">Fermer & actualiser</button>
+    </div>
+  </div>
+
+  <!-- Log viewer modal -->
+  <div id="log-modal-overlay" class="log-modal-overlay" onclick="if(event.target===this)closeLogModal()">
+    <div class="log-modal">
+      <div class="log-modal-header">
+        <span id="log-modal-title">Pipeline log</span>
+        <button class="log-modal-close" onclick="closeLogModal()">×</button>
+      </div>
+      <div id="log-modal-body" class="log-modal-body">Loading...</div>
+    </div>
+  </div>
+
+  <script>
+    let chart = null;
+
+    function scoreColor(v) {
+      if (v >= 8) return 'rgba(100,220,100,0.85)';
+      if (v >= 6.5) return 'rgba(220,180,50,0.85)';
+      return 'rgba(220,80,80,0.85)';
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+        + ' · ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatDuration(secs) {
+      if (!secs) return '';
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      return m > 0 ? `${m}m${String(s).padStart(2,'0')}s` : `${s}s`;
+    }
+
+    function renderGame(game) {
+      const s = game.scores || {};
+      const global = s.global ?? 0;
+      const color = scoreColor(global);
+      const isApproved = game.approuve !== false; // undefined = anciens jeux = approuvés
+      const miniKeys = ['technique','gameplay','visuel','execution'];
+      const miniLabels = { technique:'Tech', gameplay:'Play', visuel:'Visual', execution:'Exec' };
+      const mini = miniKeys.filter(k => s[k] !== undefined)
+        .map(k => `<div class="mini-score-item">
+          <span class="mini-score-label">${miniLabels[k]}</span>
+          <span class="mini-score-val" style="color:${scoreColor(s[k])}">${s[k].toFixed(1)}</span>
+        </div>`).join('');
+
+      const dur = game.duree_secondes ? `<span class="game-duration">⏱ ${formatDuration(game.duree_secondes)}</span>` : '';
+      const draftBadge = !isApproved
+        ? `<span style="font-size:9px;font-weight:600;letter-spacing:.08em;color:rgba(220,180,50,.7);background:rgba(220,180,50,.1);border:1px solid rgba(220,180,50,.2);border-radius:4px;padding:1px 6px;margin-left:4px">DEBUG</span>`
+        : '';
+      const cardStyle = !isApproved ? 'opacity:0.65;' : '';
+
+      return `<div class="game-card" style="${cardStyle}">
+        <div class="game-card-top">
+          <span class="genre-tag">${game.genre || '?'}</span>
+          <span style="display:flex;align-items:center;gap:4px">
+            <span class="score-tag" style="color:${color}">${global.toFixed(1)}/10</span>${draftBadge}
+          </span>
+        </div>
+        <h3 class="game-card-title">${game.titre || 'Untitled'}</h3>
+        <p class="game-card-desc">${(game.concept || '').slice(0, 90)}${(game.concept||'').length > 90 ? '…' : ''}</p>
+        <div class="game-mini-scores">${mini}</div>
+        <div class="game-card-bottom">
+          <span class="game-date">${formatDate(game.date)}${dur}</span>
+          <div class="game-actions">
+            <button class="btn-reeval-sm" onclick="startReevaluation('${game.html_basename}', '${(game.titre||'').replace(/'/g,'\\\'')}')">Réévaluer</button>
+            <button class="btn-log-sm" onclick="openLogModal('${game.html_basename}', '${(game.titre||'').replace(/'/g,'\\\'')}')" title="View pipeline log">Log</button>
+            <a href="/play/${game.html_basename}" class="btn-play-sm" target="_blank">Play</a>
+            <a href="/debug/${game.html_basename}" class="btn-log-sm" target="_blank">Debug</a>
+            <a href="/game-file/${game.html_basename}" class="btn-dl-sm" download>↓</a>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    async function openLogModal(htmlBasename, titre) {
+      document.getElementById('log-modal-title').textContent = `Log — ${titre || htmlBasename}`;
+      document.getElementById('log-modal-body').textContent = 'Loading...';
+      document.getElementById('log-modal-overlay').classList.add('open');
+
+      try {
+        const res = await fetch(`/api/game-log/${htmlBasename}`);
+        if (!res.ok) {
+          document.getElementById('log-modal-body').textContent = 'Log non disponible pour ce jeu.';
+          return;
+        }
+        const text = await res.text();
+        renderLog(text);
+      } catch(e) {
+        document.getElementById('log-modal-body').textContent = `Erreur : ${e.message}`;
+      }
+    }
+
+    function renderLog(text) {
+      const body = document.getElementById('log-modal-body');
+      // Colorize log lines
+      const lines = text.split('\n').map(line => {
+        const esc = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        if (/\[SUCCESS\]/.test(line)) return `<span class="log-success">${esc}</span>`;
+        if (/\[WARNING\]/.test(line)) return `<span class="log-warn">${esc}</span>`;
+        if (/\[ERROR\]/.test(line))   return `<span class="log-error">${esc}</span>`;
+        if (/\[SECTION\]/.test(line)) return `<span class="log-section">${esc}</span>`;
+        return esc;
+      });
+      body.innerHTML = lines.join('\n');
+      body.scrollTop = 0;
+    }
+
+    function closeLogModal() {
+      document.getElementById('log-modal-overlay').classList.remove('open');
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeLogModal();
+    });
+
+    function buildChart(games) {
+      const ctx = document.getElementById('scores-chart').getContext('2d');
+      const labels = games.map((g, i) => g.titre ? g.titre.slice(0, 14) : `#${i + 1}`);
+      const data = games.map(g => (g.scores || {}).global ?? 0);
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            data,
+            borderColor: 'rgba(255,255,255,0.3)',
+            backgroundColor: 'rgba(255,255,255,0.03)',
+            pointBackgroundColor: data.map(v => scoreColor(v)),
+            pointBorderColor: 'transparent',
+            pointRadius: 4,
+            tension: 0.3,
+            fill: true,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#111',
+              borderColor: 'rgba(255,255,255,0.1)',
+              borderWidth: 1,
+              titleColor: '#fff',
+              bodyColor: 'rgba(255,255,255,0.5)',
+              padding: 10,
+            },
+          },
+          scales: {
+            x: {
+              ticks: { color: 'rgba(255,255,255,0.2)', font: { size: 10, family: 'Inter' }, maxRotation: 30 },
+              grid: { color: 'rgba(255,255,255,0.04)' }
+            },
+            y: {
+              min: 0, max: 10,
+              ticks: { color: 'rgba(255,255,255,0.2)', font: { size: 10, family: 'Inter' } },
+              grid: { color: 'rgba(255,255,255,0.04)' }
+            },
+          },
+        },
+      });
+    }
+
+    async function loadHistory() {
+      try {
+        const [histRes, statsRes] = await Promise.all([fetch('/api/history'), fetch('/api/stats')]);
+        const games = await histRes.json();
+        const stats = await statsRes.json();
+
+        document.getElementById('stat-total').textContent = stats.total_games_generated ?? games.length;
+        const approved = games.filter(g => g.approuve !== false).length;
+        document.getElementById('stat-saved').textContent = approved;
+
+        const scores = games.map(g => (g.scores || {}).global).filter(v => v !== undefined);
+        if (scores.length) {
+          document.getElementById('stat-avg').textContent = (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+          document.getElementById('stat-best').textContent = Math.max(...scores).toFixed(1);
+        }
+
+        if (games.length > 0) {
+          document.getElementById('chart-card').classList.remove('hidden');
+          buildChart([...games].reverse());
+        }
+
+        document.getElementById('history-count').textContent = `${games.length} game${games.length !== 1 ? 's' : ''}`;
+
+        const grid = document.getElementById('games-grid');
+        if (games.length === 0) {
+          grid.innerHTML = `<div class="empty-state">
+            <p class="empty-title">No saved games yet</p>
+            <p class="empty-sub">Generate your first game to see it here.</p>
+            <a href="/" class="btn-cta" style="margin-top:16px;text-decoration:none">Generate a game</a>
+          </div>`;
+        } else {
+          grid.innerHTML = games.map(renderGame).join('');
+        }
+      } catch(e) {
+        document.getElementById('games-grid').innerHTML = `<div class="error-state">Error: ${e.message}</div>`;
+      }
+    }
+
+    loadHistory();
+
+    async function startReevaluation(filename, titre) {
+      document.getElementById('reeval-title').textContent = titre ? `Réévaluation — ${titre.slice(0,30)}` : 'Réévaluation en cours';
+      document.getElementById('reeval-status').textContent = 'Lancement des agents…';
+      document.getElementById('reeval-score-big').style.display = 'none';
+      document.getElementById('reeval-score-label').style.display = 'none';
+      document.getElementById('reeval-close').style.display = 'none';
+      const bar = document.getElementById('reeval-bar');
+      bar.style.animation = 'reeval-slide 1.4s ease-in-out infinite';
+      bar.style.width = '';
+      document.getElementById('reeval-overlay').classList.add('open');
+
+      try {
+        const res = await fetch('/api/reevaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename }),
+        });
+        const { session_id, error } = await res.json();
+        if (error) throw new Error(error);
+
+        const evtSource = new EventSource(`/api/stream/${session_id}`);
+        evtSource.onmessage = e => {
+          const event = JSON.parse(e.data);
+          if (event.type === 'agent_start') {
+            document.getElementById('reeval-status').textContent = `${event.data.agent}…`;
+          } else if (event.type === 'score') {
+            document.getElementById('reeval-status').textContent = `${event.data.label} : ${event.data.value}`;
+          } else if (event.type === 'complete') {
+            evtSource.close();
+            const score = event.data.score;
+            const scoreEl = document.getElementById('reeval-score-big');
+            scoreEl.textContent = `${score.toFixed(1)}/10`;
+            scoreEl.style.color = score >= 8 ? 'rgba(100,220,100,0.9)' : score >= 6 ? 'rgba(220,180,50,0.9)' : 'rgba(220,80,80,0.9)';
+            scoreEl.style.display = 'block';
+            document.getElementById('reeval-score-label').style.display = 'block';
+            document.getElementById('reeval-status').textContent = 'Metadata mis à jour.';
+            document.getElementById('reeval-close').style.display = 'inline-block';
+            bar.style.animation = 'none';
+            bar.style.width = '100%';
+          } else if (event.type === 'error') {
+            evtSource.close();
+            document.getElementById('reeval-status').textContent = `Erreur : ${event.data.message}`;
+            document.getElementById('reeval-close').style.display = 'inline-block';
+          } else if (event.type === 'end') {
+            evtSource.close();
+          }
+        };
+        evtSource.onerror = () => {
+          evtSource.close();
+          document.getElementById('reeval-status').textContent = 'Connexion perdue.';
+          document.getElementById('reeval-close').style.display = 'inline-block';
+        };
+      } catch(err) {
+        document.getElementById('reeval-status').textContent = `Erreur : ${err.message}`;
+        document.getElementById('reeval-close').style.display = 'inline-block';
+      }
+    }
+
+    function closeReevalOverlay() {
+      document.getElementById('reeval-overlay').classList.remove('open');
+      loadHistory(); // Recharge la liste avec les nouveaux scores
+    }
+  </script>
+</body>
+</html>

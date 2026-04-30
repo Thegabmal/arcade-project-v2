@@ -71,6 +71,9 @@ class GenreProfile:
     # Technologie de rendu
     technologie_rendu: str = "canvas2d"  # "canvas2d" ou "threejs"
 
+    # Narratif
+    is_narrative: bool = False  # True si le jeu a une histoire/quêtes/dialogues
+
     # Prompt enrichi (sortie finale de la Phase 1)
     prompt_utilisateur_original: str = ""
     prompt_enrichi: str = ""
@@ -126,6 +129,31 @@ class GeneratedModules:
 
 
 @dataclass
+class NarrativeContext:
+    """Contexte narratif généré par agent_scenariste — Phase 2 optionnelle."""
+    titre: str = ""
+    synopsis: str = ""
+    acte1: str = ""
+    acte2: str = ""
+    acte3: str = ""
+    personnages: list = field(default_factory=list)   # [{nom, role, motivation, description}]
+    quetes: list = field(default_factory=list)        # [{nom, objectif, recompense, dialogue_intro}]
+    dialogues: list = field(default_factory=list)     # [{perso, texte, choix: [{texte, consequence}]}]
+    lore: str = ""
+    ton_narratif: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "NarrativeContext":
+        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+
+
+@dataclass
 class ConceptionContext:
     """Agrège les sorties de la Phase 2."""
     genre_profile: GenreProfile = field(default_factory=GenreProfile)
@@ -133,6 +161,7 @@ class ConceptionContext:
     tech_specs: dict = field(default_factory=dict)    # Spécifications techniques
     ux_specs: dict = field(default_factory=dict)      # Guidelines UX/UI
     level_design: dict = field(default_factory=dict)  # Design des niveaux
+    narrative_context: Optional[NarrativeContext] = None  # Sortie de agent_scenariste (si is_narrative)
 
     def to_context_string(self) -> str:
         """Retourne un contexte complet formaté pour le créateur."""
@@ -148,6 +177,9 @@ class ConceptionContext:
             "\n=== LEVEL DESIGN ===",
             json.dumps(self.level_design, ensure_ascii=False, indent=2),
         ]
+        if self.narrative_context:
+            parts.append("\n=== CONTEXTE NARRATIF ===")
+            parts.append(self.narrative_context.to_json())
         return "\n".join(parts)
 
 

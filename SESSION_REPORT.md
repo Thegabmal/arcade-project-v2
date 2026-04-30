@@ -5,57 +5,147 @@
 
 ---
 
-## Dernière session : 2026-04-20 — Audit 33 améliorations : 26/33 corrigées (stable/v6-v9)
+## Dernière session : 2026-04-30 — DQ11-style rpg_narratif + fixes bugs combat
 
 ### Résumé session
-Reprise depuis l'audit exhaustif du 2026-04-19. Application de 26 des 33 fixes identifiés.
-4 commits : stable/v6, B1-B9, C3-F2, F3-B5-fix.
+Réécriture complète de `jeux_modeles/rpg_narratif.html` en style Dragon Quest 11 2D lisse.
+Abandon du pipeline pixel-art offscreen (160×120 × 4). Rendu direct 640×480 avec formes composites et dégradés.
 
-### Fixes appliqués par catégorie
+### Bugs corrigés (session précédente + cette session)
+- Actions combat incliquables : `kjp={}` vidé AVANT `update()` → fix : déplacé APRÈS `update()` dans la boucle
+- Menus illisibles : textes passaient par l'offscreen 160×120 (police 5px) → fix : rendu direct sur ctx
+- Fuite soigne l'ennemi : `combat.enemy` est une copie `{...}`, les dégâts ne se synchronisent pas → fix : `combat.enemy.ref.hp = Math.max(1, combat.enemy.hp)` avant d'appliquer la fuite
+- Probabilité de fuite trop faible : 50% → 70%
+
+### rpg_narratif.html — Réécriture DQ11 2D
+**Abandon total du pixel art offscreen. Tout dessiné directement sur ctx 640×480.**
+
+Architecture graphique :
+- `TILE=48px` — tuiles procédurales avec `createLinearGradient` / `createRadialGradient`, lames d'herbe, arbres détaillés, eau animée, bâtiments avec fenêtres lumineuses
+- `drawHero(cx,cy,dir,frame,sc)` — ombre ellipse, tunique bleue gradient, tête gradient radial peau, cheveux arc, yeux par direction, épée argentée
+- `drawNPCShape(cx,cy,type,sc)` — 5 types (sage+staff orb, forgeron tablier, garde casque, marchand grand chapeau, prisonnier)
+- `drawEnemyShape(cx,cy,type,shake,sc)` — loup (gris/bleu, yeux rouges brillants, crocs), bandit (armure rouge, bandana), boss (armure sombre, couronne dorée, grande épée), gardien (violet, aura magique, orbe)
+- `drawPanel(x,y,w,h,title)` — panneaux avec fond dégradé sombre + bordure or double
+- `drawHPBar(x,y,w,h,val,max,col)` — barre avec dégradé lumineux
+- Combat : fond ciel de bataille gradient, sol texture, étoiles animées, ennemi centré-droit (scale 1.3×), héros bas-gauche (scale 0.85×), secousse pendant animation tour
+
+**Logique préservée à l'identique :**
+- Carte 20×15, système caméra, collision tuiles, zones bloquées (citadelle sans drapeau)
+- 5 PNJs + 5 ennemis monde (2 loups, bandit, boss, gardien corrompu)
+- Tous les dialogues, arbres de choix, flags, quêtes
+- Combat tour par tour : attaque, magie (-10 MP), potion, fuite (70%)
+- Gains XP, level-up stats, or, condition victoire narrative (gardien corrompu vaincu)
+
+---
+
+## Session précédente : 2026-04-26 (suite) — Pipeline améliorations majeures (5 axes)
+
+### Résumé session
+Suite de la session précédente. Star Blaster Blitz stabilisé (boss, barre de vie, blinkAlpha). 5 axes d'amélioration pipeline implémentés.
+
+### Fixes Star Blaster Blitz (star_blaster_blitz_20260426_005117.html)
+- Boss ne spawne jamais : `BOSS_DEFS['level'+level]` = undefined → guard retourne tôt → `|| BOSS_DEFS` fallback
+- Boss scroll hors écran : `boss.y += scrollSpeed * dt` dans update + pas de clamp → entrée animée + clamp Y dans 3 bossPattern functions
+- Barre de vie boss invisible : `barX=0, barY=0, barWidth=0` → `barX=40, barY=12, barWidth=W-80, barHeight=14`
+- `blinkAlpha is not defined` dans drawGameOver : var déclarée dans drawMenu mais utilisée dans drawGameOver → déclarée locale dans drawGameOver
+- boss.vx/shootTimer/invTimer/waveActive=false manquants dans spawnBoss → ajoutés
+
+### 5 axes d'amélioration implémentés
+
+| Axe | Statut | Fichiers |
+|-----|--------|---------|
+| 0. Mini-patcher IA executor | ✅ FAIT | `agent_executeur.py` : `_mini_patcher_gemini()` extrait fonction cible + globals (~200 lignes), évite "lost in the middle" |
+| 1. Executor amélioré | ✅ FAIT | Test "Score progresse" (Space×10 → attente → check score), hard cap 4.5 si JS errors + joueur immobile |
+| 2. Support jeux narratifs | ✅ FAIT (complet) | `genre_profile.py` NarrativeContext, `agent_scenariste.py` NOUVEAU, `agent_createur.py` narrative_info, `agent_qc_gameplay.py` critères narratifs |
+| 3. Jeux modèles | ⏳ EN COURS (3/9) | `jeux_modeles/` : shoot_em_up.html, platformer.html, rpg_narratif.html codés à la main |
+| 4. Playability gate | ✅ PARTIEL | SCORE_MIN_EXECUTION=5.0, hard cap 4.5, veto agent neutre |
+| 5. Feedback erreurs JS → patcher | ✅ PARTIEL | commentaire_global inclut 3 premières erreurs JS |
+
+### Jeux modèles créés (jeux_modeles/)
+- `shoot_em_up.html` : ~400 lignes, 4 types ennemis, power-ups, boss par vague, highscore localStorage
+- `platformer.html` : ~500 lignes, coyote time + jump buffer, 3 niveaux, 2 types ennemis
+- `rpg_narratif.html` : ~600 lignes, map tuiles 20×15, dialogues typewriter, 5 PNJs, système quêtes, combat tour par tour, boss final
+
+### Ce qui reste à faire (Point 3)
+- 6 jeux modèles restants : puzzle match-3, endless runner, breakout, tower defense, visual novel, dungeon crawler
+- Script injection ChromaDB : extraire patterns → `rag.store_pattern()`
+
+---
+
+## Session précédente : 2026-04-26 (matin) — Run 7 Star Blaster Blitz + fixes pipeline
+
+### Résumé session
+Run 7 (shoot em up spatial) lancé → score 7.70 sauvegardé. Jeu injouable → débogage complet + 12 fixes pipeline.
+
+### Bugs jeu corrigés (star_blaster_blitz_20260426)
+| Bug | Cause | Fix jeu | Fix pipeline |
+|-----|-------|---------|-------------|
+| Écran noir (SyntaxError) | Literal `\n` dans string Python | `split('\\n')` dans utils_dev_console | `fix_literal_newlines_in_strings` dans js_syntax_checker |
+| Stubs vides écrasent implémentations | `_stub_orphan_calls` injecte stubs pour fonctions déjà définies | Stubs supprimés du jeu | Guard `re.search('function fn(', accumulated)` avant injection |
+| `handleBulletEnemyHit()` sans args crash | Patcher injecte appels sans args dans gameLoop | Appels supprimés | `_fix_no_args_handlers_in_gameloop` dans code_validator |
+| `multiplierTimer is not defined` | Patcher utilise var sans la déclarer | Déclaré global | Ajout à COMMON_VARS |
+| PALETTE dupliquée → undefined | Second `var PALETTE={}` écrase L1 | `Object.assign` | `fix_duplicate_palette` dans js_syntax_checker |
+| `gridSize is not defined` | Var locale L6 utilisée dans L9 sans redéclaration | Déclarée | `_fix_undeclared_draw_locals` dans code_validator |
+| `hpRatio is not defined` (9 fonctions) | Idem L6→L9 | Injectées | `_fix_undeclared_draw_locals` dans code_validator |
+| Joueur non réactif (updatePlayer/etc. vides) | Stubs orphelins écrasent vraies implémentations (last-def-wins) | Stubs retirés | `_stub_orphan_calls` skip si `function fn(` déjà présent |
+| `typeDef.name` → undefined | ENEMY_TYPES utilise `type:` mais code lit `.name` | `.name` → `.type` | `_fix_type_vs_name_property` dans code_validator |
+| `e.typeIndex` → undefined | `spawnEnemy(typeIndex)` ne stocke pas typeIndex sur l'objet | `typeIndex: typeIndex` ajouté | `_fix_spawn_missing_typeindex` dans code_validator |
+| `e is not defined` dans drawEnemies | L9 réécrit drawEnemies sans `var e = enemies[i]` | `var e` injecté | `_fix_draw_loop_missing_element_var` dans code_validator |
+| `b is not defined` dans drawBullets | Idem pour drawBullets | `var b` injecté | Couvert par même fonction |
+| `p is not defined` dans updateParticles | Idem pour updateParticles | `var p` injecté | Table étendue aux update* |
+| ArrowLeft/Right ne bougent pas le joueur | Handler stocke `keys["arrowleft"]` mais updatePlayer lit `keys.left` | Mapping ajouté | `_fix_arrow_key_mapping` dans code_validator |
+| Ennemis spawent à gauche seulement | `spawnEnemy` hardcode `400` au lieu de `W` | `W` utilisé | Bug connu |
+| Balles ne supprimées pas après hit | `handleBulletEnemyHit` L9 ne splice pas | `bullets.splice(bi,1)` ajouté | Fix dans jeu |
+| Écran vide après vague 1 | `drawUpgradeSelect` inexistant | Fonction créée | Bug connu |
+
+### Amélioration agent_executeur
+- Lit `window.__ARCADE_ERROR__` (erreur gameLoop catch) → repair loop max 3 itérations
+- Lit `player.x` avant/après ArrowRight — détecte joueur figé (avant : fallback canvas diff → faux positif car fond animé)
+- Test `enemies.length > 0` après démarrage → détecte spawn cassé
+
+### Tests
+20/20 après chaque fix.
+
+---
+
+## Session précédente : 2026-04-20 — Audit 33/33 COMPLET + Symbol Table A+B+C (stable/v8)
+
+### Résumé session
+Continuation audit. 7 items restants implémentés + refonte anti-hallucination majeure (Symbol Table A+B+C).
+Commit : stable/v8 (`8b60c99`).
+
+### Nouveau système anti-hallucination — Symbol Table A+B+C
+
+**Problème résolu :** LLM hallucine des constantes ALLCAPS (`ENEMY_SPEED_DRONE`, `ENEMY_HP_BOMBER`) inexistantes
+parce qu'il pattern-complete depuis ses données d'entraînement sans vérifier L1.
+
+**Implémentation dans `_layer_gen.py` :**
+- `_build_symbol_table(l1_js)` : extrait toutes les constantes ALLCAPS et type arrays de L1
+- `_format_global_contract(table)` : formate un "contrat global" injecté en tête de chaque prompt L2-L9
+- `_resolve_undeclared_symbols(fragment, table, accumulated)` : scan post-génération, inject `var NAME=heuristic;` pour tout ALLCAPS non déclaré
+- `_derive_constant_value(name)` : heuristiques (speed→150, rate→0.5, hp→3, dmg→1, etc.)
+- `_build_layer_context()` : nouveau param `global_contract=` utilisé sur toutes les 8 couches
+- L1 prompt : instruction `// @GLOBALS:` pour que L1 liste ses constantes
+
+### Fixes audit items 7/7 restants
 
 | ID | Fichier | Fix |
 |----|---------|-----|
-| **A1** | `app.py:1479` | `generation_sessions` → `_sessions` (NameError /api/health) |
-| **A2** | `coordinateur.py` | `run_quick()` implémenté via `_max_iterations=1` thread-safe |
-| **B1** | `coordinateur.py` | `_safe_result` fallback 5.0 → 1.5 + log ERROR agent crashé |
-| **B3** | `coordinateur.py` | `erreurs_passees` dédupliqué à la construction |
-| **B4** | `coordinateur.py` | `all_issues_str` dédupliqué avant pre-patcher |
-| **B5** | `coordinateur.py` | `apply_all_rules()` appliqué AVANT `agent_pre_patcher` (règles déterministes d'abord) |
-| **B6** | `config.py` | Commentaire MAX_CALLS_PER_DAY clarifié (payant = GEMINI_RPD_LIMIT=9999) |
-| **B7** | `_layer_gen.py` | Timeout Node.js 5s → 10s (--timeout 3000→8000ms) |
-| **B9** | `coordinateur.py` | Retry `agent_game_designer` si GDD titre vide |
-| **C3** | `_layer_gen.py` | Date.now() interdit pour animations → `_bgTimer+=dt` obligatoire |
-| **C4** | `_layer_gen.py L5` | `spawnWaveEnemies` OBLIGATOIRE lit WAVE_DEFS (plus de spawnEnemy(0) direct) |
-| **C6** | `_layer_gen.py` | Strip RAF dans init() post-assemblage (double vitesse de boucle évitée) |
-| **D3** | `config.py` | Retry paid 429 : backoff exponentiel (5×2^n + jitter) au lieu de linéaire |
-| **E4** | `app.py` | Message SSE clair "Quotas épuisés" si _AllFreeKeysExhausted |
-| **F1** | `_layer_gen.py` | Règle `localStorage` try/catch obligatoire dans `_LAYER_SYSTEM` |
-| **F2** | `app.py` | Sanitisation prompt : guillemets simples/doubles + backslashes filtrés |
-| **F3** | `app.py` | Sémaphore `MAX_CONCURRENT_GENERATIONS=3` sur `/api/generate` |
-| **rgba** | `_layer_gen.py` + `_auto_fix_rules.py` | Détection `rgba()` sans quotes + auto-repair post-assemblage (règles + LLM chirurgical) |
-| **PALETTE** | `_layer_gen.py L1` | PALETTE 15+ couleurs avec variantes neon obligatoires |
-| **NODE_RUNNER** | `_layer_gen.py` | Tests 3 états (menu/playing/gameover) + drawBackground/HUD/Menu |
+| **C1** | `_layer_gen.py` post-assemblage | Injection déterministe `score += e.points\|\|10` dans `handleBulletEnemyHit` si score absent |
+| **C2** | `agent_executeur.py` | Test Playwright : `player.hp > 0` (santé accessible et positive) |
+| **C5** | `agent_executeur.py` | Test Playwright : zone HUD (top 10% canvas) non noire |
+| **D2** | `utils.py` | `strip_js_comments(js)` → appelé automatiquement dans `extract_js_sample()` (~25% tokens économisés) |
+| **E1** | `coordinateur.py` | `store_code_preview(code)` après Phase 3 (live preview via `/api/preview`) |
+| **G1/G2/G4** | — | SKIP (dette mineure, ROI faible, pas de démo impact) |
 
-### Non traités (7/33)
-- **B2** : déjà OK dans le code (condition `< 0` avant `< 0.02`)
-- **B8** : nécessite refactoring agents Phase 2 (interfaces)
-- **B10** : intégré dans B1 (log ERROR visible)
-- **C1** : gate score non incrémenté → patch déterministe (TODO)
-- **C2** : test player.hp décroissant dans agent_executeur (TODO)
-- **C5** : vérification HUD affiche score (TODO)
-- **D1/D2** : strip commentaires JS avant agents Phase 4 (TODO)
-- **E1** : live preview pendant génération (TODO)
-- **G1-G4** : dette technique mineure (TODO)
+### État audit complet
+- **33/33 items traités** (B2/B8/B10 : déjà OK ou SKIP justifié, G1/G2/G4 : SKIP dette mineure)
+- Snapshot : stable/v8 (2026-04-20)
 
-### État actuel
-- Snapshot : stable/v6 (2026-04-20, commit `ecef9fc`)
-- Tests régression : à re-runner (`python test_regression.py --fast`)
-- Démo Arcade AI : 2026-04-21 (demain) — lancer des générations pour constituer bibliothèque
-
-### À faire en priorité avant la démo
+### À faire maintenant
 1. Lancer 3-4 générations (shooter, platformer, tower defense, puzzle)
-2. Vérifier manuellement chaque jeu sauvegardé
-3. `python test_regression.py --fast` pour valider les fixes
+2. Surveiller logs `[symbol-table]` → vérifier que les constantes hallucinées sont résolues
+3. Vérifier manuellement chaque jeu sauvegardé dans le navigateur
 
 ---
 

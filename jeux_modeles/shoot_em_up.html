@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Stellar Assault</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+var canvas = document.getElementById('c');
+var ctx = canvas.getContext('2d');
+var W = canvas.width  = 480;
+var H = canvas.height = 640;
+
+// ─── CONSTANTES ───────────────────────────────────────────────────────────────
+var PLAYER_SPEED  = 220;
+var BULLET_SPEED  = 450;
+var FIRE_RATE     = 0.12;  // secondes entre tirs
+var PLAYER_LIVES  = 3;
+var INVINCIBLE_DUR = 2.0;  // secondes d'invincibilité après un coup
+
+// ─── ÉTAT GLOBAL ──────────────────────────────────────────────────────────────
+var gameState = 'menu';  // 'menu' | 'playing' | 'gameover'
+var score = 0;
+var highScore = parseInt(localStorage.getItem('shmup_hs') || '0');
+var wave = 1;
+var lives = PLAYER_LIVES;
+
+// ─── ENTITÉS ──────────────────────────────────────────────────────────────────
+var player = null;
+var bullets = [];      // {x, y, vx, vy, owner}
+var enemies = [];      // {x, y, w, h, hp, maxHp, type, fireTimer, vx, vy, points}
+var particles = [];    // {x, y, vx, vy, life, maxLife, r, color}
+var stars = [];        // fond défilant
+
+// ─── TYPES D'ENNEMIS ──────────────────────────────────────────────────────────
+var ENEMY_TYPES = [
+    { id: 'drone',    w:24, h:24, hp:1, speed:80,  points:100, color:'#00e5ff', fireRate:0   },
+    { id: 'fighter',  w:30, h:30, hp:2, speed:60,  points:200, color:'#ff6d00', fireRate:2.5 },
+    { id: 'tank',     w:44, h:44, hp:6, speed:35,  points:500, color:'#aa00ff', fireRate:1.8 },
+    { id: 'boss',     w:80, h:80, hp:30,speed:40,  points:3000,color:'#ff1744', fireRate:1.0 },
+];
+
+// ─── POWER-UPS ────────────────────────────────────────────────────────────────
+var powerups = [];  // {x, y, type, vy}
+var POWERUP_TYPES = ['trishot', 'shield', 'bomb'];
+var playerShield = false;
+var playerTrishot = false;
+var trtshotTimer = 0;
+var bombCount = 0;
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function rnd(min, max) { return min + Math.random() * (max - min); }
+function rndInt(min, max) { return Math.floor(rnd(min, max + 1)); }
+function dist(a, b) { var dx = a.x - b.x, dy = a.y - b.y; return Math.sqrt(dx*dx + dy*dy); }
+function aabb(a, b) {
+    return a.x - a.w/2 < b.x + b.w/2 && a.x + a.w/2 > b.x - b.w/2
+        && a.y - a.h/2 < b.y + b.h/2 && a.y + a.h/2 > b.y - b.h/2;
+}
+
+// ─── CRÉATION ÉTOILES ─────────────────────────────────────────────────────────
+function initStars() {
+    stars = [];
+    for (var i = 0; i < 100; i++) {
+        stars.push({ x: rnd(0, W), y: rnd(0, H), r: rnd(0.5, 2.5), speed: rnd(30, 100) });
+    }
+}
+
+// ─── SPAWN JOUEUR ─────────────────────────────────────────────────────────────
+function spawnPlayer() {
+    player = {
+        x: W / 2, y: H - 80,
+        w: 28, h: 32,
+        fireTimer: 0,
+        invTimer: 0,   // invincibilité après coup
+        blinkTimer: 0,
+    };
+}
+
+// ─── SPAWN ENNEMI ─────────────────────────────────────────────────────────────
+function spawnEnemy(typeIdx) {
+    var t = ENEMY_TYPES[Math.min(typeIdx, ENEMY_TYPES.length - 1)];
+    var e = {
+        x: rnd(t.w, W - t.w), y: -t.h,
+        w: t.w, h: t.h,
+        hp: t.hp, maxHp: t.hp,
+        type: t.id, color: t.color, points: t.points,
+        speed: t.speed * (1 + wave * 0.05),
+        fireRate: t.fireRate,
+        fireTimer: rnd(0.5, t.fireRate || 1),
+        vx: rnd(-30, 30),
+        vy: t.speed * (1 + wave * 0.05),
+        sinOffset: rnd(0, Math.PI * 2),
+        age: 0,
+    };
+    enemies.push(e);
+}
+
+// ─── SPAWN VAGUE ──────────────────────────────────────────────────────────────
+var waveTimer = 0;
+var waveActive = false;
+var waveEnemiesLeft = 0;
+var spawnTimer = 0;
+var bossActive = false;
+
+function startWave(w) {
+    waveActive = true;
+    bossActive = false;
+    if (w % 5 === 0) {
+        // Boss wave
+        spawnEnemy(3);
+        bossActive = true;
+        waveEnemiesLeft = 1;
+    } else {
+        // Vague normale : densité augmente avec wave
+        waveEnemiesLeft = 4 + w * 2;
+        spawnTimer = 0;
+    }
+}
+
+// ─── SPAWN BULLET ─────────────────────────────────────────────────────────────
+function spawnBullet(x, y, vx, vy, owner) {
+    bullets.push({ x: x, y: y, vx: vx, vy: vy, owner: owner, w: 6, h: 12 });
+}
+
+// ─── SPAWN PARTICULES ─────────────────────────────────────────────────────────
+function explode(x, y, color, count) {
+    for (var i = 0; i < count; i++) {
+        var angle = rnd(0, Math.PI * 2);
+        var speed = rnd(40, 180);
+        particles.push({
+            x: x, y: y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            r: rnd(2, 6),
+            life: rnd(0.3, 0.8),
+            maxLife: 0.8,
+            color: color,
+        });
+    }
+}
+
+// ─── SPAWN POWERUP ────────────────────────────────────────────────────────────
+function maybeSpawnPowerup(x, y) {
+    if (Math.random() < 0.18) {
+        var type = POWERUP_TYPES[rndInt(0, POWERUP_TYPES.length - 1)];
+        powerups.push({ x: x, y: y, type: type, vy: 55, w: 22, h: 22 });
+    }
+}
+
+// ─── INPUT ────────────────────────────────────────────────────────────────────
+var keys = {};
+document.addEventListener('keydown', function(e) {
+    keys[e.code] = true;
+    if (e.code === 'Space') e.preventDefault();
+    if (gameState === 'menu' && (e.code === 'Space' || e.code === 'Enter')) startGame();
+    if (gameState === 'gameover' && (e.code === 'Space' || e.code === 'Enter')) startGame();
+    if (gameState === 'playing' && e.code === 'KeyB' && bombCount > 0) useBomb();
+});
+document.addEventListener('keyup', function(e) { keys[e.code] = false; });
+
+function startGame() {
+    score = 0; lives = PLAYER_LIVES; wave = 1;
+    bullets = []; enemies = []; particles = []; powerups = [];
+    playerShield = false; playerTrishot = false; trtshotTimer = 0; bombCount = 0;
+    spawnPlayer();
+    startWave(wave);
+    gameState = 'playing';
+}
+
+function useBomb() {
+    bombCount--;
+    enemies.forEach(function(e) {
+        score += e.points;
+        explode(e.x, e.y, e.color, 12);
+    });
+    enemies = [];
+    bullets = bullets.filter(function(b) { return b.owner !== 'enemy'; });
+}
+
+// ─── UPDATE ───────────────────────────────────────────────────────────────────
+var lastTime = 0;
+function update(dt) {
+    if (gameState !== 'playing') return;
+
+    // Étoiles
+    stars.forEach(function(s) {
+        s.y += s.speed * dt;
+        if (s.y > H) s.y = 0;
+    });
+
+    // Joueur
+    if (player) {
+        if (keys['ArrowLeft'] || keys['KeyA'])  player.x -= PLAYER_SPEED * dt;
+        if (keys['ArrowRight'] || keys['KeyD']) player.x += PLAYER_SPEED * dt;
+        if (keys['ArrowUp'] || keys['KeyW'])    player.y -= PLAYER_SPEED * dt;
+        if (keys['ArrowDown'] || keys['KeyS'])  player.y += PLAYER_SPEED * dt;
+        player.x = Math.max(player.w/2, Math.min(W - player.w/2, player.x));
+        player.y = Math.max(player.h/2, Math.min(H - player.h/2, player.y));
+
+        // Tir
+        player.fireTimer -= dt;
+        if ((keys['Space'] || keys['KeyZ']) && player.fireTimer <= 0) {
+            player.fireTimer = FIRE_RATE;
+            spawnBullet(player.x, player.y - player.h/2, 0, -BULLET_SPEED, 'player');
+            if (playerTrishot) {
+                spawnBullet(player.x - 14, player.y - player.h/4, -60, -BULLET_SPEED * 0.9, 'player');
+                spawnBullet(player.x + 14, player.y - player.h/4,  60, -BULLET_SPEED * 0.9, 'player');
+            }
+        }
+
+        // Invincibilité
+        if (player.invTimer > 0) player.invTimer -= dt;
+        if (player.blinkTimer > 0) player.blinkTimer -= dt;
+
+        // Trishot timer
+        if (trtshotTimer > 0) {
+            trtshotTimer -= dt;
+            if (trtshotTimer <= 0) playerTrishot = false;
+        }
+    }
+
+    // Spawn ennemis (vague normale)
+    if (waveActive && !bossActive && waveEnemiesLeft > 0) {
+        spawnTimer -= dt;
+        if (spawnTimer <= 0) {
+            var typeIdx = Math.min(Math.floor(wave / 3), 2);
+            if (wave > 2 && Math.random() < 0.3) typeIdx = Math.min(typeIdx + 1, 2);
+            spawnEnemy(typeIdx);
+            waveEnemiesLeft--;
+            spawnTimer = Math.max(0.4, 1.2 - wave * 0.07);
+        }
+    }
+
+    // Ennemis
+    for (var i = enemies.length - 1; i >= 0; i--) {
+        var e = enemies[i];
+        e.age += dt;
+        // Mouvement sinusoïdal
+        e.x += (Math.sin(e.age * 1.5 + e.sinOffset) * 60 + e.vx) * dt;
+        e.y += e.vy * dt;
+        e.x = Math.max(e.w/2, Math.min(W - e.w/2, e.x));
+
+        // Tir ennemi
+        if (e.fireRate > 0 && player) {
+            e.fireTimer -= dt;
+            if (e.fireTimer <= 0) {
+                e.fireTimer = e.fireRate;
+                var dx = player.x - e.x, dy = player.y - e.y;
+                var len = Math.sqrt(dx*dx + dy*dy) || 1;
+                var speed = 200 + wave * 8;
+                spawnBullet(e.x, e.y + e.h/2, dx/len * speed, dy/len * speed, 'enemy');
+            }
+        }
+
+        // Hors écran
+        if (e.y > H + e.h) {
+            enemies.splice(i, 1);
+        }
+    }
+
+    // Balles
+    for (var i = bullets.length - 1; i >= 0; i--) {
+        var b = bullets[i];
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        if (b.y < -20 || b.y > H + 20 || b.x < -20 || b.x > W + 20) {
+            bullets.splice(i, 1);
+            continue;
+        }
+
+        // Balle joueur vs ennemis
+        if (b.owner === 'player') {
+            for (var j = enemies.length - 1; j >= 0; j--) {
+                var e = enemies[j];
+                if (aabb(b, e)) {
+                    e.hp--;
+                    bullets.splice(i, 1);
+                    explode(b.x, b.y, '#fff', 3);
+                    if (e.hp <= 0) {
+                        score += e.points;
+                        explode(e.x, e.y, e.color, 16);
+                        maybeSpawnPowerup(e.x, e.y);
+                        enemies.splice(j, 1);
+                        if (bossActive) bossActive = false;
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Balle ennemi vs joueur
+        if (b.owner === 'enemy' && player && player.invTimer <= 0) {
+            if (aabb(b, player)) {
+                bullets.splice(i, 1);
+                hitPlayer();
+            }
+        }
+    }
+
+    // Collision ennemis vs joueur
+    if (player && player.invTimer <= 0) {
+        for (var i = 0; i < enemies.length; i++) {
+            if (aabb(player, enemies[i])) {
+                hitPlayer();
+                enemies.splice(i, 1);
+                break;
+            }
+        }
+    }
+
+    // Power-ups
+    for (var i = powerups.length - 1; i >= 0; i--) {
+        var p = powerups[i];
+        p.y += p.vy * dt;
+        if (p.y > H + 30) { powerups.splice(i, 1); continue; }
+        if (player && aabb(p, player)) {
+            applyPowerup(p.type);
+            powerups.splice(i, 1);
+        }
+    }
+
+    // Particules
+    for (var i = particles.length - 1; i >= 0; i--) {
+        var pt = particles[i];
+        pt.x += pt.vx * dt;
+        pt.y += pt.vy * dt;
+        pt.vy += 60 * dt;  // gravité légère
+        pt.life -= dt;
+        if (pt.life <= 0) particles.splice(i, 1);
+    }
+
+    // Fin de vague
+    if (waveActive && enemies.length === 0 && waveEnemiesLeft === 0) {
+        waveActive = false;
+        waveTimer = 2.5;
+    }
+    if (!waveActive) {
+        waveTimer -= dt;
+        if (waveTimer <= 0) {
+            wave++;
+            startWave(wave);
+        }
+    }
+}
+
+function hitPlayer() {
+    if (playerShield) {
+        playerShield = false;
+        explode(player.x, player.y, '#00e5ff', 10);
+        player.invTimer = 1.0;
+        return;
+    }
+    lives--;
+    explode(player.x, player.y, '#ff6d00', 20);
+    player.invTimer = INVINCIBLE_DUR;
+    if (lives <= 0) {
+        if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('shmup_hs', highScore);
+        }
+        gameState = 'gameover';
+    }
+}
+
+function applyPowerup(type) {
+    if (type === 'trishot') { playerTrishot = true; trtshotTimer = 10; }
+    if (type === 'shield')  { playerShield = true; }
+    if (type === 'bomb')    { bombCount = Math.min(bombCount + 1, 3); }
+}
+
+// ─── DRAW ─────────────────────────────────────────────────────────────────────
+function draw() {
+    ctx.fillStyle = '#000010';
+    ctx.fillRect(0, 0, W, H);
+
+    // Étoiles
+    stars.forEach(function(s) {
+        var alpha = 0.3 + s.r / 2.5 * 0.7;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    if (gameState === 'menu') { drawMenu(); return; }
+    if (gameState === 'gameover') { drawGameOver(); return; }
+
+    // Particules
+    particles.forEach(function(pt) {
+        var alpha = pt.life / pt.maxLife;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = pt.color;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, pt.r * alpha, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // Power-ups
+    powerups.forEach(function(p) {
+        var colors = { trishot: '#ffeb3b', shield: '#00e5ff', bomb: '#ff5722' };
+        ctx.fillStyle = colors[p.type] || '#fff';
+        ctx.shadowColor = colors[p.type] || '#fff';
+        ctx.shadowBlur = 12;
+        ctx.fillRect(p.x - p.w/2, p.y - p.h/2, p.w, p.h);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.type === 'trishot' ? '3X' : p.type === 'shield' ? 'SH' : 'B!', p.x, p.y + 4);
+    });
+
+    // Ennemis
+    enemies.forEach(function(e) {
+        ctx.fillStyle = e.color;
+        ctx.shadowColor = e.color;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        if (e.type === 'boss') {
+            // Octogone pour boss
+            for (var i = 0; i < 8; i++) {
+                var a = i / 8 * Math.PI * 2 - Math.PI / 2;
+                if (i === 0) ctx.moveTo(e.x + Math.cos(a) * e.w/2, e.y + Math.sin(a) * e.h/2);
+                else ctx.lineTo(e.x + Math.cos(a) * e.w/2, e.y + Math.sin(a) * e.h/2);
+            }
+        } else if (e.type === 'tank') {
+            ctx.rect(e.x - e.w/2, e.y - e.h/2, e.w, e.h);
+        } else {
+            // Triangle pointé vers le bas
+            ctx.moveTo(e.x, e.y + e.h/2);
+            ctx.lineTo(e.x - e.w/2, e.y - e.h/2);
+            ctx.lineTo(e.x + e.w/2, e.y - e.h/2);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Barre de vie (si hp > 1)
+        if (e.maxHp > 1) {
+            var bw = e.w, bh = 4;
+            ctx.fillStyle = '#333';
+            ctx.fillRect(e.x - bw/2, e.y - e.h/2 - 8, bw, bh);
+            ctx.fillStyle = e.hp / e.maxHp > 0.5 ? '#4caf50' : '#f44336';
+            ctx.fillRect(e.x - bw/2, e.y - e.h/2 - 8, bw * (e.hp / e.maxHp), bh);
+        }
+    });
+
+    // Balles
+    bullets.forEach(function(b) {
+        ctx.fillStyle = b.owner === 'player' ? '#00e5ff' : '#ff1744';
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = 8;
+        ctx.fillRect(b.x - b.w/2, b.y - b.h/2, b.w, b.h);
+    });
+    ctx.shadowBlur = 0;
+
+    // Joueur (clignotant si invincible)
+    if (player && (player.invTimer <= 0 || Math.floor(player.invTimer / 0.1) % 2 === 0)) {
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        // Corps
+        ctx.fillStyle = '#e3f2fd';
+        ctx.shadowColor = '#64b5f6';
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.moveTo(0, -player.h/2);
+        ctx.lineTo(player.w/2, player.h/2);
+        ctx.lineTo(0, player.h/4);
+        ctx.lineTo(-player.w/2, player.h/2);
+        ctx.closePath();
+        ctx.fill();
+        // Cockpit
+        ctx.fillStyle = '#64b5f6';
+        ctx.beginPath();
+        ctx.arc(0, -player.h/6, 6, 0, Math.PI * 2);
+        ctx.fill();
+        // Bouclier
+        if (playerShield) {
+            ctx.strokeStyle = '#00e5ff';
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.6 + Math.sin(Date.now() * 0.005) * 0.4;
+            ctx.beginPath();
+            ctx.arc(0, 0, player.w * 0.85, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+        ctx.shadowBlur = 0;
+        ctx.restore();
+    }
+
+    // HUD
+    ctx.shadowBlur = 0;
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('SCORE ' + score, 10, 24);
+    ctx.textAlign = 'right';
+    ctx.fillText('HI ' + highScore, W - 10, 24);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#aaa';
+    ctx.font = '13px monospace';
+    ctx.fillText('WAVE ' + wave, W/2, 24);
+
+    // Vies
+    for (var i = 0; i < lives; i++) {
+        drawMiniShip(18 + i * 22, H - 20, '#e3f2fd');
+    }
+
+    // Bombes
+    ctx.fillStyle = '#ff5722';
+    ctx.font = '13px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('B:' + bombCount, W - 60, H - 10);
+
+    // Trishot actif
+    if (playerTrishot) {
+        ctx.fillStyle = '#ffeb3b';
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('3X SHOT ' + Math.ceil(trtshotTimer) + 's', W/2, H - 10);
+    }
+
+    // Annonce vague
+    if (!waveActive && waveTimer > 1.5) {
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(0, H/2 - 40, W, 80);
+        ctx.fillStyle = wave % 5 === 1 && wave > 1 ? '#ff1744' : '#fff';
+        ctx.font = 'bold 28px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(wave % 5 === 1 && wave > 1 ? '!!! BOSS !!!' : 'VAGUE ' + wave, W/2, H/2 + 10);
+    }
+}
+
+function drawMiniShip(x, y, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 8); ctx.lineTo(x + 7, y + 6);
+    ctx.lineTo(x, y + 2); ctx.lineTo(x - 7, y + 6);
+    ctx.closePath(); ctx.fill();
+}
+
+function drawMenu() {
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 36px monospace';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#00e5ff';
+    ctx.shadowBlur = 20;
+    ctx.fillText('STELLAR ASSAULT', W/2, H/2 - 80);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#aaa';
+    ctx.font = '16px monospace';
+    ctx.fillText('HI-SCORE : ' + highScore, W/2, H/2 - 30);
+    ctx.fillStyle = '#00e5ff';
+    ctx.font = '14px monospace';
+    ctx.fillText('← → ↑ ↓  Déplacer', W/2, H/2 + 20);
+    ctx.fillText('ESPACE  Tirer', W/2, H/2 + 44);
+    ctx.fillText('B  Bombe (à récupérer)', W/2, H/2 + 68);
+    var blink = Math.floor(Date.now() / 500) % 2;
+    if (blink) {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText('APPUIE SUR ESPACE', W/2, H/2 + 110);
+    }
+}
+
+function drawGameOver() {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#ff1744';
+    ctx.font = 'bold 48px monospace';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#ff1744';
+    ctx.shadowBlur = 30;
+    ctx.fillText('GAME OVER', W/2, H/2 - 60);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.font = '20px monospace';
+    ctx.fillText('SCORE : ' + score, W/2, H/2);
+    ctx.fillStyle = '#ffeb3b';
+    ctx.fillText('MEILLEUR : ' + highScore, W/2, H/2 + 34);
+    var blink = Math.floor(Date.now() / 500) % 2;
+    if (blink) {
+        ctx.fillStyle = '#aaa';
+        ctx.font = '14px monospace';
+        ctx.fillText('ESPACE pour rejouer', W/2, H/2 + 90);
+    }
+}
+
+// ─── BOUCLE PRINCIPALE ────────────────────────────────────────────────────────
+function gameLoop(ts) {
+    var dt = Math.min((ts - lastTime) / 1000, 0.05);
+    lastTime = ts;
+    update(dt);
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    initStars();
+    requestAnimationFrame(function(ts) { lastTime = ts; requestAnimationFrame(gameLoop); });
+});
+</script>
+</body>
+</html>

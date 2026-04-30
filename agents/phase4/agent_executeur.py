@@ -70,8 +70,439 @@ def run(code: str, genre_profile: GenreProfile) -> EvaluationResult:
         ev.issues = [{"severite": "majeur", "description": str(e), "suggestion": "Vérifier le code"}]
         ev.commentaire_global = f"Erreur lors de l'exécution : {e}"
 
+    # ─── BOUCLE DE REPAIR AUTOMATIQUE ────────────────────────────────────────────
+    # Reproduction du process de debug manuel :
+    #   1. Playwright détecte une erreur JS à l'écran
+    #   2. On extrait le message exact
+    #   3. On essaie des fixes déterministes (rapides, sans API)
+    #   4. Si ça échoue → mini-patcher IA (Gemini ciblé sur l'erreur précise)
+    #   5. On relance Playwright pour vérifier
+    #   6. Répéter jusqu'à MAX_REPAIR fois
+    _MAX_REPAIR = 4   # 2 passes dumb + 2 passes IA si besoin
+    _MAX_AI_REPAIRS = 2   # max appels Gemini dans cette boucle
+    _ai_repairs_done = 0
+    _repair_code = code
+    import re as _re_repair
+    _undef_pattern     = _re_repair.compile(r"'?(\w+)'? is not defined", _re_repair.IGNORECASE)
+    _arcade_pattern    = _re_repair.compile(r'ARCADE_ERROR:\s*(.+)', _re_repair.IGNORECASE)
+    _cannot_read_pat   = _re_repair.compile(r"Cannot read propert\w+ of (?:undefined|null) \(reading '(\w+)'\)", _re_repair.IGNORECASE)
+    _typeerr_pattern   = _re_repair.compile(r"TypeError:\s*(.+?)(?:\s+at\s+|$)", _re_repair.IGNORECASE)
+    _not_func_pattern  = _re_repair.compile(r"(\w+) is not a function", _re_repair.IGNORECASE)
+
+    for _repair_i in range(_MAX_REPAIR):
+        if ev.score >= 7.0:
+            break
+
+        # ── Collecter TOUTES les erreurs JS : chargement + gameplay ──────────────
+        _undef_vars = set()
+        _has_arcade_error = False
+        _has_screen_issue = False
+        _error_msgs = []    # messages d'erreur bruts pour le mini-patcher IA
+        _cannot_read_props = set()
+        _not_func_names = set()
+
+        for _c in ev.criteres:
+            _txt = _c.get('commentaire', '')
+            nom = _c.get('nom', '')
+
+            # Variables non définies (chargement ET gameplay)
+            for _m in _undef_pattern.finditer(_txt):
+                _v = _m.group(1)
+                # Filtrer les faux positifs (variables navigateur)
+                if _v not in ('undefined', 'null', 'true', 'false', 'NaN', 'Infinity'):
+                    _undef_vars.add(_v)
+
+            # Erreur gameLoop visible (écran d'erreur affiché dans le jeu)
+            for _m in _arcade_pattern.finditer(_txt):
+                _has_arcade_error = True
+                _err_text = _m.group(1).strip()
+                _error_msgs.append(_err_text)
+                for _m2 in _undef_pattern.finditer(_err_text):
+                    _undef_vars.add(_m2.group(1))
+
+            # Cannot read property (crash objet undefined)
+            for _m in _cannot_read_pat.finditer(_txt):
+                _cannot_read_props.add(_m.group(1))
+                _error_msgs.append(_txt[:120])
+
+            # X is not a function
+            for _m in _not_func_pattern.finditer(_txt):
+                _not_func_names.add(_m.group(1))
+                _error_msgs.append(_txt[:120])
+
+            # TypeError générique
+            for _m in _typeerr_pattern.finditer(_txt):
+                if _m.group(1) not in _error_msgs:
+                    _error_msgs.append('TypeError: ' + _m.group(1)[:100])
+
+            # Erreurs JS brutes (critère B3 — inclut les crashs gameplay)
+            if nom == 'Erreurs JS brutes':
+                raw_errors = [e.strip() for e in _txt.split('|') if e.strip()]
+                for _re_raw in raw_errors:
+                    _error_msgs.append(_re_raw[:150])
+                    for _m in _undef_pattern.finditer(_re_raw):
+                        _undef_vars.add(_m.group(1))
+                    for _m in _cannot_read_pat.finditer(_re_raw):
+                        _cannot_read_props.add(_m.group(1))
+
+            # Crashes pendant inputs (gameplay)
+            if nom in ('Inputs sans crash', 'Joueur réactif', 'Score progresse') and _c.get('score', 1) == 0:
+                if 'crash' in _txt.lower() or 'erreur' in _txt.lower() or 'undefined' in _txt.lower():
+                    _error_msgs.append(f'[GAMEPLAY] {_txt[:120]}')
+                    for _m in _undef_pattern.finditer(_txt):
+                        _undef_vars.add(_m.group(1))
+
+            # Écran noir
+            if 'ÉCRAN NOIR' in _txt or 'ecran noir' in _txt.lower() or 'canvas figé' in _txt.lower():
+                _has_screen_issue = True
+
+        # Dédupliquer
+        _error_msgs = list(dict.fromkeys(_error_msgs))[:6]
+
+        has_any_error = bool(_undef_vars or _has_arcade_error or _has_screen_issue
+                             or _cannot_read_props or _not_func_names or _error_msgs)
+        if not has_any_error:
+            break
+
+        # ── ÉTAPE 1 : Fixes déterministes (rapides, sans API) ────────────────────
+        try:
+            from js_syntax_checker import fix_all_auto as _fix_all, fix_undefined_runtime_vars as _fix_undef_vars
+        except ImportError:
+            break
+
+        _fixed = _repair_code
+        _did_any_fix = False
+        _fix_reasons = []
+
+        # Fix ciblé : variables non définies
+        if _undef_vars:
+            _fixed, _did, _descs = _fix_undef_vars(_fixed, _undef_vars)
+            if _did:
+                _did_any_fix = True
+                _fix_reasons.append(f"vars: {', '.join(sorted(_undef_vars)[:4])}")
+
+        # Fix générique : ESLint + syntax
+        _fixed2, _did2, _ = _fix_all(_fixed)
+        if _did2:
+            _fixed = _fixed2
+            _did_any_fix = True
+            _fix_reasons.append("fix_all_auto")
+
+        # Fix code_validator si des erreurs typiques de la pipeline sont présentes
+        if _cannot_read_props or _not_func_names:
+            try:
+                from code_validator import validate_and_fix as _cv_fix
+                import re as _re_cv
+                _cv_result, _cv_issues, _ = _cv_fix(_fixed)
+                if _cv_issues:
+                    _fixed = _cv_result
+                    _did_any_fix = True
+                    _fix_reasons.append(f"code_validator ({len(_cv_issues)} fix(es))")
+            except Exception:
+                pass
+
+        # ── ÉTAPE 2 : Mini-patcher IA si les fixes déterministes n'ont pas suffi ─
+        if not _did_any_fix and _ai_repairs_done < _MAX_AI_REPAIRS and _error_msgs:
+            phase4_log.info(f"[Repair {_repair_i+1}] Fixes déterministes insuffisants — mini-patcher IA ({_ai_repairs_done+1}/{_MAX_AI_REPAIRS})")
+            _ai_fixed = _mini_patcher_gemini(_repair_code, _error_msgs, genre_profile)
+            if _ai_fixed:
+                _fixed = _ai_fixed
+                _did_any_fix = True
+                _ai_repairs_done += 1
+                _fix_reasons.append(f"mini-patcher IA [{_error_msgs[0][:40]}...]")
+            else:
+                phase4_log.warning(f"[Repair {_repair_i+1}] Mini-patcher IA sans résultat — arrêt")
+                break
+
+        if not _did_any_fix:
+            phase4_log.warning(f"[Repair {_repair_i+1}] Aucun fix applicable — arrêt")
+            break
+
+        _reason_str = " | ".join(_fix_reasons)
+        phase4_log.info(f"[Repair {_repair_i+1}/{_MAX_REPAIR}] {_reason_str} — relance Playwright")
+
+        try:
+            _ev_retry = _run_playwright(_fixed, genre_profile)
+            if _ev_retry.score > ev.score:
+                phase4_log.info(f"[Repair {_repair_i+1}] score amélioré : {ev.score:.1f} → {_ev_retry.score:.1f}")
+                _ev_retry.commentaire_global = (
+                    f"[REPAIR×{_repair_i+1} +{_ev_retry.score - ev.score:.1f}] "
+                    + _ev_retry.commentaire_global
+                )
+                ev = _ev_retry
+                _repair_code = _fixed
+            else:
+                phase4_log.info(f"[Repair {_repair_i+1}] score non amélioré ({_ev_retry.score:.1f}) — arrêt")
+                break
+        except Exception as _e_retry:
+            phase4_log.warning(f"[Repair {_repair_i+1}] Playwright retry échoué : {_e_retry}")
+            break
+
     phase4_log.score("Exécution", ev.score)
     return ev
+
+
+def _extract_function_section(js_code: str, targets: set) -> tuple[str, int, int] | None:
+    """
+    Extrait la fonction JS qui contient l'une des variables/noms cibles.
+    Remonte au 'function' précédent, suit les accolades jusqu'à la fermeture.
+    Retourne (section_code, start_in_js, end_in_js) ou None si introuvable.
+    """
+    import re
+
+    # Trouver la première occurrence d'une cible dans le code
+    best_pos = len(js_code) + 1
+    for target in targets:
+        # Chercher le nom comme token JS (pas dans un commentaire)
+        for m in re.finditer(r'\b' + re.escape(target) + r'\b', js_code):
+            if m.start() < best_pos:
+                best_pos = m.start()
+                break
+
+    if best_pos > len(js_code):
+        return None
+
+    # Remonter pour trouver le début de la fonction englobante
+    func_start = -1
+    # Chercher le dernier "function " avant best_pos
+    for m in re.finditer(r'\bfunction\s+\w*\s*\(', js_code[:best_pos]):
+        func_start = m.start()
+    # Aussi chercher les fonctions fléchées / méthodes d'objets
+    if func_start < 0:
+        func_start = max(0, best_pos - 300)
+
+    # Trouver la fin de la fonction par comptage d'accolades
+    depth = 0
+    func_end = best_pos
+    in_string = False
+    string_char = ''
+    for i in range(func_start, min(func_start + 5000, len(js_code))):
+        c = js_code[i]
+        if in_string:
+            if c == string_char and (i == 0 or js_code[i-1] != '\\'):
+                in_string = False
+        elif c in ('"', "'", '`'):
+            in_string = True
+            string_char = c
+        elif c == '{':
+            depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0:
+                func_end = i + 1
+                break
+
+    # Ajouter contexte : 3 lignes avant la fonction (pour les commentaires)
+    section_start = max(0, js_code.rfind('\n', 0, func_start - 1) + 1 if func_start > 0 else 0)
+    # Aller 2 lignes en arrière depuis func_start
+    for _ in range(2):
+        prev = js_code.rfind('\n', 0, section_start - 1)
+        if prev >= 0:
+            section_start = prev + 1
+
+    section_end = min(len(js_code), func_end)
+    return js_code[section_start:section_end], section_start, section_end
+
+
+def _extract_globals(js_code: str, max_chars: int = 1500) -> str:
+    """
+    Extrait les déclarations de variables globales du début du JS.
+    Ces vars sont nécessaires pour que Gemini comprenne le contexte sans lire tout le code.
+    """
+    import re
+    lines = js_code.split('\n')
+    global_lines = []
+    chars = 0
+    for line in lines:
+        stripped = line.strip()
+        # Lignes de déclarations de variables globales
+        if (stripped.startswith('var ') or stripped.startswith('const ') or
+                stripped.startswith('let ') or stripped.startswith('// ') or
+                stripped.startswith('/* ') or (stripped.startswith('function ') and len(stripped) < 80)):
+            global_lines.append(line)
+            chars += len(line)
+            if chars > max_chars:
+                break
+        elif stripped and not stripped.startswith('var ') and chars > 200:
+            # On a passé la zone de déclarations
+            break
+    return '\n'.join(global_lines)
+
+
+def _mini_patcher_gemini(html_code: str, error_msgs: list, genre_profile) -> str | None:
+    """
+    Mini-patcher IA anti-lost-in-the-middle.
+
+    Au lieu de passer tout le code (22K chars → modèle perd le fil),
+    on extrait UNIQUEMENT :
+    1. Les déclarations de variables globales (~30 lignes — contexte suffisant)
+    2. La fonction spécifique où l'erreur se produit (~50-150 lignes)
+
+    Gemini corrige ces ~200 lignes ciblées → on réinjecte dans le code original.
+    C'est l'équivalent du debug manuel : "voilà la fonction qui crash, corrige-la."
+    """
+    if not error_msgs or not html_code:
+        return None
+    try:
+        from config import call_gemini
+        import re
+
+        # ── Extraire le JS du HTML ──────────────────────────────────────────────
+        js_match = re.search(r'(<script[^>]*>)(.*?)(</script>)', html_code, re.DOTALL)
+        if not js_match:
+            return None
+        js_prefix   = js_match.group(1)
+        js_code     = js_match.group(2)
+        js_suffix   = js_match.group(3)
+        html_before = html_code[:js_match.start()]
+        html_after  = html_code[js_match.end():]
+
+        # ── Extraire les cibles depuis les messages d'erreur ───────────────────
+        targets = set()
+        for err in error_msgs:
+            # "X is not defined"
+            for m in re.finditer(r"'?(\w+)'? is not defined", err, re.IGNORECASE):
+                v = m.group(1)
+                if v not in ('undefined', 'null', 'true', 'false', 'window', 'document'):
+                    targets.add(v)
+            # "Cannot read properties of undefined (reading 'X')"
+            for m in re.finditer(r"reading '(\w+)'", err):
+                targets.add(m.group(1))
+            # "X is not a function"
+            for m in re.finditer(r"(\w+) is not a function", err, re.IGNORECASE):
+                targets.add(m.group(1))
+            # "[GAMEPLAY] ... X is not defined"
+            for m in re.finditer(r'\b([A-Za-z_]\w+)\s+(?:is not defined|is not a function)', err):
+                targets.add(m.group(1))
+
+        if not targets and not error_msgs:
+            return None
+
+        # ── Extraire le contexte global (variables déclarées en haut) ──────────
+        globals_ctx = _extract_globals(js_code, max_chars=1200)
+
+        # ── Extraire la/les fonction(s) concernée(s) ───────────────────────────
+        sections_to_fix = []   # [(section_text, start, end)]
+
+        # Pour chaque cible, extraire sa fonction
+        already_covered = set()  # éviter de passer la même fonction deux fois
+        for target in list(targets)[:4]:
+            result = _extract_function_section(js_code, {target})
+            if result:
+                section_text, sec_start, sec_end = result
+                # Vérifier qu'on n'a pas déjà une section qui couvre cet intervalle
+                overlap = any(
+                    not (sec_end <= s or sec_start >= e)
+                    for (_, s, e) in sections_to_fix
+                )
+                if not overlap and section_text not in already_covered:
+                    sections_to_fix.append((section_text, sec_start, sec_end))
+                    already_covered.add(section_text)
+
+        if not sections_to_fix:
+            # Fallback : prendre les 2000 premiers chars (zone init souvent problématique)
+            sections_to_fix = [(js_code[:2000], 0, 2000)]
+
+        # ── Construire le prompt focalisé ──────────────────────────────────────
+        errors_text = '\n'.join(f'  {i+1}. {e}' for i, e in enumerate(error_msgs[:4]))
+        sections_text = '\n\n---\n\n'.join(
+            f'// SECTION {i+1} (à corriger) :\n{s[0]}'
+            for i, s in enumerate(sections_to_fix)
+        )
+        total_section_chars = sum(len(s[0]) for s in sections_to_fix)
+
+        prompt = f"""Tu es un debugger JavaScript expert en jeux HTML5 Canvas.
+Playwright a détecté ces erreurs runtime :
+
+ERREURS :
+{errors_text}
+
+VARIABLES GLOBALES DU JEU (contexte — ne pas modifier) :
+```javascript
+{globals_ctx}
+```
+
+SECTION(S) DE CODE À CORRIGER ({total_section_chars} chars — c'est là que l'erreur se produit) :
+```javascript
+{sections_text}
+```
+
+CAUSES FRÉQUENTES :
+- "X is not defined" dans une boucle → `var e = arr[i];` manquant avant `e.x`
+- "Cannot read ... undefined" → objet null, ajouter `if (!obj) return;`
+- "X is not a function" → X écrasé par une var du même nom
+- Crash ArrowLeft/Right → `keys["arrowleft"]` vs `keys.left` (mapping incohérent)
+- `blinkAlpha` non défini dans drawGameOver → le déclarer localement dans la fonction
+
+RÈGLES :
+1. Corrige UNIQUEMENT les erreurs listées dans les sections fournies
+2. Retourne UNIQUEMENT le code corrigé pour chaque section, dans le même ordre
+3. Sépare chaque section corrigée par la ligne exacte : // SECTION_FIXED_N
+4. Ne réécris rien d'autre
+
+SECTIONS CORRIGÉES :"""
+
+        response = call_gemini(prompt, temperature=0.05, max_tokens=8000)
+
+        if not response or len(response) < 50:
+            phase4_log.warning("Mini-patcher IA : réponse vide")
+            return None
+
+        # ── Parser la réponse et réinjecter chaque section ──────────────────────
+        # Nettoyer les backticks markdown
+        response = re.sub(r'^```(?:javascript|js)?\s*\n?', '', response.strip())
+        response = re.sub(r'\n?```\s*$', '', response.strip())
+
+        # Tenter de séparer les sections par le marqueur // SECTION_FIXED_N
+        fixed_sections_raw = re.split(r'//\s*SECTION_FIXED_\d+\s*\n?', response)
+        # Filtrer les segments vides
+        fixed_sections_raw = [s.strip() for s in fixed_sections_raw if s.strip()]
+
+        # Si une seule section (pas de marqueur), utiliser pour la première section
+        if len(fixed_sections_raw) == 0:
+            phase4_log.warning("Mini-patcher IA : réponse sans contenu utilisable")
+            return None
+
+        # Réinjecter dans le JS original, en remplaçant section par section
+        # On trie par position décroissante pour ne pas décaler les indices
+        fixed_js = js_code
+        replacements = []
+        for i, (orig_section, sec_start, sec_end) in enumerate(sections_to_fix):
+            if i < len(fixed_sections_raw):
+                fixed_section = fixed_sections_raw[i]
+            else:
+                fixed_section = fixed_sections_raw[-1]  # réutiliser le dernier
+            # Vérifier que le fix est raisonnable (pas plus de 3x plus court)
+            if len(fixed_section) < len(orig_section) * 0.3:
+                phase4_log.warning(f"Mini-patcher IA : section {i+1} réponse trop courte — ignorée")
+                continue
+            replacements.append((sec_start, sec_end, fixed_section))
+
+        if not replacements:
+            return None
+
+        # Appliquer les remplacements du dernier au premier (positions stables)
+        replacements.sort(key=lambda x: x[0], reverse=True)
+        for sec_start, sec_end, fixed_section in replacements:
+            fixed_js = fixed_js[:sec_start] + fixed_section + fixed_js[sec_end:]
+
+        # Réinjecter dans le HTML
+        fixed_html = html_before + js_prefix + '\n' + fixed_js + '\n' + js_suffix + html_after
+
+        # Sanity check
+        if len(fixed_html) < len(html_code) * 0.65:
+            phase4_log.warning(f"Mini-patcher IA : HTML résultant trop court — rejeté")
+            return None
+
+        phase4_log.info(
+            f"Mini-patcher IA : {len(replacements)} section(s) corrigée(s) "
+            f"(cibles: {', '.join(list(targets)[:3])})"
+        )
+        return fixed_html
+
+    except Exception as e:
+        phase4_log.warning(f"Mini-patcher IA exception : {e}")
+        return None
 
 
 def _run_playwright(code: str, genre_profile: GenreProfile) -> EvaluationResult:
@@ -124,6 +555,15 @@ def _run_playwright(code: str, genre_profile: GenreProfile) -> EvaluationResult:
             # Charger le jeu
             page.goto(f"file://{tmp_path}")
             time.sleep(_init_delay_for_genre(genre_profile.genre_principal))
+
+            # Lire l'erreur gameLoop capturée par le try/catch (invisible à page.on('pageerror'))
+            try:
+                _arcade_err = page.evaluate("typeof window.__ARCADE_ERROR__ !== 'undefined' ? window.__ARCADE_ERROR__ : ''")
+                if _arcade_err:
+                    js_errors.append(f"ARCADE_ERROR: {_arcade_err}")
+                    phase4_log.warning(f"Erreur gameLoop (écran d'erreur) : {_arcade_err}")
+            except Exception:
+                pass
 
             # Test 1 : Canvas présent (Three.js crée son propre canvas via WebGLRenderer)
             canvas = page.query_selector("canvas")
@@ -307,15 +747,26 @@ def _run_playwright(code: str, genre_profile: GenreProfile) -> EvaluationResult:
                 pass
 
             # ─── Test 4b : GAMEPLAY RÉACTIF via hooks logiques (B1) ──────────────────
-            # B1 : teste score, playerX via __ARCADE_TEST__ au lieu de pixels canvas
+            # Lire player.x AVANT les inputs (fallback direct sans hooks)
+            _player_x_before = -1
+            _lives_before = -1
+            try:
+                _player_x_before = page.evaluate(
+                    "typeof player !== 'undefined' && player ? Number(player.x) : "
+                    "(typeof playerX !== 'undefined' ? Number(playerX) : -1)"
+                )
+                _lives_before = page.evaluate("typeof lives !== 'undefined' ? Number(lives) : -1")
+            except Exception:
+                pass
+
             try:
                 page.keyboard.down("ArrowRight")
-                time.sleep(0.5)
+                time.sleep(0.6)
                 page.keyboard.press("Space")   # tir / action
-                time.sleep(0.3)
+                time.sleep(0.4)
                 page.keyboard.up("ArrowRight")
                 page.keyboard.down("ArrowLeft")
-                time.sleep(0.4)
+                time.sleep(0.5)
                 page.keyboard.up("ArrowLeft")
                 page.keyboard.press("z")       # certains jeux utilisent z/x
                 time.sleep(0.3)
@@ -323,13 +774,20 @@ def _run_playwright(code: str, genre_profile: GenreProfile) -> EvaluationResult:
                 input_crash = True
                 js_errors.append(f"CRASH gameplay inputs : {e}")
 
-            # Lire état après interactions
+            # Lire état après interactions — player.x direct + hooks
             _state_after = None
             _hooks_penalty = False
+            _player_x_after = -1
+            _lives_after = -1
             try:
                 score_val = page.evaluate("typeof score !== 'undefined' ? Number(score) : -1")
                 lives_val = page.evaluate("typeof lives !== 'undefined' ? Number(lives) : -1")
                 game_state_now = page.evaluate("typeof gameState !== 'undefined' ? String(gameState) : '?'")
+                _player_x_after = page.evaluate(
+                    "typeof player !== 'undefined' && player ? Number(player.x) : "
+                    "(typeof playerX !== 'undefined' ? Number(playerX) : -1)"
+                )
+                _lives_after = page.evaluate("typeof lives !== 'undefined' ? Number(lives) : -1")
                 if _hooks_available:
                     _state_after = page.evaluate("window.__ARCADE_TEST__.getState()")
             except Exception:
@@ -380,15 +838,67 @@ def _run_playwright(code: str, genre_profile: GenreProfile) -> EvaluationResult:
                     tests_echoues.append({"nom": "Score s'incrémente", "score": 0,
                                           "commentaire": f"score inchangé après inputs (hooks: score={_state_after.get('score')})"})
             else:
-                # Fallback : canvas diff si hooks absents
-                _fallback_comment = " [hooks absents — fallback visuel]" if not _hooks_available else " [hooks null — B4]"
-                if canvas_moved and not _hooks_penalty:
-                    tests_passes.append({"nom": "Gameplay réactif", "score": 1.5,
-                                         "commentaire": f"Canvas change durant le jeu{_fallback_comment}"
+                # Fallback : player.x direct + canvas diff si hooks absents
+                _fallback_comment = " [hooks absents]" if not _hooks_available else " [hooks null — B4]"
+                _direct_moved = (_player_x_before >= 0 and _player_x_after >= 0
+                                 and abs(_player_x_after - _player_x_before) > 5)
+                if _direct_moved:
+                    tests_passes.append({"nom": "Joueur réactif", "score": 1.5,
+                                         "commentaire": f"player.x : {_player_x_before:.0f} → {_player_x_after:.0f} (direct){_fallback_comment}"})
+                elif canvas_moved and not _hooks_penalty and _player_x_before < 0:
+                    # Canvas change mais player.x illisible (variable pas globale) — score partiel
+                    tests_passes.append({"nom": "Gameplay réactif", "score": 0.8,
+                                         "commentaire": f"Canvas change (player.x non lisible){_fallback_comment}"
                                                         + (f" (score={score_val})" if score_val >= 0 else "")})
                 else:
-                    tests_echoues.append({"nom": "Gameplay réactif", "score": 0,
-                                          "commentaire": f"Canvas statique + hooks non conclusifs (gameState={game_state_now}){_fallback_comment}"})
+                    _detail = f"player.x avant={_player_x_before:.0f} après={_player_x_after:.0f}" if _player_x_before >= 0 else "player.x non lisible"
+                    tests_echoues.append({"nom": "Joueur réactif", "score": 0,
+                                          "commentaire": f"Joueur immobile après ArrowRight/Left ({_detail}){_fallback_comment}"})
+
+            # ─── Test 4b2 : Ennemis présents et actifs après démarrage ───────────────
+            _enemies_before = -1
+            try:
+                time.sleep(1.5)  # laisser le temps aux ennemis de spawner
+                enemies_count = page.evaluate(
+                    "typeof enemies !== 'undefined' ? enemies.length : "
+                    "(typeof ENEMIES !== 'undefined' ? ENEMIES.length : -1)"
+                )
+                _enemies_before = enemies_count
+                if enemies_count > 0:
+                    tests_passes.append({"nom": "Ennemis présents", "score": 1.0,
+                                         "commentaire": f"{enemies_count} ennemi(s) actif(s) dans le jeu"})
+                elif enemies_count == 0:
+                    tests_echoues.append({"nom": "Ennemis présents", "score": 0,
+                                          "commentaire": "Tableau enemies vide après démarrage — spawn cassé"})
+                # enemies_count == -1 → variable non globale, on ne pénalise pas
+            except Exception:
+                pass
+
+            # ─── Test 4b3 : Score progresse (tirs + attente, sans hooks) ─────────────
+            # Lire score, tirer 10x, attendre, relire — si score augmente = gameplay fonctionnel
+            try:
+                _score_before_shoot = page.evaluate("typeof score !== 'undefined' ? Number(score) : -1")
+                for _ in range(10):
+                    page.keyboard.press("Space")
+                    time.sleep(0.1)
+                time.sleep(2.0)  # attendre impacts + dégâts
+                _score_after_shoot = page.evaluate("typeof score !== 'undefined' ? Number(score) : -1")
+                _enemies_after_shoot = page.evaluate(
+                    "typeof enemies !== 'undefined' ? enemies.length : -1"
+                )
+                if _score_before_shoot >= 0 and _score_after_shoot > _score_before_shoot:
+                    tests_passes.append({"nom": "Score progresse", "score": 1.5,
+                                         "commentaire": f"score {_score_before_shoot:.0f} → {_score_after_shoot:.0f} après tirs"})
+                elif _score_before_shoot >= 0:
+                    # Score n'a pas bougé — vérifier si ennemis diminuent (peut-être score différé)
+                    if _enemies_before > 0 and _enemies_after_shoot >= 0 and _enemies_after_shoot < _enemies_before:
+                        tests_passes.append({"nom": "Score progresse", "score": 0.8,
+                                             "commentaire": f"Ennemis tués ({_enemies_before}→{_enemies_after_shoot}) mais score inchangé — score non incrémenté"})
+                    else:
+                        tests_echoues.append({"nom": "Score progresse", "score": 0,
+                                              "commentaire": f"Score inchangé après 10 tirs ({_score_before_shoot}) — balles inefficaces ou ennemis intouchables"})
+            except Exception:
+                pass
 
             # ─── Test 4c : Interactions souris + absence de crash ─────────────────────
             errors_before_mouse = list(js_errors)
@@ -509,16 +1019,22 @@ def _run_playwright(code: str, genre_profile: GenreProfile) -> EvaluationResult:
     # Calcul du score (normalisé sur max_score ajusté)
     # max_score : 1.5 (canvas) + 1.5 (JS load) + 2.5 (visible) + 2.0 (loop) + 1.0 (FPS)
     #           + 1.5 (démarrage jeu) + 1.5 (joueur réactif) + 2.0 (score s'incrémente)
+    #           + 1.5 (score progresse) + 1.0 (ennemis présents)
     #           + 1.0 (inputs sans crash) + 0.5 (localStorage) + 1.5 (stabilité)
-    #           + 0.5 (santé joueur C2) + 0.5 (HUD visible C5) = 17.0
-    # Sans hooks : 1.5+1.5+2.5+2.0+1.0+1.5+1.5+1.0+0.5+1.5+0.5+0.5 = 15.0
+    #           + 0.5 (santé joueur C2) + 0.5 (HUD visible C5) = 18.5 avec hooks / 16.5 sans
     score_brut = sum(t["score"] for t in tests_passes)
     webgl_partial = any("score partiel" in t.get("commentaire", "") for t in tests_passes if t.get("nom") == "Contenu visible")
     _with_hooks_tests = any(t.get("nom") in ("Joueur réactif", "Score s'incrémente") for t in tests_passes + tests_echoues)
+    _has_score_progresse = any(t.get("nom") == "Score progresse" for t in tests_passes + tests_echoues)
+    _has_enemies_test = any(t.get("nom") == "Ennemis présents" for t in tests_passes + tests_echoues)
     if webgl_partial:
         max_score = 13.0 if _with_hooks_tests else 12.5
     else:
         max_score = 17.0 if _with_hooks_tests else 15.0
+    if _has_score_progresse:
+        max_score += 1.5
+    if _has_enemies_test:
+        max_score += 1.0
     ev.score = min(10.0, (score_brut / max_score) * 10)
 
     # Pénalité dure : écran noir = score plafonné à 3.0 quel que soit le reste
@@ -530,6 +1046,19 @@ def _run_playwright(code: str, genre_profile: GenreProfile) -> EvaluationResult:
     crash_interaction = any("Crash ou erreur" in t.get("commentaire", "") for t in tests_echoues if t.get("nom") == "Inputs sans crash")
     if crash_interaction:
         ev.score = min(ev.score, 4.0)
+
+    # Pénalité dure : erreurs JS au chargement + joueur immobile = jeu injouable → cap 4.5
+    _player_immobile = any(
+        t.get("nom") == "Joueur réactif" and t.get("score", 1) == 0
+        for t in tests_echoues
+    )
+    if errors_count_at_load > 0 and _player_immobile:
+        ev.score = min(ev.score, 4.5)
+        ev.issues.append({
+            "severite": "critique",
+            "description": f"INJOUABLE : {errors_count_at_load} erreur(s) JS au chargement + joueur immobile après inputs",
+            "suggestion": "Corriger les erreurs JavaScript — le joueur ne peut pas interagir avec le jeu"
+        })
 
     ev.criteres = tests_passes + tests_echoues
 
@@ -569,9 +1098,13 @@ def _run_playwright(code: str, genre_profile: GenreProfile) -> EvaluationResult:
     _hooks_status = "hooks OK" if _hooks_available else "sans hooks"
     ev.points_forts = [t["commentaire"] for t in tests_passes]
     ev.commentaire_global = f"{len(tests_passes)}/{len(tests_passes) + len(tests_echoues)} tests réussis [{_hooks_status}]"
-
     if js_errors:
+        # Inclure les 3 premières erreurs JS dans le commentaire global pour le patcher
+        _err_summary = " | ".join(js_errors[:3])
+        ev.commentaire_global += f" | ERREURS JS: {_err_summary[:200]}"
         phase4_log.warning(f"{len(js_errors)} erreur(s) JS : {js_errors[0]}")
+    if _player_immobile:
+        ev.commentaire_global += " | JOUEUR IMMOBILE"
 
     return ev
 

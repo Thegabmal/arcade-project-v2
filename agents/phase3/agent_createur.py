@@ -3043,6 +3043,111 @@ def run(context: ConceptionContext, patterns_reussis: list = None, tendances: st
             depth_info += f"  {inter.get('source', '')} → {inter.get('cible', '')} : {inter.get('description', '')}\n"
     tendances_info = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nTENDANCES & RÉFÉRENCES DU GENRE\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n{tendances}\n" if tendances else ""
 
+    # Section narrative — injectée uniquement si le jeu est narratif
+    narrative_info = ""
+    nc = context.narrative_context
+    if nc:
+        narrative_info = "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        narrative_info += "HISTOIRE & NARRATION — IMPLÉMENTER INTÉGRALEMENT\n"
+        narrative_info += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        if nc.synopsis:
+            narrative_info += f"Synopsis : {nc.synopsis}\n"
+        if nc.ton_narratif:
+            narrative_info += f"Ton : {nc.ton_narratif}\n"
+        if nc.lore:
+            narrative_info += f"Lore : {nc.lore}\n"
+
+        # Actes
+        if nc.acte1 or nc.acte2 or nc.acte3:
+            narrative_info += "\nSTRUCTURE EN 3 ACTES :\n"
+            if nc.acte1:
+                narrative_info += f"  Acte 1 (début) : {nc.acte1}\n"
+            if nc.acte2:
+                narrative_info += f"  Acte 2 (milieu) : {nc.acte2}\n"
+            if nc.acte3:
+                narrative_info += f"  Acte 3 (fin) : {nc.acte3}\n"
+
+        # Personnages
+        if nc.personnages:
+            narrative_info += "\nPERSONNAGES (chaque NPC doit être présent dans la map) :\n"
+            for p in nc.personnages[:6]:
+                if isinstance(p, dict):
+                    nom = p.get("nom", p.get("name", "?"))
+                    role = p.get("role", "")
+                    motivation = p.get("motivation", "")
+                    narrative_info += f"  [{nom}] {role}"
+                    if motivation:
+                        narrative_info += f" — {motivation}"
+                    narrative_info += "\n"
+                else:
+                    narrative_info += f"  {p}\n"
+
+        # Quêtes
+        if nc.quetes:
+            narrative_info += "\nQUÊTES (implémenter chaque quête dans quests = {}) :\n"
+            for q in nc.quetes[:5]:
+                if isinstance(q, dict):
+                    qid = q.get("id", q.get("nom", "quest"))
+                    obj = q.get("objectif", q.get("description", ""))
+                    recompense = q.get("recompense", "")
+                    narrative_info += f"  quests['{qid}'] = {{active: false, done: false}}\n"
+                    if obj:
+                        narrative_info += f"    → Objectif : {obj}\n"
+                    if recompense:
+                        narrative_info += f"    → Récompense : {recompense}\n"
+                else:
+                    narrative_info += f"  {q}\n"
+
+        # Dialogues
+        if nc.dialogues:
+            narrative_info += "\nDIALOGUES (extraits — implémenter avec showDialog()/showChoiceDialog()) :\n"
+            for d in nc.dialogues[:4]:
+                if isinstance(d, dict):
+                    speaker = d.get("personnage", d.get("speaker", "?"))
+                    texte = d.get("texte", d.get("text", ""))
+                    choix = d.get("choix", d.get("choices", []))
+                    narrative_info += f"  [{speaker}] : \"{texte[:120]}\"\n"
+                    if choix:
+                        narrative_info += f"    Choix : {json.dumps(choix[:3], ensure_ascii=False)[:200]}\n"
+                else:
+                    narrative_info += f"  {str(d)[:150]}\n"
+
+        narrative_info += """
+⚠️ MOTEUR NARRATIF OBLIGATOIRE — implémenter ces systèmes exactement :
+
+1. SYSTÈME DE QUÊTES :
+   const quests = {};  // clés = IDs des quêtes ci-dessus, valeurs = {active, done}
+   const flags = {};   // flags narratifs : flags['aldricLibere'] = true
+   function checkQuestConditions() { /* vérifie flags → active/complète quêtes */ }
+   function completeQuest(id) { quests[id].done = true; showDialog('Quête accomplie !', 'SYSTÈME'); }
+
+2. MOTEUR DIALOGUE (typewriter) :
+   let dialogState = null;  // null = pas de dialogue actif
+   function showDialog(text, speaker) {
+     dialogState = {text, speaker, displayed:'', timer:0, done:false};
+   }
+   function showChoiceDialog(text, choices, onChoice, speaker) {
+     dialogState = {text, speaker, displayed:'', timer:0, done:true, choices, onChoice, selectedChoice:0};
+   }
+   // Dans update(dt) : if(dialogState) updateDialog(dt)
+   // Dans draw() : if(dialogState) drawDialog()
+   // drawDialog() : boîte semi-transparente en bas, typewriter, choix numérotés navigables ↑↓+ESPACE
+
+3. INTERACTION NPC ([E] key) :
+   // Dans update() si key E pressée : chercher NPC à distance < 60px
+   // → déclencher dialogue + quest update selon flags
+
+4. CONDITION DE VICTOIRE narrative :
+   // Vérifier que les quêtes principales sont done → écran victoire avec résumé de l'histoire
+
+5. ÉTATS DU JEU pour le narratif :
+   states: ['menu', 'playing', 'dialogue', 'combat', 'victory', 'gameover']
+   // En état 'dialogue' : mouvement bloqué, seuls les choix de dialogue sont actifs
+
+⚠️ INTERDIT : dialogues non fonctionnels, NPCs qui ne parlent pas, quêtes sans objectif trackable
+⚠️ OBLIGATOIRE : chaque personnage listé ci-dessus DOIT avoir au moins un dialogue jouable
+"""
+
     # Template structurel pour ce genre (si disponible)
     template_info = ""
     if not est_3d:
@@ -3158,7 +3263,7 @@ Polish spécifique : {ux.get('polish_specifique_genre', '')}
 REJOUABILITÉ
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {json.dumps(gdd.get('rejouabilite', {}), ensure_ascii=False)}
-{patterns_info}{code_examples_info}{erreurs_info}{game_logics_info}{depth_info}{template_info}{f'''
+{patterns_info}{code_examples_info}{erreurs_info}{game_logics_info}{depth_info}{narrative_info}{template_info}{f'''
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PLAN D'ARCHITECTURE — NOMS À UTILISER EXACTEMENT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3586,7 +3691,7 @@ def _build_gdd_from_genre_profile(gp) -> dict:
 <html><head><title>Erreur</title></head>
 <body><p>Erreur lors de la génération du jeu.</p></body></html>""")
 def _call(prompt: str, system_instruction: str = SYSTEM_2D, max_tokens: int = 16000) -> str:
-    return call_gemini(prompt, temperature=0.6, system_instruction=system_instruction, max_tokens=max_tokens, model=MODEL_NAME_PRO)
+    return call_gemini(prompt, temperature=0.6, system_instruction=system_instruction, max_tokens=max_tokens)
 
 
 # ─────────────────────────────────────────────
@@ -3794,7 +3899,7 @@ def _minimal_module_fallback(nom: str, module_def: dict, est_3d: bool) -> str:
 
 @with_fallback("")
 def _call_module(prompt: str, system: str) -> str:
-    return call_gemini(prompt, temperature=0.5, system_instruction=system, max_tokens=24000, model=MODEL_NAME_PRO)
+    return call_gemini(prompt, temperature=0.5, system_instruction=system, max_tokens=24000)
 
 
 # ─────────────────────────────────────────────

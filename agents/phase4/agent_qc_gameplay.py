@@ -27,9 +27,10 @@ def run(code: str, genre_profile: GenreProfile, gdd: dict) -> dict:
     Les deux résultats proviennent d'un seul appel LLM.
     """
     est_3d = genre_profile.technologie_rendu == "threejs"
+    est_narratif = getattr(genre_profile, "is_narrative", False)
     phase4_log.agent_start(
         "QC Gameplay + Anti-Pattern",
-        f"{genre_profile.genre_principal} ({'3D' if est_3d else '2D'})"
+        f"{genre_profile.genre_principal} ({'3D' if est_3d else '2D'}{', narratif' if est_narratif else ''})"
     )
 
     criteres = genre_profile.criteres_qc_gameplay
@@ -128,6 +129,27 @@ CRITÈRES SPÉCIFIQUES TOWER DEFENSE (si genre = tower defense/td) :
 - Système d'upgrade de tours fonctionnel
 - Économie (gold) gagnée en tuant des ennemis, dépensée pour construire/upgrader
 - Vagues avec compte à rebours visible et types d'ennemis annoncés
+{"" if not est_narratif else """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CRITÈRES SPÉCIFIQUES JEU NARRATIF (OBLIGATOIRES — ce jeu est narratif)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- SYSTÈME DE QUÊTES : quests{} implémenté avec états active/done trackables
+- MOTEUR DIALOGUE : showDialog()/showChoiceDialog() avec effet typewriter et choix navigables
+- DIALOGUES JOUABLES : chaque PNJ principal a au moins un dialogue déclenchable (touche [E] ou clic)
+- CHOIX NARRATIFS : au moins un arbre de décision avec choix multiples et conséquences différentes
+- FLAGS NARRATIFS : flags{} permettant de conditionner des dialogues ou l'avancement de quêtes
+- CONDITION DE VICTOIRE : liée à l'accomplissement de quêtes, pas juste au score
+- COHÉRENCE HISTOIRE : le lore affiché correspond au synopsis défini (pas de placeholder générique)
+- ÉTAT 'dialogue' : le jeu entre en état dialogue (mouvement bloqué) pendant les échanges
+
+ANTI-PATTERNS NARRATIFS À PÉNALISER :
+- Dialogues statiques (affichés instantanément, pas de typewriter) → mineur
+- PNJs présents dans la map mais non interactables → majeur
+- Quêtes affichées dans le HUD sans suivi d'avancement → majeur
+- Texte placeholder "Lorem ipsum" ou "NPC says: Hello" → critique
+- Système de choix affiché mais tous les choix mènent au même résultat → majeur
+- Histoire sans début ni fin (pas d'écran de victoire narratif) → critique
+"""}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PARTIE 2 — ANTI-PATTERNS ET PIÈGES DU GENRE

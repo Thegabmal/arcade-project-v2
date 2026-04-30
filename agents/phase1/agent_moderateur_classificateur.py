@@ -51,6 +51,7 @@ def run(prompt: str) -> dict:
     "sous_genre": "action",
     "technologie": "canvas2d",
     "complexite_estimee": "moyenne",
+    "is_narrative": False,
     "mots_cles": []
 })
 def _call(prompt: str) -> dict:
@@ -76,6 +77,13 @@ TECHNOLOGIE :
   vue 3d, en 3 dimensions, 3 dimensions, shooter 3d, jeu 3d, environnement 3d
 - "canvas2d" par défaut (y compris perspective isométrique, vue de dessus, vue de côté)
 
+MODE NARRATIF (is_narrative: true si) :
+- Le prompt mentionne une histoire, quête, scénario, personnages, dialogues, RPG, visual novel,
+  aventure textuelle, conte, intrigue, mission narrative, quête principale, choix narratif,
+  point-and-click, adventure game, histoire interactive
+- Genres intrinsèquement narratifs : RPG, visual novel, point-and-click, adventure, narrative game
+- NB : un shooter avec "une histoire" = is_narrative:true + genre shooter
+
 COMPLEXITÉ (pour adapter le budget de génération) :
 - "simple" : jeu à 1-2 mécaniques, genre classique (pong, snake, breakout style)
 - "moyenne" : jeu avec plusieurs systèmes, genre standard (platformer, shooter, puzzle)
@@ -91,5 +99,6 @@ Réponds en JSON :
   "sous_genre": "sous-genre précis (ex: bullet hell, metroidvania, match-3, dungeon crawler...)",
   "technologie": "canvas2d",
   "complexite_estimee": "simple | moyenne | elevee",
+  "is_narrative": false,
   "mots_cles": ["mot-clé 1", "mot-clé 2"]
 }}""", temperature=0.1, max_tokens=2000)

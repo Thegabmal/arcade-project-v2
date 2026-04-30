@@ -854,4 +854,4 @@ GAME FEEL :
 @with_fallback(None)
 def _call_section(prompt: str) -> str:
     """Appel focalisé sur une seule section — prompt court, réponse ciblée."""
-    return call_gemini(prompt, system_instruction=SYSTEM, max_tokens=4000, temperature=0.5)
+    return call_gemini(prompt, system_instruction=SYSTEM, max_tokens=8192, temperature=0.5)

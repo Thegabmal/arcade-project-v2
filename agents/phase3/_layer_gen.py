@@ -398,59 +398,60 @@ def _patch_gameloop_calls(accumulated_js: str, new_fns: list[str]) -> str:
             if depth == 0: gl_body_end = ci; break
     gl_body = accumulated_js[gl_body_start:gl_body_end]
 
-    # Localiser le bloc playing dans gameLoop
+    # Localiser le bloc playing dans gameLoop (if/else ou switch/case)
     playing_m = re.search(r'gameState\s*===?\s*["\']playing["\']', gl_body)
     if not playing_m:
-        phase3_log.info("[layered] _patch_gameloop_calls : bloc playing non trouvé")
-        return accumulated_js
-
-    # Trouver l'accolade ouvrante du bloc playing
-    brace_pos = gl_body.find('{', playing_m.end())
-    if brace_pos == -1:
-        return accumulated_js
-    # Extraire le contenu du bloc playing (entre { et })
-    pdepth, pend = 1, brace_pos + 1
-    for ci in range(brace_pos + 1, len(gl_body)):
-        if gl_body[ci] == '{': pdepth += 1
-        elif gl_body[ci] == '}':
-            pdepth -= 1
-            if pdepth == 0: pend = ci; break
-    playing_block = gl_body[brace_pos + 1:pend]
-
-    # Position absolue de l'intérieur du bloc playing dans accumulated_js
-    playing_abs_start = gl_body_start + brace_pos + 1
-
-    # Trouver où injecter les update_fns (après le dernier appel update*)
-    inject_update_pos = None
-    for m in re.finditer(r'\b(?:update\w+|checkCollisions)\s*\([^)]*\)\s*;?', playing_block):
-        inject_update_pos = m.end()
-    # Trouver où injecter les draw_fns (après le dernier appel draw*)
-    inject_draw_pos = None
-    for m in re.finditer(r'\bdraw\w+\s*\(\s*\)\s*;?', playing_block):
-        inject_draw_pos = m.end()
+        playing_m = re.search(r"case\s+['\"]playing['\"]", gl_body)
+    if not playing_m:
+        phase3_log.info("[layered] _patch_gameloop_calls : bloc playing non trouvé — fallback RAF")
 
     patched = accumulated_js
     offset = 0  # décalage cumulatif après injections
 
-    # Injection update_fns
-    if update_fns and inject_update_pos is not None:
-        inj = '\n' + '\n'.join(
-            "    if(typeof %s==='function') %s();" % (fn, fn)
-            for fn in update_fns
-        )
-        abs_pos = playing_abs_start + inject_update_pos + offset
-        patched = patched[:abs_pos] + inj + patched[abs_pos:]
-        offset += len(inj)
+    if playing_m:
+        # Trouver l'accolade ouvrante du bloc playing
+        brace_pos = gl_body.find('{', playing_m.end())
+        if brace_pos != -1:
+            # Extraire le contenu du bloc playing (entre { et })
+            pdepth, pend = 1, brace_pos + 1
+            for ci in range(brace_pos + 1, len(gl_body)):
+                if gl_body[ci] == '{': pdepth += 1
+                elif gl_body[ci] == '}':
+                    pdepth -= 1
+                    if pdepth == 0: pend = ci; break
+            playing_block = gl_body[brace_pos + 1:pend]
 
-    # Injection draw_fns
-    if draw_fns and inject_draw_pos is not None:
-        inj = '\n' + '\n'.join(
-            "    if(typeof %s==='function') %s();" % (fn, fn)
-            for fn in draw_fns
-        )
-        abs_pos = playing_abs_start + inject_draw_pos + offset
-        patched = patched[:abs_pos] + inj + patched[abs_pos:]
-        offset += len(inj)
+            # Position absolue de l'intérieur du bloc playing dans accumulated_js
+            playing_abs_start = gl_body_start + brace_pos + 1
+
+            # Trouver où injecter les update_fns (après le dernier appel update*)
+            inject_update_pos = None
+            for m in re.finditer(r'\b(?:update\w+|checkCollisions)\s*\([^)]*\)\s*;?', playing_block):
+                inject_update_pos = m.end()
+            # Trouver où injecter les draw_fns (après le dernier appel draw*)
+            inject_draw_pos = None
+            for m in re.finditer(r'\bdraw\w+\s*\(\s*\)\s*;?', playing_block):
+                inject_draw_pos = m.end()
+
+            # Injection update_fns
+            if update_fns and inject_update_pos is not None:
+                inj = '\n' + '\n'.join(
+                    "    if(typeof %s==='function') %s();" % (fn, fn)
+                    for fn in update_fns
+                )
+                abs_pos = playing_abs_start + inject_update_pos + offset
+                patched = patched[:abs_pos] + inj + patched[abs_pos:]
+                offset += len(inj)
+
+            # Injection draw_fns
+            if draw_fns and inject_draw_pos is not None:
+                inj = '\n' + '\n'.join(
+                    "    if(typeof %s==='function') %s();" % (fn, fn)
+                    for fn in draw_fns
+                )
+                abs_pos = playing_abs_start + inject_draw_pos + offset
+                patched = patched[:abs_pos] + inj + patched[abs_pos:]
+                offset += len(inj)
 
     if offset == 0:
         # Aucune position trouvée — fallback : injecter avant RAF (stratégie précédente)
@@ -1606,6 +1607,9 @@ def _stub_orphan_calls(accumulated_js: str) -> tuple[str, list[str]]:
         # M1 — Skip les noms trop génériques
         if fn.lower() in _ORPHAN_STUB_BLACKLIST or len(fn) <= 2:
             continue
+        # M2 — Skip si une implémentation réelle existe déjà (last-definition-wins évité)
+        if re.search(r'\bfunction\s+' + re.escape(fn) + r'\s*\(', accumulated_js):
+            continue
         stub = f"function {fn}() {{}}\n"
         stubs += stub
         injected.append(fn)
@@ -1797,12 +1801,15 @@ def _inject_trycatch_gameloop(js: str) -> str:
     # Ajouter drawErrorScreen si absent
     if 'drawErrorScreen' not in js:
         js = (
+            "window.__ARCADE_ERROR__ = '';\n"
             "function drawErrorScreen(msg) {\n"
+            "  var s = String(msg).slice(0,120);\n"
+            "  window.__ARCADE_ERROR__ = s;\n"
             "  ctx.fillStyle = '#300'; ctx.fillRect(0,0,W,H);\n"
             "  ctx.fillStyle = '#FF4444'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';\n"
             "  ctx.fillText('Erreur — rechargez la page', W/2, H/2-20);\n"
             "  ctx.fillStyle = '#FFAAAA'; ctx.font = '11px monospace';\n"
-            "  ctx.fillText(String(msg).slice(0,80), W/2, H/2+10);\n"
+            "  ctx.fillText(s.slice(0,80), W/2, H/2+10);\n"
             "  ctx.textAlign = 'left';\n"
             "}\n\n"
         ) + js
@@ -2223,6 +2230,12 @@ def _mechanic_to_keywords(mechanic: str) -> list[str]:
         return ['bossActive', 'spawnBoss']
     if any(k in m for k in ('vague', 'wave', 'horde')):
         return ['wave', 'updateWave']
+    if any(k in m for k in ('vaisseau', 'ship', 'spaceship', 'vaisseau joueur')):
+        return ['player', 'updatePlayer']
+    if any(k in m for k in ('formation', 'géométrique', 'geometric', 'pattern ennemi', 'formation ennemi')):
+        return ['enemies', 'updateEnemies']
+    if any(k in m for k in ('mouvement', 'déplacement', 'mouvement libre', 'mouvement 2d', 'horizontal', 'vertical limité')):
+        return ['player', 'updatePlayer']
     if any(k in m for k in ('dash', 'esquive', 'dodge', 'blink')):
         return ['dashTimer', 'isDashing']
     if any(k in m for k in ('double jump', 'double saut', 'doublejump')):
@@ -3679,7 +3692,17 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '- drawFlash() et drawFloatTexts() DOIVENT être appelées à la fin de chaque frame (après tout draw)\n'
         '  → ajoute function drawPolish() { drawFlash(); drawFloatTexts(); } que L7 appellera en dernier.\n\n'
         'INTERDIT ABSOLU : redéfinir gameLoop, init(), toute fonction update*() existante sauf spawnBullet/handleBulletEnemyHit/handlePowerUpCollect.\n'
-        'NE PAS toucher à updatePlayer, updateEnemies, updateBullets, updateParticles, updateWave, updateBoss.\n'
+        'NE PAS toucher à updatePlayer, updateEnemies, updateBullets, updateParticles, updateWave, updateBoss.\n\n'
+        '⚠️ RÈGLE CRITIQUE — RÉÉCRITURE DE FONCTIONS :\n'
+        'Quand tu réécris une fonction existante (ex: spawnBullet), la version précédente est REMPLACÉE.\n'
+        'Toutes les variables déclarées avec var DANS la version précédente sont INACCESSIBLES dans ta version.\n'
+        'Tu DOIS redéclarer TOUTES les variables locales que tu utilises dans chaque fonction réécrite.\n'
+        'Exemple CORRECT :\n'
+        '  function spawnBullet() {\n'
+        '    var speed = 400;  // ← DOIT être redéclaré même si présent dans l\'ancienne version\n'
+        '    ...\n'
+        '  }\n'
+        'Ne suppose JAMAIS qu\'une variable locale d\'une version précédente est encore disponible.\n\n'
         f'{_no_redecl_note}'
         f'{_contract_reminder(_global_contract, _incremental_manifest)}'
         'Output : JS pur uniquement.'
@@ -3741,6 +3764,21 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         if new_fns_from_8:
             accumulated = _patch_gameloop_calls(accumulated, new_fns_from_8)
 
+        # J8b : forcer la version correcte de _playTone (last-wins) si L8 l'a réécrite sans var t
+        if '_playTone' in accumulated:
+            _PLAYTONE_SAFE = (
+                '\nfunction _playTone(freq,dur,type,vol,delay){'
+                'if(!_AC)return; var t=_AC.currentTime+(delay||0);'
+                'var o=_AC.createOscillator(),g=_AC.createGain();'
+                'o.connect(g);g.connect(_AC.destination);'
+                'o.frequency.value=freq; o.type=type||"square";'
+                'g.gain.setValueAtTime(0.001,t);'
+                'g.gain.linearRampToValueAtTime(vol||0.15,t+0.005);'
+                'g.gain.exponentialRampToValueAtTime(0.001,t+dur);'
+                'o.start(t); o.stop(t+dur+0.01);}\n'
+            )
+            accumulated += _PLAYTONE_SAFE
+
         # J8 : s'assurer que _initAudio() est câblé dans init() si L8 a généré _initAudio
         if '_initAudio' in layer8_js and '_initAudio' not in accumulated.split('function init')[0] if 'function init' in accumulated else True:
             _init_m = re.search(r'function\s+init\s*\([^)]*\)\s*\{', accumulated)
@@ -3751,6 +3789,84 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     else:
         phase3_log.info("[layered] Couche 8 ignorée (output vide)")
         _record_layer_event('layer8', False, reason="output vide")
+
+    # ─────────────────────────────────────────────────────────────
+    # HELPER : stubs draw* minimaux après rollback ou L9 vide
+    # ─────────────────────────────────────────────────────────────
+    def _inject_draw_stubs(acc: str, _genre: str, _schemas: dict) -> str:
+        """Injecte des stubs fonctionnels pour chaque draw* absent après un rollback L9."""
+        _has_palette = 'PALETTE' in acc
+        _bg   = 'PALETTE.bg||"#0a0a1a"'   if _has_palette else '"#0a0a1a"'
+        _pl   = 'PALETTE.player||"#00ffcc"' if _has_palette else '"#00ffcc"'
+        _en   = 'PALETTE.enemy||"#ff4444"' if _has_palette else '"#ff4444"'
+        _bo   = 'PALETTE.boss||"#ff00ff"'  if _has_palette else '"#ff00ff"'
+
+        _REQUIRED_DRAW = {
+            'drawBackground': (
+                f'function drawBackground(){{'
+                f'ctx.fillStyle={_bg};ctx.fillRect(0,0,W,H);'
+                f'ctx.strokeStyle="rgba(0,200,255,0.1)";ctx.lineWidth=1;'
+                f'for(var _gx=0;_gx<W;_gx+=60){{ctx.beginPath();ctx.moveTo(_gx,0);ctx.lineTo(_gx,H);ctx.stroke();}}'
+                f'for(var _gy=0;_gy<H;_gy+=60){{ctx.beginPath();ctx.moveTo(0,_gy);ctx.lineTo(W,_gy);ctx.stroke();}}'
+                f'}}'
+            ),
+            'drawPlayer': (
+                f'function drawPlayer(){{'
+                f'if(!player)return;'
+                f'var _pw=player.w||24,_ph=player.h||24;'
+                f'ctx.fillStyle={_pl};ctx.shadowColor={_pl};ctx.shadowBlur=10;'
+                f'ctx.fillRect(player.x-_pw/2,player.y-_ph/2,_pw,_ph);'
+                f'ctx.shadowBlur=0;}}'
+            ),
+            'drawEnemies': (
+                f'function drawEnemies(){{'
+                f'for(var _i=0;_i<enemies.length;_i++){{'
+                f'var _e=enemies[_i];'
+                f'ctx.fillStyle={_en};'
+                f'ctx.beginPath();ctx.arc(_e.x,_e.y,_e.r||12,0,Math.PI*2);ctx.fill();}}}}'
+            ),
+            'drawBoss': (
+                f'function drawBoss(){{'
+                f'if(!bossActive||!boss)return;'
+                f'ctx.fillStyle={_bo};ctx.shadowColor={_bo};ctx.shadowBlur=20;'
+                f'ctx.fillRect(boss.x-boss.w/2,boss.y-boss.h/2,boss.w,boss.h);'
+                f'ctx.shadowBlur=0;}}'
+            ),
+            'drawHUD': (
+                'function drawHUD(){'
+                'ctx.fillStyle="#fff";ctx.font="bold 16px monospace";'
+                'ctx.fillText("Score: "+(score||0),10,25);'
+                'ctx.fillText("Vies: "+(lives||0),10,50);}'
+            ),
+            'drawMenu': (
+                'function drawMenu(){'
+                'ctx.fillStyle="#fff";ctx.font="bold 36px monospace";'
+                'ctx.textAlign="center";'
+                'ctx.fillText("PRESS SPACE",W/2,H/2);'
+                'ctx.textAlign="left";}'
+            ),
+            'drawGameOver': (
+                'function drawGameOver(){'
+                'ctx.fillStyle="#ff4444";ctx.font="bold 48px monospace";'
+                'ctx.textAlign="center";'
+                'ctx.fillText("GAME OVER",W/2,H/2);'
+                'ctx.fillStyle="#fff";ctx.font="20px monospace";'
+                'ctx.fillText("SPACE pour rejouer",W/2,H/2+60);'
+                'ctx.textAlign="left";}'
+            ),
+        }
+
+        stubs_added = []
+        for fn_name, stub_code in _REQUIRED_DRAW.items():
+            if f'function {fn_name}' not in acc:
+                acc += '\n' + stub_code
+                stubs_added.append(fn_name)
+
+        if stubs_added:
+            phase3_log.info(
+                "[layered] Stubs draw* injectés (L9 absent/rollback) : %s" % ', '.join(stubs_added)
+            )
+        return acc
 
     # ─────────────────────────────────────────────────────────────
     # COUCHE 9 — GRAPHISME FINAL (directeur artistique)
@@ -3821,6 +3937,11 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '  var _bgTimer = (typeof _bgTimer !== "undefined") ? _bgTimer : 0;\n'
         '  var _bgStars = (typeof _bgStars !== "undefined") ? _bgStars : [];\n'
         'JAMAIS référencer une variable que tu n\'as pas déclarée dans ce fragment.\n\n'
+        '⚠️ RÈGLE N°1bis — RÉÉCRITURE DE FONCTIONS :\n'
+        'Quand tu réécris drawBackground, drawPlayer, etc., la version L6 est EFFACÉE — ses variables locales disparaissent.\n'
+        'Tout ce que tu utilises DANS le corps de ta fonction doit être déclaré DANS ce corps.\n'
+        'Exemple : si tu utilises gridSize dans drawBackground, tu DOIS écrire var gridSize = 50; au début.\n'
+        'Ne suppose JAMAIS qu\'une variable était dans la version précédente de la fonction — elle n\'existe plus.\n\n'
         f'⚠️ RÈGLE N°2 — PROPRIÉTÉS D\'OBJETS :\n'
         f'Utilise UNIQUEMENT les propriétés du SCHÉMA : {_safe_props_hint}\n'
         'JAMAIS inventer player.angle, player.rot, enemy.frame, etc. si absent du schéma.\n'
@@ -3915,6 +4036,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
             )
             accumulated = accumulated_before_l9
             _record_layer_event('layer9', False, reason="rollback runtime: " + _crit9[0][:50])
+            _inject_draw_stubs(accumulated, genre, schemas_dict)
         else:
             phase3_log.info("[layered] Couche 9 OK — %d chars (visuels enrichis)" % len(layer9_js))
             if _rt9:
@@ -3922,6 +4044,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     else:
         phase3_log.info("[layered] Couche 9 ignorée (output vide ou invalide)")
         _record_layer_event('layer9', False, reason="output vide")
+        accumulated = _inject_draw_stubs(accumulated, genre, schemas_dict)
 
     # ─────────────────────────────────────────────────────────────
     # ASSEMBLAGE FINAL
@@ -4013,6 +4136,24 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
             # Déclaré avec const/let → convertir en var pour éviter les conflits de scope
             accumulated = re.sub(r'\b(?:const|let)\s+(PALETTE\s*=)', r'var \1', accumulated)
             phase3_log.info("[layered] PALETTE const/let → var (compatibilité multi-couche)")
+
+    # PALETTE clés manquantes — L9 peut inventer PALETTE.neonCyan absent de L1
+    _palette_existing_m = re.search(r'\bvar\s+PALETTE\s*=\s*\{([^}]+)\}', accumulated, re.DOTALL)
+    if _palette_existing_m:
+        _pal_declared = set(re.findall(r'(\w+)\s*:', _palette_existing_m.group(1)))
+        _pal_used = set(re.findall(r'\bPALETTE\.(\w+)\b', accumulated))
+        _pal_missing = _pal_used - _pal_declared
+        if _pal_missing:
+            _pal_new = ','.join(
+                f"{k}:'{next((c for h,c in [('neon','#00ffcc'),('cyan','#00ffff'),('magenta','#ff00ff'),('orange','#ff6600'),('gold','#ffd700'),('yellow','#ffff00'),('green','#00ff44'),('pink','#ff0088'),('red','#ff2200'),('blue','#0088ff'),('white','#ffffff'),('dark','#0a0a1a'),('gray','#888888'),('bg','#0a0a1a'),('player','#00ffcc'),('enemy','#ff4444'),('boss','#ff00ff'),('bullet','#ffff00'),('ui','#ffffff'),('hit','#ff8800')] if h in k.lower()), '#ffffff')}'"
+                for k in sorted(_pal_missing)
+            )
+            accumulated = re.sub(
+                r'(\bvar\s+PALETTE\s*=\s*\{)([^}]+)(\})',
+                lambda m: m.group(1) + m.group(2).rstrip().rstrip(',') + ',' + _pal_new + m.group(3),
+                accumulated, count=1, flags=re.DOTALL
+            )
+            phase3_log.info(f"[layered] PALETTE clés manquantes ajoutées : {', '.join(sorted(_pal_missing)[:8])}")
 
     # _AC + sfx : garantir déclaration si utilisés
     if '_AC' in accumulated and not re.search(r'\bvar\s+_AC\b|\blet\s+_AC\b|\bconst\s+_AC\b', accumulated):

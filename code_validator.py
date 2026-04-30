@@ -190,6 +190,25 @@ COMMON_VARS: dict[str, str] = {
     'staggerTimer': '0',
     'phaseTimer': '0',
     'transitionTimer': '0',
+    'multiplierTimer': '0',
+    'doubleTimer': '0',
+    'speedBoostTimer': '0',
+    'bombTimer': '0',
+    'freezeTimer': '0',
+    'rageTimer': '0',
+    'stunTimer': '0',
+    'multiplier': '1',
+    'highScore': '0',
+    'powerUps': '[]',
+    'bossPhase': '0',
+    'scrollSpeed': '1',
+    'scrollY': '0',
+    'gridSize': '50',
+    'offset': '0',
+    'waveAnnounce': '0',
+    'waveAnnounceTxt': '""',
+    'bulletPool': '[]',
+    'shieldActive': 'false',
 
     # Variables intermédiaires — évitent ReferenceError dans les boucles
     'def': 'null',
@@ -486,6 +505,9 @@ def validate_and_fix(html: str) -> tuple[str, list[str], bool]:
     script, const_fixes = _fix_const_reassignments(script)
     issues.extend(const_fixes)
 
+    script, draw_local_fixes = _fix_undeclared_draw_locals(script)
+    issues.extend(draw_local_fixes)
+
     script, var_fixes = _fix_undeclared_common_vars(script)
     issues.extend(var_fixes)
 
@@ -494,6 +516,27 @@ def validate_and_fix(html: str) -> tuple[str, list[str], bool]:
 
     script, stub_fixes = _inject_missing_stubs(script)
     issues.extend(stub_fixes)
+
+    script, handler_fixes = _fix_no_args_handlers_in_gameloop(script)
+    issues.extend(handler_fixes)
+
+    script, type_name_fixes = _fix_type_vs_name_property(script)
+    issues.extend(type_name_fixes)
+
+    script, spawnplayer_fixes = _fix_spawnplayer_missing_dimensions(script)
+    issues.extend(spawnplayer_fixes)
+
+    script, spawn_fixes = _fix_spawn_missing_typeindex(script)
+    issues.extend(spawn_fixes)
+
+    script, draw_loop_fixes = _fix_draw_loop_missing_element_var(script)
+    issues.extend(draw_loop_fixes)
+
+    script, arrow_fixes = _fix_arrow_key_mapping(script)
+    issues.extend(arrow_fixes)
+
+    script, boss_fixes = _fix_boss_defs_access(script)
+    issues.extend(boss_fixes)
 
     script, raf_fixes = _fix_missing_raf_in_domready(script)
     issues.extend(raf_fixes)
@@ -699,6 +742,182 @@ def _fix_const_reassignments(script: str) -> tuple[str, list[str]]:
 # ─────────────────────────────────────────────────────────────
 # FIX 2 — Variables communes non déclarées
 # ─────────────────────────────────────────────────────────────
+
+def _fix_undeclared_draw_locals(script: str) -> tuple[str, list[str]]:
+    """
+    Détecte les variables locales utilisées dans les fonctions draw*/update* sans déclaration.
+    Pattern récurrent : L9 réécrit drawBackground/drawEnemies/drawBoss en utilisant des `var`
+    qui étaient locales dans la version L6 (hpRatio, barX, barWidth, alpha, gradient, radius...).
+    Injecte `var x = default;` au début du corps de chaque fonction concernée.
+    """
+    fixes: list[str] = []
+
+    # Vars typiquement locales aux fonctions draw — avec leur valeur par défaut
+    _DRAW_LOCALS: dict[str, str] = {
+        'hpRatio': '1', 'hpPct': '1', 'ratio': '1', 'pct': '1',
+        'barX': '0', 'barY': '0', 'barWidth': '0', 'barHeight': '6',
+        'barColor': '"#00ff00"',
+        'alpha': '1', 'opacity': '1',
+        'gradient': 'null', 'grad': 'null', 'gradBoss': 'null',
+        'glowSize': '0', 'pulse': '0',
+        'radius': '0', 'scale': '1',
+        'gradX': '0', 'gradY': '0',
+        'offsetX': '0', 'offsetY': '0',
+        'wobble': '0', 'bounce': '0',
+        'brightness': '1', 'saturation': '1',
+        'frameX': '0', 'frameY': '0',
+    }
+
+    # Trouver toutes les fonctions draw* et update*
+    func_pattern = re.compile(r'\bfunction\s+((?:draw|update|render)\w*)\s*\(([^)]*)\)\s*\{')
+    result = script
+    offset = 0  # décalage cumulatif après injections
+
+    for m in func_pattern.finditer(script):
+        fname = m.group(1)
+        params_str = m.group(2)
+        params = {p.strip() for p in params_str.split(',') if p.strip()}
+
+        # Extraire le corps de la fonction
+        body_start = m.end()
+        depth = 1
+        i = body_start
+        while i < len(script) and depth > 0:
+            if script[i] == '{':
+                depth += 1
+            elif script[i] == '}':
+                depth -= 1
+            i += 1
+        body = script[body_start:i - 1]
+
+        # Vars déclarées dans le corps
+        declared = params.copy()
+        declared |= set(re.findall(r'\bvar\s+(\w+)', body))
+        declared |= set(re.findall(r'\blet\s+(\w+)', body))
+        declared |= set(re.findall(r'\bconst\s+(\w+)', body))
+
+        # Vars utilisées mais non déclarées
+        to_inject = []
+        for vname, vdefault in _DRAW_LOCALS.items():
+            if vname in declared:
+                continue
+            if not re.search(r'\b' + re.escape(vname) + r'\b', body):
+                continue
+            to_inject.append((vname, vdefault))
+
+        if not to_inject:
+            continue
+
+        inject_str = ''.join(f'  var {n} = {v};\n' for n, v in to_inject)
+        # Injecter juste après l'accolade ouvrante de la fonction
+        insert_pos = m.end() + offset
+        result = result[:insert_pos] + '\n' + inject_str + result[insert_pos:]
+        offset += len('\n' + inject_str)
+        fixes.append(
+            f'[AUTO-FIX] {fname}(): {len(to_inject)} var(s) locales injectées '
+            f'({", ".join(n for n, _ in to_inject)})'
+        )
+
+    return result, fixes
+
+
+def _fix_draw_loop_missing_element_var(script: str) -> tuple[str, list[str]]:
+    """
+    Corrige le pattern drawEnemies/drawBullets/drawParticles/drawPowerUps où le for-loop
+    itère sur un tableau avec `for (var i = 0; ...)` mais utilise `e.x` / `e.hp` sans
+    déclarer `var e = array[i]` dans le corps.
+
+    Symptôme : 'e is not defined' au runtime dans drawEnemies.
+    Cause : L9 réécrit drawEnemies en utilisant `e` (copié depuis updateEnemies) sans
+    ajouter `var e = enemies[i]`.
+    """
+    fixes = []
+
+    # Table (nom de fonction → tableau qu'elle itère → variable d'itération)
+    _DRAW_LOOPS = [
+        (r'drawEnemy(?:ies)?',    'enemies',    'e'),
+        (r'drawBullet(?:s)?',     'bullets',    'b'),
+        (r'drawParticle(?:s)?',   'particles',  'p'),
+        (r'drawPowerUp(?:s)?',    'powerUps',   'p'),
+        (r'drawFloatText(?:s)?',  'floatTexts', 't'),
+        (r'drawExplosion(?:s)?',  'explosions', 'ex'),
+        (r'drawItem(?:s)?',       'items',      'item'),
+        # update* aussi touchées par ce bug
+        (r'updateParticle(?:s)?', 'particles',  'p'),
+        (r'updateExplosion(?:s)?','explosions', 'ex'),
+        (r'updatePowerUp(?:s)?',  'powerUps',   'p'),
+        (r'updateItem(?:s)?',     'items',      'item'),
+        (r'updateFloatText(?:s)?','floatTexts', 't'),
+    ]
+
+    result = script
+    delta = 0
+
+    for func_pat, arr, ivar in _DRAW_LOOPS:
+        func_re = re.compile(
+            r'\bfunction\s+(' + func_pat + r')\s*\([^)]*\)\s*\{', re.IGNORECASE
+        )
+        for m_func in func_re.finditer(script):
+            fname = m_func.group(1)
+            body_start = m_func.end()
+            depth = 1
+            i = body_start
+            while i < len(script) and depth > 0:
+                c = script[i]
+                if c == '{': depth += 1
+                elif c == '}': depth -= 1
+                i += 1
+            body = script[body_start:i - 1]
+
+            # Vérifier si le corps contient un for-loop sur le tableau
+            for_pat = re.compile(
+                r'for\s*\(\s*var\s+\w+\s*=\s*0[^)]*' + re.escape(arr) + r'[^)]*\)\s*\{',
+                re.DOTALL
+            )
+            m_for = for_pat.search(body)
+            if not m_for:
+                continue
+
+            # Vérifier si `ivar` est déclaré dans le corps du for
+            for_body_start = m_for.end()
+            depth2 = 1
+            j = for_body_start
+            while j < len(body) and depth2 > 0:
+                c = body[j]
+                if c == '{': depth2 += 1
+                elif c == '}': depth2 -= 1
+                j += 1
+            for_body = body[for_body_start:j - 1]
+
+            # Détecter le vrai nom de variable utilisé : cherche `xx.` non déclaré
+            # (peut être ivar='t' mais le code utilise 'ft', ou ivar='p' mais code utilise 'part')
+            _candidates_to_check = {ivar}
+            # Cherche tout `identifier.` dans le for-body qui n'est pas déclaré
+            for _m_cand in re.finditer(r'\b([a-zA-Z_]\w*)\s*\.', for_body):
+                _c = _m_cand.group(1)
+                if _c in ('ctx', 'Math', 'window', 'document', 'console', 'PALETTE',
+                           'player', 'boss', 'canvas', 'dt', 'i', 'j'):
+                    continue
+                _candidates_to_check.add(_c)
+
+            for _ivar in _candidates_to_check:
+                if re.search(r'\bvar\s+' + re.escape(_ivar) + r'\b', for_body):
+                    continue  # déclaré
+                if not re.search(r'\b' + re.escape(_ivar) + r'\s*\.', for_body):
+                    continue  # non utilisé avec .prop
+                # Vérifie que cette var n'est pas un param de fonction ou déclarée en dehors du for
+                if re.search(r'\bvar\s+' + re.escape(_ivar) + r'\b', body[:m_for.start()]):
+                    continue
+                # Injecter `var _ivar = arr[i];` comme première ligne du for-body
+                abs_for_body_start = m_func.start() + (body_start - m_func.start()) + m_for.end() + delta
+                inject = f'\n        var {_ivar} = {arr}[i];\n        if (!{_ivar}) continue;\n'
+                result = result[:abs_for_body_start] + inject + result[abs_for_body_start:]
+                delta += len(inject)
+                fixes.append(f'[AUTO-FIX] {fname}(): var {_ivar} = {arr}[i] injecté (évite "{_ivar} is not defined")')
+                break  # une seule injection par for-loop
+
+    return result, fixes
+
 
 def _fix_undeclared_common_vars(script: str) -> tuple[str, list[str]]:
     """
@@ -1630,6 +1849,253 @@ def _fix_external_resources(script: str) -> tuple[str, list[str]]:
             script
         )
         fixes.append('[AUTO-FIX] fetch() externe → Promise.resolve vide')
+
+    return script, fixes
+
+
+def _fix_arrow_key_mapping(script: str) -> tuple[str, list[str]]:
+    """
+    Corrige les handlers keydown/keyup qui font `keys[e.key.toLowerCase()] = true/false`
+    sans mapper ArrowLeft/Right/Up/Down vers keys.left/right/up/down.
+
+    Symptôme : le joueur ne peut pas se déplacer avec les flèches car updatePlayer vérifie
+    keys.left/right/up/down mais le handler stocke keys["arrowleft"] etc.
+    """
+    fixes = []
+    _ARROW_KEYDOWN = (
+        "  if (e.key === \"ArrowLeft\")  { keys.left = true;  e.preventDefault(); }\n"
+        "  if (e.key === \"ArrowRight\") { keys.right = true; e.preventDefault(); }\n"
+        "  if (e.key === \"ArrowUp\")    { keys.up = true;    e.preventDefault(); }\n"
+        "  if (e.key === \"ArrowDown\")  { keys.down = true;  e.preventDefault(); }\n"
+        "  if (e.key === \" \")          { keys.space = true; e.preventDefault(); }\n"
+    )
+    _ARROW_KEYUP = (
+        "  if (e.key === \"ArrowLeft\")  keys.left = false;\n"
+        "  if (e.key === \"ArrowRight\") keys.right = false;\n"
+        "  if (e.key === \"ArrowUp\")    keys.up = false;\n"
+        "  if (e.key === \"ArrowDown\")  keys.down = false;\n"
+        "  if (e.key === \" \")          keys.space = false;\n"
+    )
+
+    # Patch le premier keydown handler qui utilise keys[e.key.toLowerCase()]
+    kd_pat = re.compile(
+        r'(addEventListener\(["\']keydown["\'][^)]*\)\s*\{[^\n]*\n)'
+        r'(\s*keys\[e\.key\.toLowerCase\(\)\]\s*=\s*true;)'
+    )
+    def _patch_kd(m):
+        if 'ArrowLeft' in m.group(0):
+            return m.group(0)  # déjà patché
+        fixes.append('[AUTO-FIX] keydown handler: mapping ArrowLeft/Right/Up/Down → keys.left/right/up/down ajouté')
+        return m.group(1) + m.group(2) + '\n' + _ARROW_KEYDOWN
+    script, n = re.subn(kd_pat, _patch_kd, script, count=1)
+
+    # Patch le premier keyup handler
+    ku_pat = re.compile(
+        r'(addEventListener\(["\']keyup["\'][^)]*\)\s*\{[^\n]*\n)'
+        r'(\s*keys\[e\.key\.toLowerCase\(\)\]\s*=\s*false;)'
+    )
+    def _patch_ku(m):
+        if 'ArrowLeft' in m.group(0):
+            return m.group(0)
+        return m.group(1) + m.group(2) + '\n' + _ARROW_KEYUP
+    script = re.sub(ku_pat, _patch_ku, script, count=1)
+
+    return script, fixes
+
+
+def _fix_spawnplayer_missing_dimensions(script: str) -> tuple[str, list[str]]:
+    """
+    Corrige spawnPlayer() qui crée l'objet player sans w/h/r.
+    Symptômes :
+      - Balles spawent à player.y - undefined = NaN → invisibles
+      - aabbCollide(player, e) → NaN → jamais de collision → ennemis ne font pas de dégâts
+    Fix : injecte w:24, h:24, r:12 dans l'objet créé si absent.
+    """
+    fixes = []
+
+    spawnplayer_pat = re.compile(
+        r'(function\s+spawnPlayer\s*\([^)]*\)\s*\{)(.*?)(\n\})',
+        re.DOTALL
+    )
+    def _patch(m):
+        body = m.group(2)
+        # Cherche l'objet littéral player = { ... }
+        obj_pat = re.compile(r'(player\s*=\s*\{)(.*?)(\})', re.DOTALL)
+        m_obj = obj_pat.search(body)
+        if not m_obj:
+            return m.group(0)
+        obj_content = m_obj.group(2)
+        changed = False
+        if not re.search(r'\bw\s*:', obj_content):
+            obj_content += '\n        w: 24,'
+            changed = True
+        if not re.search(r'\bh\s*:', obj_content):
+            obj_content += '\n        h: 24,'
+            changed = True
+        if not re.search(r'\br\s*:', obj_content):
+            obj_content += '\n        r: 12,'
+            changed = True
+        if changed:
+            new_body = body[:m_obj.start(2)] + obj_content + body[m_obj.end(2):]
+            fixes.append('[AUTO-FIX] spawnPlayer(): w/h/r ajoutés à player (évite balles NaN + collisions cassées)')
+            return m.group(1) + new_body + m.group(3)
+        return m.group(0)
+
+    script = spawnplayer_pat.sub(_patch, script)
+    return script, fixes
+
+
+def _fix_spawn_missing_typeindex(script: str) -> tuple[str, list[str]]:
+    """
+    Corrige le pattern spawnEnemy(typeIndex) où typeIndex n'est pas stocké sur l'objet ennemi.
+    Symptôme : ENEMY_TYPES[e.typeIndex] → undefined → 'Cannot read properties of undefined (reading type)'
+    Fix : injecte 'typeIndex: typeIndex,' dans l'objet ennemi retourné par spawnEnemy.
+    S'applique aussi à spawnPowerUp / spawnItem avec powerUpIndex / itemIndex.
+    """
+    fixes = []
+
+    def _inject_field_if_missing(m_func):
+        fname = m_func.group(1)       # ex: spawnEnemy
+        param = m_func.group(2)       # ex: typeIndex
+        body = m_func.group(3)
+        field = param                  # on stocke le param tel quel
+
+        # Cherche l'objet littéral créé dans la fonction (var xxx = { ... })
+        obj_pat = re.compile(
+            r'(var\s+\w+\s*=\s*\{)([^}]*?\})',
+            re.DOTALL
+        )
+        m_obj = obj_pat.search(body)
+        if not m_obj:
+            return m_func.group(0)
+
+        obj_content = m_obj.group(2)
+        # Si le champ est déjà là, rien à faire
+        if re.search(r'\b' + re.escape(field) + r'\s*:', obj_content):
+            return m_func.group(0)
+
+        # Injecte le champ juste après l'accolade ouvrante
+        new_obj = m_obj.group(1) + f'\n        {field}: {field},' + obj_content
+        new_body = body[:m_obj.start()] + new_obj + body[m_obj.end():]
+        fixes.append(f'[AUTO-FIX] {fname}: champ "{field}" ajouté dans l\'objet créé (evite ENEMY_TYPES[undefined])')
+        full = m_func.group(0)
+        return full.replace(body, new_body)
+
+    # Applique sur spawnEnemy(typeIndex), spawnItem(itemIndex), etc.
+    pattern = re.compile(
+        r'(function\s+spawn(?:Enemy|PowerUp|Item|Obstacle))\s*\((\w*[Ii]ndex\w*)\)\s*\{(.*?)\n\}',
+        re.DOTALL
+    )
+    script = pattern.sub(_inject_field_if_missing, script)
+    return script, fixes
+
+
+def _fix_type_vs_name_property(script: str) -> tuple[str, list[str]]:
+    """
+    Corrige la confusion type.name / type.type sur les objets de tableaux de définition
+    (ENEMY_TYPES, POWERUP_TYPES, WAVE_DEFS, etc.) dont la propriété d'identité s'appelle 'type'.
+
+    Pattern: quand les définitions utilisent { type: "..." } mais que le code lit .name sur
+    un élément issu de ces tableaux — last-def-wins entre L6 (génère les arrays) et L7/L9
+    (réécrit les fonctions update en utilisant .name).
+
+    Stratégie : si le script contient au moins un tableau de définition avec { type: "..." }
+    et qu'il contient des accès .name sur des variables typiquement issues de ces tableaux
+    (typeDef, enemyType, powerupDef, waveDef, etc.) → remplacer .name par .type.
+    """
+    fixes = []
+    # Vérifie si le script utilise le pattern { type: "..." } dans des arrays de defs
+    has_type_arrays = bool(re.search(
+        r'(?:ENEMY_TYPES|POWERUP_TYPES|WAVE_DEFS|ITEM_TYPES|WEAPON_TYPES|UPGRADE_TYPES|OBSTACLE_TYPES)\s*=\s*\[',
+        script
+    ))
+    if not has_type_arrays:
+        return script, fixes
+
+    # Remplace typeDef.name, enemyType.name, etc. → .type
+    _TYPE_VAR_PATTERN = r'\b(typeDef|enemyType|enemyDef|powerupDef|powerupType|waveDef|itemDef|itemType|weaponDef|weaponType|upgradeDef|upgradeType|obstacleDef|obstacleType|type)\s*\.\s*name\b'
+
+    def _replace_name(m):
+        var = m.group(1)
+        fixes.append(f'[AUTO-FIX] {var}.name → {var}.type (propriété identité = "type" dans les arrays de définition)')
+        return var + '.type'
+
+    new_script = re.sub(_TYPE_VAR_PATTERN, _replace_name, script)
+    return new_script, fixes
+
+
+def _fix_no_args_handlers_in_gameloop(script: str) -> tuple[str, list[str]]:
+    """
+    Supprime les appels sans arguments à des handlers de collision/événement dans la gameLoop.
+    Ex: handleBulletEnemyHit() → supprimé (déjà appelé avec args dans checkCollisions())
+    Cause: le Patcher injecte parfois ces appels dans la gameLoop sans passer les paramètres,
+    ce qui provoque 'Cannot read properties of undefined' au runtime.
+    """
+    fixes = []
+    # Handlers qui sont TOUJOURS appelés via checkCollisions() avec des args — jamais directement
+    _HANDLER_PREFIXES = (
+        'handleBulletEnemyHit', 'handleEnemyBulletHit', 'handlePlayerEnemyHit',
+        'handleBossBulletHit', 'handlePlayerBossHit', 'handlePowerUpCollect',
+        'handleBulletBossHit', 'handleBulletHit', 'handleEnemyHit',
+    )
+    # Trouver la gameLoop pour limiter la recherche (éviter de toucher checkCollisions lui-même)
+    gameloop_m = re.search(r'function\s+gameLoop\b', script)
+    if not gameloop_m:
+        return script, fixes
+
+    gameloop_start = gameloop_m.start()
+    # Chercher uniquement dans le corps de la gameLoop (heuristique : ~200 lignes après)
+    gameloop_body_end = min(len(script), gameloop_start + 8000)
+    prefix = script[:gameloop_start]
+    body = script[gameloop_start:gameloop_body_end]
+    suffix = script[gameloop_body_end:]
+
+    for handler in _HANDLER_PREFIXES:
+        # Appel sans arguments : handler(); ou handler() ; (avec espaces éventuels)
+        pattern = re.compile(r'\b' + re.escape(handler) + r'\s*\(\s*\)\s*;[^\n]*\n?')
+        new_body, n = re.subn(pattern, '', body)
+        if n:
+            body = new_body
+            fixes.append(f'[AUTO-FIX] {handler}() sans args supprimé de gameLoop (géré par checkCollisions)')
+
+    return prefix + body + suffix, fixes
+
+
+def _fix_boss_defs_access(script: str) -> tuple[str, list[str]]:
+    """
+    Corrige BOSS_DEFS['level' + level] quand BOSS_DEFS est un objet plat (non indexé par niveau).
+    Symptôme : spawnBoss() fait BOSS_DEFS['level1'] → undefined → guard if (!bossDef) return → boss jamais spawné.
+    Fix : remplace par BOSS_DEFS['level' + level] || BOSS_DEFS pour le fallback sur l'objet plat.
+    Ajoute aussi vx/shootTimer/spawnDroneTimer/invTimer si absents dans l'objet boss créé.
+    """
+    fixes = []
+
+    # Fix 1 : fallback sur l'objet plat
+    pat = re.compile(r"BOSS_DEFS\s*\[\s*['\"]level['\"]?\s*\+\s*\w+\s*\](?!\s*\|\|)")
+    if pat.search(script):
+        script = pat.sub(lambda m: m.group(0) + ' || BOSS_DEFS', script)
+        fixes.append('[AUTO-FIX] BOSS_DEFS[\'level\' + level] → || BOSS_DEFS (fallback objet plat)')
+
+    # Fix 2 : BOSS_DEFS[boss.type] (aussi incorrect pour objet plat) → BOSS_DEFS
+    pat2 = re.compile(r"BOSS_DEFS\s*\[\s*boss\s*\.\s*type\s*\]")
+    if pat2.search(script):
+        script = pat2.sub('BOSS_DEFS', script)
+        fixes.append('[AUTO-FIX] BOSS_DEFS[boss.type] → BOSS_DEFS (objet plat)')
+
+    # Fix 3 : injecter vx/shootTimer/invTimer dans l'objet boss si absents
+    spawn_boss_pat = re.compile(r'(function\s+spawnBoss\s*\([^)]*\)\s*\{.*?boss\s*=\s*\{)(.*?)(\})', re.DOTALL)
+    def _patch_boss_obj(m):
+        content = m.group(2)
+        changed = False
+        for prop, val in [('vx', '40'), ('shootTimer', '1.0'), ('invTimer', '0'), ('spawnDroneTimer', '5.0')]:
+            if not re.search(r'\b' + prop + r'\s*:', content):
+                content += f'\n        {prop}: {val},'
+                changed = True
+        if changed:
+            fixes.append('[AUTO-FIX] spawnBoss(): vx/shootTimer/invTimer/spawnDroneTimer ajoutés')
+            return m.group(1) + content + m.group(3)
+        return m.group(0)
+    script = spawn_boss_pat.sub(_patch_boss_obj, script)
 
     return script, fixes
 

@@ -9,6 +9,7 @@ Usage :
 
 import sys
 import os
+import re
 import time
 import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -251,6 +252,7 @@ from agents.phase2 import (
     agent_ux_designer,
     agent_level_designer,
     agent_game_logics,
+    agent_scenariste,
 )
 
 # Phase 3 — Génération
@@ -275,13 +277,13 @@ from agents.support import agent_verdict_final, agent_sauvegarde, agent_auto_lea
 # ─────────────────────────────────────────────
 # CONFIGURATION
 # ─────────────────────────────────────────────
-MAX_ITERATIONS = 2          # E4 : 2 itérations max (coût API réduit)
+MAX_ITERATIONS = 3          # 3 itérations : génération + 2 passes de patch/fix
 SCORE_SEUIL_SAUVEGARDE = 7.0   # Score minimum pour marquer "approuvé"
 SCORE_SORTIE_ANTICIPEE = 8.0   # Score pour sortir sans itérer
 SCORE_STAGNATION_DELTA = 0.2   # Si le score progresse de moins de ça → stagnation
 SCORE_MIN_VIABLE_SAVE  = 2.0   # En dessous de ça, inutile de sauvegarder (code vide)
 # Nombre d'itérations consécutives sans progrès avant stagnation déclarée
-MAX_ITERATIONS_SANS_PROGRES = 1  # avec MAX_ITERATIONS=2, stagnation détectable dès l'iter 2
+MAX_ITERATIONS_SANS_PROGRES = 2  # tolérer 1 itération "bloquée" — A2 fix peut débloquer
 # E4 : seuil pour autoriser les passes 3 et 4 (économie quota)
 SCORE_SEUIL_ITERATIONS_SUP = 7.0  # Au-dessus → 2 passes suffisent
 # C1 : seuils minimums par dimension (bloquer sauvegarde si non atteints)
@@ -460,11 +462,14 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
     genre_profile = agent_enrichisseur.run(prompt_nettoye, classification, research)
 
     # Propager la détection 3D du classificateur vers le GenreProfile
-    # (l'enrichisseur ne connaît pas ce champ — on le force ici pour cohérence)
     if est_3d:
         genre_profile.technologie_rendu = "threejs"
     else:
         genre_profile.technologie_rendu = "canvas2d"
+
+    # Propager la détection narrative
+    _is_narrative_raw = mod_class.get("is_narrative", False)
+    genre_profile.is_narrative = bool(_is_narrative_raw)
 
     coordinateur_log.success(f"Phase 1 terminée : {genre_profile.summary()}")
 
@@ -513,6 +518,14 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
     game_logics   = p2["game_logics"]  or ""
     level_design  = p2["level_design"] or {}
 
+    # Agent Scénariste (optionnel — si jeu narratif)
+    narrative_context = None
+    if genre_profile.is_narrative:
+        coordinateur_log.info("Mode narratif détecté — appel agent scénariste")
+        push_event("agent_start", {"agent": "Scénariste", "phase": "PHASE2", "description": "Création histoire, quêtes et personnages"})
+        narrative_context = agent_scenariste.run(genre_profile)
+        push_event("agent_done", {"agent": "Scénariste", "phase": "PHASE2", "result": f"Histoire : {narrative_context.titre}"})
+
     # Assembler le contexte de conception
     context = ConceptionContext(
         genre_profile=genre_profile,
@@ -520,6 +533,7 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
         tech_specs=tech_specs,
         ux_specs=ux_specs,
         level_design=level_design,
+        narrative_context=narrative_context,
     )
 
     coordinateur_log.success("Phase 2 terminée — contexte complet assemblé")
@@ -743,8 +757,28 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
         push_event("score", {"label": "Score global", "value": round(score, 2)})
         push_event("score", {"label": "Execution",    "value": round(exec_score, 2)})
 
-        # Plafonnement log uniquement — la régénération sur exec stagné a été supprimée
-        # (trop coûteuse : 9 couches × retries × rotation clés = +30-45 min)
+        # A2 — Auto-fix réactif : extraire les "X is not defined" des erreurs Playwright
+        # et injecter var X = <default>; pour débloquer la prochaine itération.
+        # _a2_fixed_vars persiste jusqu'à la construction de all_issues_str
+        # pour que le Diagnosticien ne reçoive pas les issues déjà corrigées.
+        _a2_fixed_vars = set()
+        if exec_score < SCORE_MIN_EXECUTION and iteration < _iters:
+            _exec_criteres = bundle.execution.criteres if bundle.execution else []
+            _undef_vars = set()
+            _undef_re = re.compile(r'\b(\w+) is not defined', re.IGNORECASE)
+            for _c in _exec_criteres:
+                for _m in _undef_re.finditer(_c.get('commentaire', '')):
+                    _undef_vars.add(_m.group(1))
+            if _undef_vars:
+                from js_syntax_checker import fix_undefined_runtime_vars as _fix_undef
+                code, _a2_fixed, _a2_descs = _fix_undef(code, _undef_vars)
+                if _a2_fixed:
+                    _a2_fixed_vars = _undef_vars
+                    coordinateur_log.success(
+                        f"A2 auto-fix {len(_undef_vars)} var(s) undef post-Playwright : "
+                        f"{', '.join(sorted(_undef_vars)[:6])}"
+                    )
+                    iterations_sans_progres = max(0, iterations_sans_progres - 1)
 
         # Sortie anticipée si score excellent
         if score >= SCORE_SORTIE_ANTICIPEE:
@@ -796,6 +830,24 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
             i.get("description", str(i)) if isinstance(i, dict) else str(i)
             for i in _issues_for_prepatch
         ))
+
+        # A2-filter : exclure du Diagnosticien les issues déjà corrigées par A2 (variables injectées)
+        # Evite que le Patcher réécrive drawBackground pour "corriger" gridSize déjà déclaré par A2
+        if _a2_fixed_vars:
+            _before_filter = len(all_issues_str)
+            all_issues_str = [
+                issue for issue in all_issues_str
+                if not any(
+                    re.search(r'\b' + re.escape(v) + r'\b', issue, re.IGNORECASE)
+                    for v in _a2_fixed_vars
+                )
+            ]
+            _filtered_count = _before_filter - len(all_issues_str)
+            if _filtered_count:
+                coordinateur_log.info(
+                    f"[A2-filter] {_filtered_count} issue(s) exclues du Diagnosticien "
+                    f"(déjà corrigées : {', '.join(sorted(_a2_fixed_vars)[:4])})"
+                )
 
         # B5 : règles déterministes en premier — résolvent 30-40% des issues sans LLM
         try:
@@ -863,6 +915,12 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
                     if not _p4_rebroken:
                         code = _p4_patched
                         coordinateur_log.info("P4 : pre-patcher post-patch OK")
+                # P4b — ESLint no-undef post-patcher : attrape les variables non déclarées
+                # introduites par le Patcher LLM, avant que Phase 4 ne les voit
+                from js_syntax_checker import fix_all_auto as _fix_all_post_patch
+                code, _p4b_fixed, _p4b_descs = _fix_all_post_patch(code)
+                if _p4b_fixed:
+                    coordinateur_log.success(f"P4b post-patch auto-fix : {len(_p4b_descs)} correction(s)")
         else:
             # C — Patch ciblé par type d'erreur avant de régénérer entièrement
             issue_descs = [

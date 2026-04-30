@@ -1,0 +1,3814 @@
+[
+  {
+    "timestamp": "2026-03-28T17:40:46.222779",
+    "titre": "dungeon_dashers_20260328_",
+    "genre": "dungeon",
+    "score": 6.5,
+    "approuve": false,
+    "html_size": 126741,
+    "new_common_vars_candidates": [
+      {
+        "varname": "active",
+        "occurrences": 10,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "attackFlash",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "bought",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "chargeTargetX",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "chargeTargetY",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "chargeTimer",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 12,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "count",
+        "occurrences": 10,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "critChance",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "critMult",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentClassId",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "down",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "down_pressed",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "e_prev",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "equipment",
+        "occurrences": 13,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "ctx_before_init",
+        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
+        "severity": "high"
+      },
+      {
+        "type": "draw_no_clear",
+        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-03-28T17:40:46.794712",
+    "titre": "dungeon_dash__the_lo_2026",
+    "genre": "dungeon",
+    "score": 6.5,
+    "approuve": false,
+    "html_size": 75744,
+    "new_common_vars_candidates": [
+      {
+        "varname": "active",
+        "occurrences": 3,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "attackFlash",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "classId",
+        "occurrences": 16,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "completed",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "critChance",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "critDamage",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "distance",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "down",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "down_pressed",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "ennemis",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape_pressed",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "event",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "facing",
+        "occurrences": 14,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "showDialog",
+        "call_count": 4
+      },
+      {
+        "function": "initGame",
+        "call_count": 3
+      },
+      {
+        "function": "createInteractable",
+        "call_count": 3
+      },
+      {
+        "function": "corridor",
+        "call_count": 2
+      },
+      {
+        "function": "drop",
+        "call_count": 2
+      },
+      {
+        "function": "completion",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-03-28T17:40:47.711568",
+    "titre": "dungeon_s_ascent_20260328",
+    "genre": "dungeon",
+    "score": 6.5,
+    "approuve": false,
+    "html_size": 110800,
+    "new_common_vars_candidates": [
+      {
+        "varname": "activated",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "attackFlash",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "base",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "baseAtk",
+        "occurrences": 10,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "baseDef",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bought",
+        "occurrences": 13,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "buffer",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "bulletCooldown",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "classId",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 19,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "comp",
+        "occurrences": 19,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "composition",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "count",
+        "occurrences": 19,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentAtk",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentPattern",
+        "occurrences": 3,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "ctx_before_init",
+        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
+        "severity": "high"
+      },
+      {
+        "type": "draw_no_clear",
+        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-03-28T18:28:17.637431",
+    "titre": "Dungeon Ascendant",
+    "genre": "rpg",
+    "score": 6.18,
+    "approuve": false,
+    "html_size": 118489,
+    "new_common_vars_candidates": [
+      {
+        "varname": "active",
+        "occurrences": 14,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "agility",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "aoeAttack",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "artifacts",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "attackFlash",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "bestScore",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "classId",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "cleared",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "crit_chance",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "crit_mult",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentAtk",
+        "occurrences": 15,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentHp",
+        "occurrences": 17,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentXP",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashTimer",
+        "occurrences": 5,
+        "suggested_default": "0"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "bar",
+        "call_count": 3
+      },
+      {
+        "function": "drawFloatingTexts",
+        "call_count": 2
+      },
+      {
+        "function": "drawParticles",
+        "call_count": 2
+      },
+      {
+        "function": "chance",
+        "call_count": 2
+      },
+      {
+        "function": "wide",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "ctx_before_init",
+        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
+        "severity": "high"
+      },
+      {
+        "type": "draw_no_clear",
+        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-03-28T20:10:16.605099",
+    "titre": "Donjon des Chroma-Ombres",
+    "genre": "rpg",
+    "score": 7.16,
+    "approuve": false,
+    "html_size": 83574,
+    "new_common_vars_candidates": [
+      {
+        "varname": "active",
+        "occurrences": 6,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "chargeTimer",
+        "occurrences": 10,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 12,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "current",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentDir",
+        "occurrences": 24,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentXP",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "e_pressed",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "equipment",
+        "occurrences": 13,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape_pressed",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 36,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "flashTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 24,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gain",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 4,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['boss_fight', 'loading']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-03-29T12:39:35.169744",
+    "titre": "Pixel Dash: Shadow King's Gauntlet",
+    "genre": "platformer",
+    "score": 7.4,
+    "approuve": true,
+    "html_size": 23486,
+    "new_common_vars_candidates": [
+      {
+        "varname": "fillStyle",
+        "occurrences": 25,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 14,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "function",
+        "occurrences": 62,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 34,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "leftClicked",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "leftDown",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "length",
+        "occurrences": 21,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "onGround",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "rightClicked",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "rightDown",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "state",
+        "occurrences": 7,
+        "suggested_default": "{}"
+      },
+      {
+        "varname": "textAlign",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "width",
+        "occurrences": 36,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "yVelocity",
+        "occurrences": 6,
+        "suggested_default": "0"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-03-29T13:13:41.051467",
+    "titre": "Le Donjon de l'Épée Éclair",
+    "genre": "rpg",
+    "score": 6.93,
+    "approuve": true,
+    "html_size": 36079,
+    "new_common_vars_candidates": [
+      {
+        "varname": "assets",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "attack",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentAttackCooldown",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentDashCooldown",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentHP",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dash",
+        "occurrences": 12,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "donjon",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "down",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "ennemis",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 22,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "goblin",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 32,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "isAlive",
+        "occurrences": 6,
+        "suggested_default": "false"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "jeu",
+        "call_count": 2
+      },
+      {
+        "function": "joueur",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "draw_no_clear",
+        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-03-30T10:35:45.127678",
+    "titre": "Donjon des Héros",
+    "genre": "rpg",
+    "score": 6.87,
+    "approuve": false,
+    "html_size": 101670,
+    "new_common_vars_candidates": [
+      {
+        "varname": "actionTaken",
+        "occurrences": 15,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "active",
+        "occurrences": 9,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "activeSkills",
+        "occurrences": 7,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "attacker",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "buffs",
+        "occurrences": 37,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "caster",
+        "occurrences": 21,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 13,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "combatant",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "crit_chance",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "crit_damage",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentCooldown",
+        "occurrences": 12,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentMp",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentPa",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentPm",
+        "occurrences": 14,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "description",
+        "occurrences": 12,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "flash",
+        "call_count": 4
+      },
+      {
+        "function": "bar",
+        "call_count": 3
+      },
+      {
+        "function": "interactables",
+        "call_count": 2
+      },
+      {
+        "function": "appris",
+        "call_count": 2
+      },
+      {
+        "function": "archer",
+        "call_count": 2
+      },
+      {
+        "function": "activateQuest",
+        "call_count": 2
+      },
+      {
+        "function": "value",
+        "call_count": 2
+      },
+      {
+        "function": "mage",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['playing']",
+        "severity": "medium"
+      },
+      {
+        "type": "ctx_before_init",
+        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
+        "severity": "high"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-03-30T11:46:35.912009",
+    "titre": "Cartoon Dungeons",
+    "genre": "rpg",
+    "score": 6.16,
+    "approuve": false,
+    "html_size": 107529,
+    "new_common_vars_candidates": [
+      {
+        "varname": "actionCount",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "active",
+        "occurrences": 20,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "activeBuffs",
+        "occurrences": 9,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "attack",
+        "occurrences": 19,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 14,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "count",
+        "occurrences": 32,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentHp",
+        "occurrences": 14,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "description",
+        "occurrences": 14,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "down",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "down_pressed",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dragon",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "e_prev",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "effect",
+        "occurrences": 23,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape_pressed",
+        "occurrences": 16,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "facing",
+        "occurrences": 5,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "spawnProjectile",
+        "call_count": 3
+      },
+      {
+        "function": "takeDamage",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "ctx_before_init",
+        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
+        "severity": "high"
+      },
+      {
+        "type": "draw_no_clear",
+        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-03-30T12:24:50.309244",
+    "titre": "Dungeon Tactics: Canvas Saga",
+    "genre": "rpg",
+    "score": 6.77,
+    "approuve": false,
+    "html_size": 72353,
+    "new_common_vars_candidates": [
+      {
+        "varname": "activeBuffs",
+        "occurrences": 7,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "aggroed",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "atkMult",
+        "occurrences": 19,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "attackIndex",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "checkCollision",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentFloor",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentLine",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentPhaseId",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dragon",
+        "occurrences": 13,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dungeonFloor",
+        "occurrences": 14,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "energy",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 30,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireCooldown",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "flashTimer",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "fogMap",
+        "occurrences": 6,
+        "suggested_default": "{}"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "isKeyDown",
+        "call_count": 8
+      },
+      {
+        "function": "checkCollision",
+        "call_count": 4
+      },
+      {
+        "function": "playerUseSkill",
+        "call_count": 2
+      },
+      {
+        "function": "room",
+        "call_count": 2
+      },
+      {
+        "function": "fadeOut",
+        "call_count": 2
+      },
+      {
+        "function": "damage",
+        "call_count": 2
+      },
+      {
+        "function": "spawn_rate_enemy_count",
+        "call_count": 2
+      },
+      {
+        "function": "appris",
+        "call_count": 2
+      },
+      {
+        "function": "checkMainQuestCompletion",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-03-30T16:12:51.370443",
+    "titre": "Donjon Tactique: L'Ascension des Héros",
+    "genre": "rpg",
+    "score": 5.64,
+    "approuve": false,
+    "html_size": 137115,
+    "new_common_vars_candidates": [
+      {
+        "varname": "attack",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "attackFlash",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "audioCtx",
+        "occurrences": 13,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "baseRange",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "classDef",
+        "occurrences": 24,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentAtk",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentMvt",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentStepIndex",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "damageReduction",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "decay",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "degats_ennemis_mult",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dialogId",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dialogs",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "down",
+        "occurrences": 7,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "callback",
+        "call_count": 5
+      },
+      {
+        "function": "introduit",
+        "call_count": 2
+      },
+      {
+        "function": "hCorridor",
+        "call_count": 2
+      },
+      {
+        "function": "movement",
+        "call_count": 2
+      },
+      {
+        "function": "appris",
+        "call_count": 2
+      },
+      {
+        "function": "vCorridor",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "ctx_before_init",
+        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
+        "severity": "high"
+      },
+      {
+        "type": "draw_no_clear",
+        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-03-31T20:25:50.994164",
+    "titre": "Dungeon Delver: Pixel's Path",
+    "genre": "rpg",
+    "score": 6.98,
+    "approuve": false,
+    "html_size": 116546,
+    "new_common_vars_candidates": [
+      {
+        "varname": "arrowdown_pressed",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "arrowup_pressed",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "attaques",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "base",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "chargeTargetX",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "chargeTargetY",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "coffre",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "count",
+        "occurrences": 16,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentDef",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentSpd",
+        "occurrences": 10,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "description",
+        "occurrences": 15,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dialogues",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "distance",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "e_pressed",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "enter",
+        "occurrences": 6,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "appris",
+        "call_count": 6
+      },
+      {
+        "function": "declencheur",
+        "call_count": 4
+      },
+      {
+        "function": "ennemis",
+        "call_count": 2
+      },
+      {
+        "function": "ralentissements",
+        "call_count": 2
+      },
+      {
+        "function": "performAttack",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "ctx_before_init",
+        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
+        "severity": "high"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-03-31T20:46:01.602502",
+    "titre": "Mini-Héros : L'Odyssée des Mondes",
+    "genre": "platformer",
+    "score": 5.31,
+    "approuve": false,
+    "html_size": 70598,
+    "new_common_vars_candidates": [
+      {
+        "varname": "active",
+        "occurrences": 21,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "airControlMultiplier",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "airDashesLeft",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "comboCount",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "coyoteTime",
+        "occurrences": 10,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentPhaseIndex",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentUpgrades",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dash",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashCooldown",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dash_pressed",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "down",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "factor",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 70,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fire",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireCooldown",
+        "occurrences": 10,
+        "suggested_default": "0"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "appris",
+        "call_count": 5
+      },
+      {
+        "function": "fadeIn",
+        "call_count": 3
+      },
+      {
+        "function": "fadeOut",
+        "call_count": 3
+      },
+      {
+        "function": "collision",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "draw_no_clear",
+        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-03-31T21:37:13.684348",
+    "titre": "Jump 'n' Dash: Gem Rush",
+    "genre": "platformer",
+    "score": 6.62,
+    "approuve": false,
+    "html_size": 78594,
+    "new_common_vars_candidates": [
+      {
+        "varname": "acceleration_globale_post_5min",
+        "occurrences": 14,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "animTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "checkpointX",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "checkpointY",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "coyoteTime",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dash",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashActive",
+        "occurrences": 10,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "dashCharge",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashCooldown",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashDirection",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashSpeedMod",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dash_pressed",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "e_pressed",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 69,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 30,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "appris",
+        "call_count": 6
+      },
+      {
+        "function": "collision",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['playing']",
+        "severity": "medium"
+      },
+      {
+        "type": "ctx_before_init",
+        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
+        "severity": "high"
+      },
+      {
+        "type": "draw_no_clear",
+        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-01T07:47:57.959642",
+    "titre": "Pixel Defense: Nexus Siege",
+    "genre": "tower defense",
+    "score": 6.27,
+    "approuve": false,
+    "html_size": 85695,
+    "new_common_vars_candidates": [
+      {
+        "varname": "burnDamage",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "burnDuration",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "burnTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "chain",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "controlImmune",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "cooldownTimer",
+        "occurrences": 11,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "count",
+        "occurrences": 20,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "down",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "effect",
+        "occurrences": 29,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "ennemis",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape_pressed",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "event",
+        "occurrences": 16,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 64,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireTimer",
+        "occurrences": 6,
+        "suggested_default": "0"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "appris",
+        "call_count": 4
+      },
+      {
+        "function": "path",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "ctx_before_init",
+        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
+        "severity": "high"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-03T00:29:30.311036",
+    "titre": "Tower Blitz: Cartoon Clash",
+    "genre": "tower defense",
+    "score": 6.68,
+    "approuve": false,
+    "html_size": 89633,
+    "new_common_vars_candidates": [
+      {
+        "varname": "acceleration_300s",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "actualAoeRadius",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "actualChainCount",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "actualChainRange",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "actualFireRate",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "actualRange",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "actualSlow",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "actualSlowDuration",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "allTowerDamage",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "aoeRadius",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "archer",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "archerDamage",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "avant",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "buff_temporaire_tours",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "cannon",
+        "occurrences": 5,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "appris",
+        "call_count": 6
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-04T00:10:15.945060",
+    "titre": "PixelDash Saga: The Emerald Quest",
+    "genre": "platformer",
+    "score": 4.92,
+    "approuve": false,
+    "html_size": 82742,
+    "new_common_vars_candidates": [
+      {
+        "varname": "ancient_guardian",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "attack_pressed",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "chargeDir",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "count",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dash",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashInvulnTimer",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "diveTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "down",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "eDef",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "event",
+        "occurrences": 20,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 66,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 25,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "force",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "interact",
+        "occurrences": 3,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "appris",
+        "call_count": 11
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "ctx_before_init",
+        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
+        "severity": "high"
+      },
+      {
+        "type": "draw_no_clear",
+        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-04T13:53:40.752276",
+    "titre": "Grid Guardians: The Golden Path",
+    "genre": "tower defense",
+    "score": 5.75,
+    "approuve": false,
+    "html_size": 110440,
+    "new_common_vars_candidates": [
+      {
+        "varname": "abilityTimer",
+        "occurrences": 13,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "baseDamageTaken",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "count",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "curr",
+        "occurrences": 29,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentCount",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentLine",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentPath",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "damageAmp",
+        "occurrences": 17,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "degats_base",
+        "occurrences": 36,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "effect",
+        "occurrences": 25,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape_pressed",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 66,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 4,
+        "suggested_default": "0"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "createBoss",
+        "call_count": 3
+      },
+      {
+        "function": "path",
+        "call_count": 2
+      },
+      {
+        "function": "logic",
+        "call_count": 2
+      },
+      {
+        "function": "onDone",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 4× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "ctx_before_init",
+        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
+        "severity": "high"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-04T14:20:15.518984",
+    "titre": "Crystal Keepers: Tower Tactics",
+    "genre": "tower defense",
+    "score": 4.92,
+    "approuve": false,
+    "html_size": 83846,
+    "new_common_vars_candidates": [
+      {
+        "varname": "activeTypes",
+        "occurrences": 7,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "air_strike",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "armor_reduction",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "artifact",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "canInteract",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "cooldownTimer",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentPhaseDef",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "damageBonus",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "defined",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dotDamage",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dotDuration",
+        "occurrences": 31,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dotTimer",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "effect",
+        "occurrences": 22,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape_pressed",
+        "occurrences": 7,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "value",
+        "call_count": 5
+      },
+      {
+        "function": "feu",
+        "call_count": 4
+      },
+      {
+        "function": "interactables",
+        "call_count": 3
+      },
+      {
+        "function": "onDone",
+        "call_count": 2
+      },
+      {
+        "function": "togglePause",
+        "call_count": 2
+      },
+      {
+        "function": "applyDoT",
+        "call_count": 2
+      },
+      {
+        "function": "applyFreeze",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['playing']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-04T15:33:24.373715",
+    "titre": "Neon Cyber Assault",
+    "genre": "shooter",
+    "score": 4.78,
+    "approuve": false,
+    "html_size": 94412,
+    "new_common_vars_candidates": [
+      {
+        "varname": "action",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "active",
+        "occurrences": 10,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "attack",
+        "occurrences": 19,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "attackPattern",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentCount",
+        "occurrences": 21,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashCooldown",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashTimer",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "durationBase",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "escape_pressed",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 62,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireCooldown",
+        "occurrences": 27,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 50,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "flashTimer",
+        "occurrences": 13,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 29,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "force",
+        "occurrences": 3,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "declencheur",
+        "call_count": 3
+      },
+      {
+        "function": "shake",
+        "call_count": 3
+      },
+      {
+        "function": "avertissement_visuel",
+        "call_count": 3
+      },
+      {
+        "function": "flash",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "draw_no_clear",
+        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-04T17:54:16.011485",
+    "titre": "Astro Blitz",
+    "genre": "shooter",
+    "score": 3.77,
+    "approuve": false,
+    "html_size": 5456,
+    "new_common_vars_candidates": [
+      {
+        "varname": "fillStyle",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "textAlign",
+        "occurrences": 4,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['playing']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-05T13:58:32.807154",
+    "titre": "Cyberpunk Core Defense: Neo-Kyoto Protocol",
+    "genre": "tower defense",
+    "score": 3.82,
+    "approuve": false,
+    "html_size": 52063,
+    "new_common_vars_candidates": [
+      {
+        "varname": "armorPierce",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "chargeTimer",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "coreShieldMult",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "count",
+        "occurrences": 22,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "credits",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "creditsBonusMult",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentCooldown",
+        "occurrences": 14,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentShieldHp",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dead",
+        "occurrences": 13,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "disruptorTimer",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dotDmg",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dotDuration",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 31,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "scaling",
+        "call_count": 3
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['boss_fight']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-05T17:03:33.713578",
+    "titre": "Cyberpunk Defense Grid: Neo-Kyoto Siege",
+    "genre": "tower defense",
+    "score": 3.77,
+    "approuve": false,
+    "html_size": 5518,
+    "new_common_vars_candidates": [
+      {
+        "varname": "fillStyle",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "textAlign",
+        "occurrences": 4,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['playing']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-05T17:23:54.096441",
+    "titre": "Cyber-Bastion",
+    "genre": "tower defense",
+    "score": 4.2,
+    "approuve": false,
+    "html_size": 5466,
+    "new_common_vars_candidates": [
+      {
+        "varname": "fillStyle",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "textAlign",
+        "occurrences": 4,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['playing']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-05T18:07:47.855165",
+    "titre": "Neo-Defense Protocol",
+    "genre": "tower defense",
+    "score": 4.15,
+    "approuve": false,
+    "html_size": 5480,
+    "new_common_vars_candidates": [
+      {
+        "varname": "fillStyle",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "textAlign",
+        "occurrences": 4,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['playing']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-05T18:35:42.265046",
+    "titre": "Neo-Défenseurs : Soulèvement Robotique",
+    "genre": "tower defense",
+    "score": 4.18,
+    "approuve": false,
+    "html_size": 5516,
+    "new_common_vars_candidates": [
+      {
+        "varname": "fillStyle",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "textAlign",
+        "occurrences": 4,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['playing']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-07T13:41:12.642288",
+    "titre": "Aether Fury",
+    "genre": "shooter",
+    "score": 5.43,
+    "approuve": false,
+    "html_size": 19347,
+    "new_common_vars_candidates": [
+      {
+        "varname": "down",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 17,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireTimer",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "idleTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "invincible",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "invincibleTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "life",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "loop",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "patrolDir",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "patrolDistance",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "pulseTimer",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "state",
+        "occurrences": 11,
+        "suggested_default": "{}"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 4× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['playing']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-11T12:05:51.151634",
+    "titre": "Nova Blitz: Bullet Heaven",
+    "genre": "shooter",
+    "score": 4.3,
+    "approuve": false,
+    "html_size": 30267,
+    "new_common_vars_candidates": [
+      {
+        "varname": "down",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 20,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireTimer",
+        "occurrences": 12,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "length",
+        "occurrences": 20,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "piercingLaserTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "shieldTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "textAlign",
+        "occurrences": 13,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "tripleShotTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "typeof",
+        "occurrences": 13,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-11T12:48:47.274421",
+    "titre": "Cosmic Blaster Blitz",
+    "genre": "shooter",
+    "score": 5.57,
+    "approuve": false,
+    "html_size": 22151,
+    "new_common_vars_candidates": [
+      {
+        "varname": "fillStyle",
+        "occurrences": 19,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireTimer",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 30,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "invincibleTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "laserTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "length",
+        "occurrences": 15,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "life",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "patrolDirection",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "patrolStartPos",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "shieldTimer",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "state",
+        "occurrences": 9,
+        "suggested_default": "{}"
+      },
+      {
+        "varname": "stateTimer",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "textAlign",
+        "occurrences": 9,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['GAMEOVER']",
+        "severity": "medium"
+      },
+      {
+        "type": "ctx_before_init",
+        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
+        "severity": "high"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-14T16:42:09.147305",
+    "titre": "GALACTIC FURY",
+    "genre": "shooter",
+    "score": 6.81,
+    "approuve": false,
+    "html_size": 89995,
+    "new_common_vars_candidates": [
+      {
+        "varname": "anim",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bulletDamage",
+        "occurrences": 27,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "color",
+        "occurrences": 31,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "down",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "enemyShoot",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "enter",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "explosion",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 99,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 29,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 33,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gain",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 25,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 18,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "invincible",
+        "occurrences": 9,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "bullet",
+        "call_count": 3
+      },
+      {
+        "function": "shape",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-15T15:19:42.029418",
+    "titre": "Star Blaster Blitz",
+    "genre": "shooter",
+    "score": 7.64,
+    "approuve": true,
+    "html_size": 97572,
+    "new_common_vars_candidates": [
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashCooldownTimer",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashDirectionX",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashDirectionY",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 107,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 39,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gain",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 21,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 110,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "invincible",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "invincibleTimer",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "isDashing",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "isStunned",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "length",
+        "occurrences": 41,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-19T18:44:45.919222",
+    "titre": "Aether Fury: Retro Reckoning",
+    "genre": "shooter",
+    "score": 6.42,
+    "approuve": false,
+    "html_size": 120895,
+    "new_common_vars_candidates": [
+      {
+        "varname": "active",
+        "occurrences": 30,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "bombUsedThisFrame",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "bombs",
+        "occurrences": 13,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "buffer",
+        "occurrences": 18,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentUpgrades",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dessin",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "down",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "enrageTimer",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "enraged",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 82,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 23,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 34,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gain",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 34,
+        "suggested_default": "0"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "joueur",
+        "call_count": 2
+      },
+      {
+        "function": "bombes",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-19T19:52:09.190620",
+    "titre": "Néon Fury: Stellar Ascent",
+    "genre": "shooter",
+    "score": 6.29,
+    "approuve": false,
+    "html_size": 115679,
+    "new_common_vars_candidates": [
+      {
+        "varname": "appellera",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "bouclier",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "bulletShape",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "bulletSpeed",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bulletType",
+        "occurrences": 16,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "code",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentPowerUps",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "doubleTimer",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "enemyPool",
+        "occurrences": 3,
+        "suggested_default": "[]"
+      },
+      {
+        "varname": "enrageThreshold",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "enter",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 85,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireTimer",
+        "occurrences": 13,
+        "suggested_default": "0"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "soundMenuBeep",
+        "call_count": 10
+      },
+      {
+        "function": "body",
+        "call_count": 2
+      },
+      {
+        "function": "joueur",
+        "call_count": 2
+      },
+      {
+        "function": "frame",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-25T18:51:46.836730",
+    "titre": "Dodger's Dance",
+    "genre": "shooter",
+    "score": 6.9,
+    "approuve": false,
+    "html_size": 173278,
+    "new_common_vars_candidates": [
+      {
+        "varname": "active",
+        "occurrences": 20,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "anim",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "body",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 13,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "color",
+        "occurrences": 66,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentPattern",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashCooldown",
+        "occurrences": 18,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashCooldownTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashDurationTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashTimer",
+        "occurrences": 12,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashing",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "degrees",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "doubleTimer",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "down",
+        "occurrences": 25,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "enter",
+        "occurrences": 13,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "hitbox",
+        "call_count": 3
+      },
+      {
+        "function": "bullet",
+        "call_count": 3
+      },
+      {
+        "function": "bar",
+        "call_count": 2
+      },
+      {
+        "function": "lines",
+        "call_count": 2
+      },
+      {
+        "function": "firing",
+        "call_count": 2
+      },
+      {
+        "function": "body",
+        "call_count": 2
+      },
+      {
+        "function": "trail",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['title']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-25T19:05:29.316195",
+    "titre": "Dash & Dodge: Bullet Hell Odyssey",
+    "genre": "shooter",
+    "score": 6.74,
+    "approuve": false,
+    "html_size": 157854,
+    "new_common_vars_candidates": [
+      {
+        "varname": "anim",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "body",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "collision",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "consumed",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashCooldownTimer",
+        "occurrences": 20,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashTimer",
+        "occurrences": 14,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "enter",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "errors",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "example",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 133,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 48,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "frame",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "frequency",
+        "occurrences": 4,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "movement",
+        "call_count": 2
+      },
+      {
+        "function": "shot",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-25T19:30:01.685453",
+    "titre": "Aether Bullet",
+    "genre": "shooter",
+    "score": 6.58,
+    "approuve": false,
+    "html_size": 92801,
+    "new_common_vars_candidates": [
+      {
+        "varname": "bulletDmg",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bulletSpeed",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "chaseRange",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "color",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "deathDuration",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "direction",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "doubleFireActive",
+        "occurrences": 4,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "doubleFireTimer",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "enter",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 64,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 11,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "fireTimer",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 19,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 10,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "text",
+        "call_count": 5
+      }
+    ],
+    "residual_patterns": [],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-25T20:06:32.966927",
+    "titre": "Pixel Fury: Bullet Symphony",
+    "genre": "shooter",
+    "score": 7.14,
+    "approuve": true,
+    "html_size": 137710,
+    "new_common_vars_candidates": [
+      {
+        "varname": "active",
+        "occurrences": 46,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "anim",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "available",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "body",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "critChance",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "doubleFire",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "doubleFireTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "down",
+        "occurrences": 16,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 143,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 40,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 58,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gain",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 40,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "handled",
+        "occurrences": 7,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "menuBeep",
+        "call_count": 3
+      },
+      {
+        "function": "lines",
+        "call_count": 2
+      },
+      {
+        "function": "shape",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['error']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-25T21:40:44.237855",
+    "titre": "Cosmic Dash",
+    "genre": "shooter",
+    "score": 6.68,
+    "approuve": false,
+    "html_size": 110112,
+    "new_common_vars_candidates": [
+      {
+        "varname": "background",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "bulletDamage",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bulletDamageBoosted",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bulletDamageTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "burstCount",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "burstCountMax",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "burstDelay",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "burstTimer",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "calls",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashCooldownTimer",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashDirection",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashTimer",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "direction",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "effect",
+        "occurrences": 26,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "menuBeep",
+        "call_count": 4
+      },
+      {
+        "function": "body",
+        "call_count": 3
+      },
+      {
+        "function": "timer",
+        "call_count": 3
+      },
+      {
+        "function": "active",
+        "call_count": 2
+      },
+      {
+        "function": "bar",
+        "call_count": 2
+      },
+      {
+        "function": "soundPowerUp",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-04-26T00:51:21.764336",
+    "titre": "Star Blaster Blitz",
+    "genre": "shooter",
+    "score": 7.7,
+    "approuve": true,
+    "html_size": 104709,
+    "new_common_vars_candidates": [
+      {
+        "varname": "center",
+        "occurrences": 30,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "doubleTimer",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "enter",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 93,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 18,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "fireRateMod",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "fireRateMultiplier",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 37,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gain",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 39,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 57,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "invTimer",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "length",
+        "occurrences": 54,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "lineWidth",
+        "occurrences": 14,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "bar",
+        "call_count": 2
+      },
+      {
+        "function": "bombe",
+        "call_count": 2
+      },
+      {
+        "function": "joueur",
+        "call_count": 2
+      },
+      {
+        "function": "vie",
+        "call_count": 2
+      },
+      {
+        "function": "flash",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  }
+]

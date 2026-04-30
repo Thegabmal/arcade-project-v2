@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arcade AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <a href="/" class="nav-logo">Arcade AI</a>
+    <a href="/history" class="nav-link">Historique</a>
+  </nav>
+
+  <!-- HERO VIEW -->
+  <section id="view-hero" class="view-hero">
+
+    <h1 class="hero-title">
+      Génère ton jeu,<br>
+      <em>instantanément.</em>
+    </h1>
+    <p class="hero-sub">
+      Décrivez votre idée — notre pipeline IA construit<br>
+      un jeu HTML5 complet en quelques minutes.
+    </p>
+
+    <div class="prompt-form">
+      <textarea
+        id="prompt"
+        class="prompt-textarea"
+        placeholder="Un shooter spatial avec des boss et des power-ups..."
+        maxlength="500"
+      ></textarea>
+      <div class="char-hint"><span id="char-count">0</span> / 500</div>
+
+      <div class="style-row">
+        <label class="style-label" for="graphic-style">Style graphique</label>
+        <select id="graphic-style" class="style-select">
+          <option value="">✨ Auto — l'IA choisit</option>
+          <optgroup label="Pixel Art">
+            <option value="pixel_art_gameboy">🎮 Pixel Art Game Boy (Pokémon)</option>
+            <option value="pixel_art_nes_mario">🍄 Pixel Art NES — Mario Bros</option>
+            <option value="pixel_art_nes_zelda">🗡️ Pixel Art NES — Zelda (coloré)</option>
+            <option value="pixel_art_16bit">⭐ Pixel Art 16-bit SNES</option>
+          </optgroup>
+          <optgroup label="2D">
+            <option value="cartoon_2d">🎨 Cartoon 2D coloré</option>
+            <option value="minimaliste">◼ Minimaliste géométrique</option>
+          </optgroup>
+          <optgroup label="3D">
+            <option value="3d_lowpoly">🌐 3D Low-poly (Three.js)</option>
+          </optgroup>
+        </select>
+      </div>
+    </div>
+
+    <!-- Hidden game-type select — used by JS only -->
+    <select id="game-type" style="display:none">
+      <option value="tout type">Auto</option>
+      <option value="platformer">Platformer</option>
+      <option value="shooter">Shooter</option>
+      <option value="puzzle">Puzzle</option>
+      <option value="racing">Racing</option>
+      <option value="RPG">RPG</option>
+      <option value="tower defense">Tower Defense</option>
+      <option value="roguelite">Roguelite</option>
+      <option value="survival">Survival</option>
+      <option value="3D">3D (Three.js)</option>
+    </select>
+
+    <div class="generate-row">
+      <button id="generate-btn" class="btn-generate" onclick="startGeneration()">
+        Générer
+      </button>
+      <button id="quick-btn" class="btn-quick" onclick="startGeneration(true)" title="Pipeline allégée ~2min">
+        ⚡ Quick
+      </button>
+    </div>
+
+  </section>
+
+  <!-- PROGRESS VIEW -->
+  <section id="progress-section" class="view-progress hidden">
+    <div class="progress-center">
+
+      <div class="progress-top-row">
+        <span id="current-phase-title" class="progress-phase-title">Connecting...</span>
+        <div class="progress-right-badges">
+          <span id="elapsed-timer" class="elapsed-timer">0s</span>
+          <div id="global-score-badge" class="score-badge hidden">
+            <span id="score-value">—</span><span class="score-badge-unit">/10</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="progress-bar-wrap">
+        <div id="progress-bar" class="progress-bar-fill"></div>
+      </div>
+      <span id="progress-pct" class="progress-pct-label">0%</span>
+
+      <div id="iteration-badge" class="iteration-tag hidden">
+        Iteration <span id="iteration-num">1</span>
+      </div>
+
+      <div id="phases-container" class="phases-list"></div>
+      <div id="log-tail" class="log-tail"></div>
+
+      <!-- Live preview bar — visible dès que le code Phase 3 est prêt -->
+      <div id="preview-bar" class="preview-bar hidden">
+        <span class="preview-bar-label">Game code ready</span>
+        <button class="btn-preview" onclick="openPreview()">
+          Preview
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1 5.5h9M6.5 2l3 3.5-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- RESULT VIEW -->
+  <section id="result-section" class="view-result hidden">
+
+    <!-- Approved -->
+    <div id="result-approved" class="result-card hidden">
+      <div class="result-icon result-icon-ok">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M4 10l4 4 8-8" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h2 id="game-title-result" class="result-title">—</h2>
+      <div class="result-score-row">
+        <span id="result-score-num" class="result-score-num">—</span>
+        <span class="result-score-denom">/10</span>
+        <span id="result-duration" class="result-duration"></span>
+      </div>
+      <div id="scores-grid" class="scores-grid"></div>
+      <div id="approved-tips" class="recs-block hidden">
+        <div class="recs-heading">Go further</div>
+        <div id="approved-recs-grid" class="recs-grid"></div>
+      </div>
+      <div class="result-actions">
+        <button id="play-btn" class="btn-cta" onclick="playGame()">
+          Play now
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5h9M7.5 3l3 3.5-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="btn-ghost" onclick="resetGenerator()">New game</button>
+      </div>
+    </div>
+
+    <!-- Rejected -->
+    <div id="result-rejected" class="result-card hidden">
+      <div class="result-icon result-icon-warn">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M10 7v5M10 14.5h.01" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <h2 id="game-title-rejected" class="result-title">Not saved</h2>
+      <div class="result-score-row warn">
+        <span id="result-score-rejected" class="result-score-num">—</span>
+        <span class="result-score-denom">/10</span>
+      </div>
+      <div id="diag-scores-grid" class="diag-scores-grid"></div>
+      <div id="diag-issues-section" class="diag-block">
+        <div class="diag-heading">Issues</div>
+        <ul id="diag-issues-list" class="issues-list"></ul>
+      </div>
+      <div id="diag-recs-section" class="diag-block">
+        <div class="diag-heading">Improve your prompt</div>
+        <div id="diag-recs-grid" class="recs-grid"></div>
+      </div>
+      <div class="result-actions">
+        <button class="btn-ghost" onclick="resetGenerator()">Try again</button>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div id="result-error" class="result-card hidden">
+      <div class="result-icon result-icon-err">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M6 6l8 8M14 6l-8 8" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <h2 class="result-title">Generation failed</h2>
+      <p id="error-msg" class="error-msg">—</p>
+      <div class="result-actions">
+        <button class="btn-ghost" onclick="resetGenerator()">Retry</button>
+      </div>
+    </div>
+
+  </section>
+
+  <footer class="footer">Arcade AI — Powered by Gemini 2.5</footer>
+
+  <script src="/static/js/main.js"></script>
+</body>
+</html>

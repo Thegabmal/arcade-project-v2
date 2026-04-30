@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Platform Hero</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#1a1a2e; display:flex; justify-content:center; align-items:center; height:100vh; overflow:hidden; }
+canvas { display:block; image-rendering:pixelated; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+var canvas = document.getElementById('c');
+var ctx = canvas.getContext('2d');
+var W = canvas.width  = 640;
+var H = canvas.height = 480;
+
+// ─── PHYSIQUE ─────────────────────────────────────────────────────────────────
+var GRAVITY     = 900;
+var JUMP_FORCE  = -420;
+var MOVE_SPEED  = 180;
+var COYOTE_TIME = 0.12;   // secondes de tolérance après bord de plateforme
+var JUMP_BUFFER = 0.12;   // secondes de buffer pour appui anticipé sur saut
+
+// ─── ÉTAT ─────────────────────────────────────────────────────────────────────
+var gameState = 'menu';
+var score = 0;
+var highScore = parseInt(localStorage.getItem('plat_hs') || '0');
+var level = 1;
+var lives = 3;
+var gems = 0;
+
+// ─── JOUEUR ───────────────────────────────────────────────────────────────────
+var player = null;
+
+function spawnPlayer(x, y) {
+    player = {
+        x: x, y: y,
+        w: 24, h: 32,
+        vx: 0, vy: 0,
+        onGround: false,
+        facingRight: true,
+        coyoteTimer: 0,
+        jumpBuffer: 0,
+        invTimer: 0,
+        animFrame: 0, animTimer: 0,
+        dead: false,
+    };
+}
+
+// ─── NIVEAUX ──────────────────────────────────────────────────────────────────
+var platforms = [];   // {x, y, w, h, moving, vx, range, orig_x}
+var enemies   = [];   // {x, y, w, h, vx, hp, type, onGround, animTimer}
+var collectibles = []; // {x, y, w, h, type, collected}
+var spawnPoint = {x: 60, y: 380};
+var levelGoal  = {x: 0, y: 0, w: 32, h: 48};
+
+var LEVELS = [
+    // Niveau 1 : intro simple
+    {
+        platforms: [
+            {x:0,   y:440, w:640, h:40},          // sol
+            {x:100, y:360, w:100, h:16},
+            {x:260, y:300, w:120, h:16},
+            {x:420, y:360, w:80,  h:16},
+            {x:520, y:280, w:100, h:16, moving:true, vx:60, range:80},
+        ],
+        enemies: [
+            {x:200, y:420, type:'slime'},
+            {x:350, y:420, type:'slime'},
+            {x:460, y:340, type:'slime'},
+        ],
+        gems: [
+            {x:150,y:330},{x:290,y:270},{x:460,y:330},
+            {x:560,y:250},{x:300,y:420},{x:400,y:420},
+        ],
+        spawn: {x:60, y:400},
+        goal:  {x:585, y:230},
+    },
+    // Niveau 2 : plateformes plus serrées
+    {
+        platforms: [
+            {x:0,   y:440, w:200, h:40},
+            {x:250, y:400, w:80,  h:16},
+            {x:370, y:350, w:80,  h:16, moving:true, vx:50, range:60},
+            {x:480, y:300, w:80,  h:16},
+            {x:380, y:240, w:100, h:16},
+            {x:220, y:200, w:120, h:16},
+            {x:80,  y:260, w:100, h:16},
+            {x:440, y:440, w:200, h:40},
+        ],
+        enemies: [
+            {x:100, y:420, type:'slime'},
+            {x:490, y:420, type:'bat'},
+            {x:400, y:220, type:'slime'},
+            {x:240, y:180, type:'bat'},
+        ],
+        gems: [
+            {x:290,y:370},{x:520,y:270},{x:420,y:210},
+            {x:140,y:230},{x:500,y:420},{x:160,y:420},
+        ],
+        spawn: {x:40, y:400},
+        goal:  {x:600, y:400},
+    },
+    // Niveau 3
+    {
+        platforms: [
+            {x:0,   y:440, w:120, h:40},
+            {x:160, y:400, w:60,  h:16, moving:true, vx:70, range:100},
+            {x:300, y:360, w:60,  h:16},
+            {x:200, y:300, w:60,  h:16, moving:true, vx:-50, range:80},
+            {x:380, y:260, w:80,  h:16},
+            {x:500, y:320, w:80,  h:16},
+            {x:560, y:200, w:80,  h:16},
+            {x:420, y:160, w:100, h:16},
+            {x:260, y:180, w:80,  h:16},
+            {x:100, y:220, w:80,  h:16},
+            {x:520, y:440, w:120, h:40},
+        ],
+        enemies: [
+            {x:200, y:280, type:'bat'},
+            {x:420, y:240, type:'bat'},
+            {x:580, y:300, type:'slime'},
+            {x:300, y:160, type:'bat'},
+            {x:550, y:420, type:'slime'},
+        ],
+        gems: [
+            {x:200,y:270},{x:340,y:330},{x:440,y:230},
+            {x:590,y:170},{x:280,y:150},{x:140,y:190},
+        ],
+        spawn: {x:40, y:400},
+        goal:  {x:580, y:400},
+    },
+];
+
+function loadLevel(idx) {
+    var def = LEVELS[(idx - 1) % LEVELS.length];
+
+    // Plateformes
+    platforms = def.platforms.map(function(p) {
+        return Object.assign({}, p, { orig_x: p.x, dir: 1 });
+    });
+
+    // Ennemis
+    enemies = def.enemies.map(function(e) {
+        var base = e.type === 'bat'
+            ? { w:24, h:16, hp:1, vx:60, vy:0, floatTimer:0 }
+            : { w:24, h:20, hp:1, vx:50, vy:0 };
+        return Object.assign({}, base, e, { onGround:false, animTimer:0, dead:false });
+    });
+
+    // Gemmes
+    collectibles = def.gems.map(function(g) {
+        return { x:g.x, y:g.y, w:16, h:16, type:'gem', collected:false };
+    });
+
+    spawnPoint = def.spawn;
+    levelGoal  = Object.assign({}, def.goal, { w:32, h:48 });
+    spawnPlayer(spawnPoint.x, spawnPoint.y);
+    gems = 0;
+}
+
+// ─── INPUT ────────────────────────────────────────────────────────────────────
+var keys = {};
+document.addEventListener('keydown', function(e) {
+    keys[e.code] = true;
+    if (e.code === 'Space' || e.code === 'ArrowUp') e.preventDefault();
+    if (gameState === 'menu' && (e.code === 'Space' || e.code === 'Enter')) startGame();
+    if (gameState === 'gameover' && (e.code === 'Space' || e.code === 'Enter')) startGame();
+    if (gameState === 'levelclear' && (e.code === 'Space' || e.code === 'Enter')) nextLevel();
+    // Saut buffering
+    if (gameState === 'playing' && player && (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW')) {
+        player.jumpBuffer = JUMP_BUFFER;
+    }
+});
+document.addEventListener('keyup', function(e) { keys[e.code] = false; });
+
+function startGame() {
+    score = 0; lives = 3; level = 1;
+    loadLevel(level);
+    gameState = 'playing';
+}
+
+function nextLevel() {
+    level++;
+    score += 500 * level;
+    loadLevel(level);
+    gameState = 'playing';
+}
+
+// ─── COLLISIONS AABB ──────────────────────────────────────────────────────────
+function resolvePlayerVsPlats(dt) {
+    player.vy += GRAVITY * dt;
+    var wasOnGround = player.onGround;
+    player.onGround = false;
+
+    // X
+    player.x += player.vx * dt;
+    platforms.forEach(function(p) {
+        if (overlapXY(player, p)) {
+            if (player.vx > 0) player.x = p.x - player.w/2;
+            else player.x = p.x + p.w + player.w/2;
+            player.vx = 0;
+        }
+    });
+
+    // Y
+    player.y += player.vy * dt;
+    platforms.forEach(function(p) {
+        if (overlapXY(player, p)) {
+            if (player.vy > 0) {
+                player.y = p.y - player.h/2;
+                player.vy = 0;
+                player.onGround = true;
+            } else if (player.vy < 0) {
+                player.y = p.y + p.h + player.h/2;
+                player.vy = 0;
+            }
+        }
+    });
+
+    if (player.onGround) player.coyoteTimer = COYOTE_TIME;
+    else if (wasOnGround) {} // coyoteTimer continue de décroître dans update
+}
+
+function overlapXY(a, b) {
+    return (a.x - a.w/2 < b.x + b.w &&
+            a.x + a.w/2 > b.x &&
+            a.y - a.h/2 < b.y + b.h &&
+            a.y + a.h/2 > b.y);
+}
+
+// ─── UPDATE ───────────────────────────────────────────────────────────────────
+var lastTime = 0;
+var particles = [];
+
+function update(dt) {
+    if (gameState !== 'playing') return;
+
+    // Plateformes mobiles
+    platforms.forEach(function(p) {
+        if (!p.moving) return;
+        p.x += p.vx * p.dir * dt;
+        if (Math.abs(p.x - p.orig_x) >= p.range) p.dir *= -1;
+        // Pousser joueur si debout dessus
+        if (player && player.onGround) {
+            var pad = 4;
+            if (player.x - player.w/2 < p.x + p.w + pad &&
+                player.x + player.w/2 > p.x - pad &&
+                Math.abs(player.y + player.h/2 - p.y) < 8) {
+                player.x += p.vx * p.dir * dt;
+            }
+        }
+    });
+
+    // Joueur
+    if (player && !player.dead) {
+        // Déplacement horizontal
+        var moving = false;
+        if (keys['ArrowLeft'] || keys['KeyA']) {
+            player.vx = -MOVE_SPEED; player.facingRight = false; moving = true;
+        } else if (keys['ArrowRight'] || keys['KeyD']) {
+            player.vx = MOVE_SPEED; player.facingRight = true; moving = true;
+        } else {
+            player.vx *= 0.7;  // friction
+        }
+
+        // Coyote time
+        player.coyoteTimer -= dt;
+        player.jumpBuffer -= dt;
+
+        // Saut
+        if (player.jumpBuffer > 0 && (player.onGround || player.coyoteTimer > 0)) {
+            player.vy = JUMP_FORCE;
+            player.onGround = false;
+            player.coyoteTimer = 0;
+            player.jumpBuffer = 0;
+        }
+        // Relâchement anticipé du saut
+        if (!(keys['Space'] || keys['ArrowUp'] || keys['KeyW']) && player.vy < -200) {
+            player.vy += GRAVITY * 1.5 * dt;
+        }
+
+        resolvePlayerVsPlats(dt);
+
+        // Mort par chute
+        if (player.y > H + 60) loseLife();
+
+        // Invincibilité
+        if (player.invTimer > 0) player.invTimer -= dt;
+
+        // Animation
+        if (moving) { player.animTimer += dt; if (player.animTimer > 0.1) { player.animTimer = 0; player.animFrame = (player.animFrame + 1) % 4; } }
+        else player.animFrame = 0;
+
+        // Collectibles
+        collectibles.forEach(function(c) {
+            if (!c.collected && overlapXY(player, c)) {
+                c.collected = true;
+                score += 50;
+                gems++;
+                spawnParticles(c.x + 8, c.y + 8, '#ffeb3b', 6);
+            }
+        });
+
+        // Ennemis vs joueur
+        if (player.invTimer <= 0) {
+            enemies.forEach(function(e, i) {
+                if (e.dead) return;
+                if (overlapXY(player, e)) {
+                    // Sauter sur ennemi = le tue
+                    if (player.vy > 0 && player.y < e.y) {
+                        killEnemy(e, i);
+                        player.vy = JUMP_FORCE * 0.7;
+                    } else {
+                        loseLife();
+                    }
+                }
+            });
+        }
+
+        // Objectif niveau
+        if (overlapXY(player, levelGoal)) {
+            levelClear();
+        }
+    }
+
+    // Ennemis
+    enemies.forEach(function(e) {
+        if (e.dead) return;
+        e.animTimer += dt;
+
+        if (e.type === 'bat') {
+            // Vol sinusoïdal
+            e.floatTimer = (e.floatTimer || 0) + dt;
+            e.y += Math.sin(e.floatTimer * 2) * 40 * dt;
+            e.x += e.vx * dt;
+            if (e.x < 20 || e.x > W - 20) e.vx *= -1;
+        } else {
+            // Slime : marche sur le sol, tourne au bord
+            e.vy += GRAVITY * dt;
+            e.x += e.vx * dt;
+            var onGnd = false;
+            platforms.forEach(function(p) {
+                if (overlapXY(e, p)) {
+                    if (e.vy > 0) { e.y = p.y - e.h/2; e.vy = 0; onGnd = true; }
+                }
+            });
+            if (!onGnd && e.onGround) e.vx *= -1;
+            e.onGround = onGnd;
+            // Demi-tour au bord de plateforme
+            if (e.onGround) {
+                var nextX = e.x + e.vx * 0.15;
+                var edgeCheck = {x: nextX, y: e.y + 10, w: 4, h: 4};
+                var hasPlatBelow = platforms.some(function(p) { return overlapXY(edgeCheck, p); });
+                if (!hasPlatBelow) e.vx *= -1;
+            }
+        }
+    });
+
+    // Particules
+    for (var i = particles.length - 1; i >= 0; i--) {
+        var pt = particles[i];
+        pt.x += pt.vx * dt; pt.y += pt.vy * dt;
+        pt.vy += 400 * dt;
+        pt.life -= dt;
+        if (pt.life <= 0) particles.splice(i, 1);
+    }
+}
+
+function killEnemy(e, i) {
+    e.dead = true;
+    score += 100;
+    spawnParticles(e.x, e.y, '#ff6d00', 8);
+}
+
+function loseLife() {
+    if (player.invTimer > 0) return;
+    lives--;
+    if (lives <= 0) {
+        if (score > highScore) { highScore = score; localStorage.setItem('plat_hs', highScore); }
+        gameState = 'gameover';
+    } else {
+        spawnPlayer(spawnPoint.x, spawnPoint.y);
+    }
+}
+
+function levelClear() {
+    var gemsBonus = gems * 20;
+    score += gemsBonus;
+    gameState = 'levelclear';
+}
+
+function spawnParticles(x, y, color, count) {
+    for (var i = 0; i < count; i++) {
+        var a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 120;
+        particles.push({ x:x, y:y, vx:Math.cos(a)*s, vy:Math.sin(a)*s - 80, r: 3+Math.random()*3, life:0.5+Math.random()*0.4, maxLife:0.9, color:color });
+    }
+}
+
+// ─── DRAW ─────────────────────────────────────────────────────────────────────
+var camX = 0, camY = 0;  // réservé pour scroll futur
+
+function draw() {
+    // Fond dégradé
+    var grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#0d0d2b');
+    grad.addColorStop(1, '#1a1a2e');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    if (gameState === 'menu')       { drawMenu(); return; }
+    if (gameState === 'gameover')   { drawGameOver(); return; }
+    if (gameState === 'levelclear') { drawLevelClear(); return; }
+
+    // Plateformes
+    platforms.forEach(function(p) {
+        ctx.fillStyle = '#3d5a80';
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+        // Bord supérieur vert
+        ctx.fillStyle = p.moving ? '#ffd700' : '#4caf50';
+        ctx.fillRect(p.x, p.y, p.w, 4);
+    });
+
+    // Objectif niveau (drapeau)
+    ctx.fillStyle = '#ffeb3b';
+    ctx.fillRect(levelGoal.x, levelGoal.y, 4, levelGoal.h);
+    ctx.fillStyle = '#f44336';
+    ctx.fillRect(levelGoal.x + 4, levelGoal.y, 20, 16);
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('GO!', levelGoal.x + 6, levelGoal.y + 12);
+
+    // Collectibles
+    collectibles.forEach(function(c) {
+        if (c.collected) return;
+        var t = Date.now() / 800;
+        ctx.fillStyle = '#ffeb3b';
+        ctx.shadowColor = '#ffeb3b';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        var cx = c.x + 8, cy = c.y + 8 + Math.sin(t) * 3;
+        ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // Étoile
+        ctx.fillStyle = '#fff8';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('★', cx, cy + 3);
+    });
+
+    // Particules
+    particles.forEach(function(pt) {
+        ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+        ctx.fillStyle = pt.color;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+
+    // Ennemis
+    enemies.forEach(function(e) {
+        if (e.dead) return;
+        ctx.save();
+        if (!e.facingRight && e.vx !== undefined) ctx.scale(-1, 1);
+        if (e.type === 'bat') {
+            ctx.fillStyle = '#7c4dff';
+            // Corps
+            ctx.fillRect(e.x - 8, e.y - 6, 16, 12);
+            // Ailes (battement)
+            var wingY = Math.sin(e.animTimer * 8) * 5;
+            ctx.fillStyle = '#5e35b1';
+            ctx.beginPath();
+            ctx.ellipse(e.x - 18, e.y - wingY, 12, 6, 0, 0, Math.PI * 2);
+            ctx.ellipse(e.x + 18, e.y - wingY, 12, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Yeux
+            ctx.fillStyle = '#ff1744';
+            ctx.fillRect(e.x - 5, e.y - 4, 3, 3);
+            ctx.fillRect(e.x + 2, e.y - 4, 3, 3);
+        } else {
+            // Slime
+            var bob = Math.abs(Math.sin(e.animTimer * 5)) * 3;
+            ctx.fillStyle = '#4caf50';
+            ctx.beginPath();
+            ctx.ellipse(e.x, e.y + bob/2, e.w/2, e.h/2 - bob/2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(e.x - 5, e.y - 2, 3, 0, Math.PI * 2);
+            ctx.arc(e.x + 5, e.y - 2, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    });
+
+    // Joueur
+    if (player && !player.dead && (player.invTimer <= 0 || Math.floor(player.invTimer / 0.1) % 2 === 0)) {
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        if (!player.facingRight) ctx.scale(-1, 1);
+        // Corps
+        ctx.fillStyle = '#e91e63';
+        ctx.fillRect(-player.w/2, -player.h/2, player.w, player.h);
+        // Tête
+        ctx.fillStyle = '#ffcc80';
+        ctx.fillRect(-8, -player.h/2 - 10, 16, 14);
+        // Yeux
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-4, -player.h/2 - 6, 3, 3);
+        ctx.fillRect(2, -player.h/2 - 6, 3, 3);
+        // Jambes animées
+        var legOff = player.animFrame % 2 === 0 ? 4 : -4;
+        ctx.fillStyle = '#1565c0';
+        ctx.fillRect(-player.w/2, player.h/2 - 10, 10, 10);
+        ctx.fillRect(player.w/2 - 10, player.h/2 - 10, 10, 10);
+        ctx.restore();
+    }
+
+    // HUD
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, W, 36);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('SCORE ' + score, 10, 24);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffeb3b';
+    ctx.fillText('★ ' + gems, W/2, 24);
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'right';
+    ctx.fillText('NIVEAU ' + level, W - 10, 24);
+
+    // Vies
+    for (var i = 0; i < lives; i++) {
+        ctx.fillStyle = '#e91e63';
+        ctx.fillRect(10 + i * 18, 44, 12, 12);
+    }
+}
+
+function drawMenu() {
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 36px monospace';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#e91e63';
+    ctx.shadowBlur = 20;
+    ctx.fillText('PLATFORM HERO', W/2, H/2 - 80);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#aaa';
+    ctx.font = '15px monospace';
+    ctx.fillText('← → : Déplacer', W/2, H/2 - 20);
+    ctx.fillText('ESPACE / ↑ : Sauter', W/2, H/2 + 10);
+    ctx.fillText('Sauter sur les ennemis pour les éliminer', W/2, H/2 + 40);
+    ctx.fillStyle = '#ffeb3b';
+    ctx.fillText('HI : ' + highScore, W/2, H/2 + 74);
+    var blink = Math.floor(Date.now() / 500) % 2;
+    if (blink) {
+        ctx.fillStyle = '#e91e63';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText('APPUIE SUR ESPACE', W/2, H/2 + 110);
+    }
+}
+
+function drawGameOver() {
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#f44336';
+    ctx.font = 'bold 48px monospace';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#f44336';
+    ctx.shadowBlur = 30;
+    ctx.fillText('GAME OVER', W/2, H/2 - 50);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.font = '20px monospace';
+    ctx.fillText('SCORE : ' + score, W/2, H/2 + 10);
+    ctx.fillStyle = '#ffeb3b';
+    ctx.fillText('MEILLEUR : ' + highScore, W/2, H/2 + 44);
+    var blink = Math.floor(Date.now() / 500) % 2;
+    if (blink) { ctx.fillStyle = '#aaa'; ctx.font = '14px monospace'; ctx.fillText('ESPACE pour rejouer', W/2, H/2 + 90); }
+}
+
+function drawLevelClear() {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#4caf50';
+    ctx.font = 'bold 40px monospace';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#4caf50';
+    ctx.shadowBlur = 20;
+    ctx.fillText('NIVEAU TERMINÉ !', W/2, H/2 - 50);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.font = '18px monospace';
+    ctx.fillText('SCORE : ' + score, W/2, H/2 + 10);
+    var blink = Math.floor(Date.now() / 500) % 2;
+    if (blink) { ctx.fillStyle = '#ffeb3b'; ctx.font = '14px monospace'; ctx.fillText('ESPACE pour continuer', W/2, H/2 + 60); }
+}
+
+// ─── BOUCLE ───────────────────────────────────────────────────────────────────
+function gameLoop(ts) {
+    var dt = Math.min((ts - lastTime) / 1000, 0.05);
+    lastTime = ts;
+    update(dt);
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    requestAnimationFrame(function(ts) { lastTime = ts; requestAnimationFrame(gameLoop); });
+});
+</script>
+</body>
+</html>

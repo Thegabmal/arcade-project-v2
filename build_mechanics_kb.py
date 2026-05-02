@@ -1,12 +1,12 @@
 """
-build_mechanics_kb.py — Peuple la collection ChromaDB "mechanics_kb"
-avec les mécaniques des jeux classiques par genre.
+build_mechanics_kb.py — Populates the ChromaDB "mechanics_kb" collection
+with mechanics from classic games by genre.
 
-Usage :
+Usage:
     python build_mechanics_kb.py
 
-La fonction search_mechanics(genre, query, n=3) est exportable et utilisée
-par agent_intelligence_genre.py pour enrichir l'analyse.
+The search_mechanics(genre, query, n=3) function is exportable and used
+by agent_intelligence_genre.py to enrich the analysis.
 """
 
 import os

@@ -13,10 +13,10 @@ MODEL_NAME = "gemini-2.5-flash"
 MODEL_NAME_PRO = os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro")
 MAX_RETRIES = 2  # RPD=20/clé — 5 retries × 9 clés = 45 appels brûlés pour UN seul appel raté
 
-# ── Clé payante (créateur) ────────────────────────────────────────────────────
-# GEMINI_PAID_KEY : clé payante dédiée à l'agent créateur (génération 9 couches).
-# Si absente, utilise GEMINI_API_KEY comme clé payante (comportement avant).
-# RPD illimité sur la clé payante — pas de comptage journalier.
+# ── Paid key (creator agent) ─────────────────────────────────────────────────
+# GEMINI_PAID_KEY: dedicated paid key for the creator agent (9-layer generation).
+# If absent, falls back to GEMINI_API_KEY as paid key (legacy behavior).
+# Paid key has unlimited RPD — no daily quota tracking.
 _PAID_KEY_RAW = os.getenv("GEMINI_PAID_KEY") or os.getenv("GEMINI_API_KEY")
 if not _PAID_KEY_RAW:
     raise RuntimeError("Aucune clé payante trouvée (GEMINI_PAID_KEY ou GEMINI_API_KEY requis dans .env)")
@@ -32,10 +32,10 @@ _paid_key_lock = threading.Lock()
 _paid_timestamps: list = []  # RPM tracking pour la clé payante
 MAX_CALLS_PER_MINUTE_PAID = int(os.getenv("GEMINI_RPM_LIMIT_PAID", "200"))
 
-# ── Rotation de clés gratuites ────────────────────────────────────────────────
-# GEMINI_API_KEY (si pas de GEMINI_PAID_KEY) + GEMINI_API_KEY_1..N = clés gratuites
-# Quand une clé fait 429, on passe à la suivante automatiquement.
-# Quand TOUTES les clés gratuites sont épuisées → fallback automatique sur clé payante.
+# ── Free key rotation ────────────────────────────────────────────────────────
+# GEMINI_API_KEY (if no GEMINI_PAID_KEY) + GEMINI_API_KEY_1..N = free-tier keys
+# On 429, automatically rotates to the next key.
+# When ALL free keys are exhausted → automatic fallback to paid key.
 def _load_api_keys() -> list[str]:
     keys = []
     # Si GEMINI_PAID_KEY est défini, GEMINI_API_KEY est une clé gratuite aussi
@@ -63,15 +63,15 @@ _clients = [
 _current_key_idx = 0
 _key_lock = threading.Lock()
 
-# Timestamps par clé pour respecter le RPM par clé
+# Per-key timestamps for RPM enforcement
 _key_timestamps: dict[int, list] = {i: [] for i in range(len(_api_keys))}
 
-# Compteur RPD par clé — persisté dans un fichier JSON, reset à minuit UTC
+# Per-key RPD counter — persisted to JSON, resets at UTC midnight
 import datetime as _dt
 _RPD_FILE = os.path.join(os.path.dirname(__file__), ".quota_rpd.json")
 
 def _load_daily_counts() -> tuple[dict, str]:
-    """Charge les compteurs RPD depuis le fichier. Retourne (counts, date)."""
+    """Loads RPD counters from the file. Returns (counts, date)."""
     today = _dt.datetime.utcnow().strftime("%Y-%m-%d")
     try:
         if os.path.exists(_RPD_FILE):
@@ -88,7 +88,7 @@ def _load_daily_counts() -> tuple[dict, str]:
     return {i: 0 for i in range(len(_api_keys))}, today
 
 def _save_daily_counts():
-    """Persiste les compteurs RPD dans le fichier."""
+    """Persists RPD counters to the file."""
     try:
         with open(_RPD_FILE, "w") as f:
             json.dump({"date": _key_daily_reset_date, "counts": _key_daily_counts}, f)
@@ -98,68 +98,68 @@ def _save_daily_counts():
 _key_daily_counts, _key_daily_reset_date = _load_daily_counts()
 
 def _reset_daily_counts_if_needed():
-    """Remet à zéro les compteurs RPD si on a changé de jour UTC."""
+    """Resets RPD counters if the UTC day has changed."""
     global _key_daily_counts, _key_daily_reset_date
     today = _dt.datetime.utcnow().strftime("%Y-%m-%d")
     if _key_daily_reset_date != today:
         _key_daily_reset_date = today
         _key_daily_counts = {i: 0 for i in range(len(_api_keys))}
         _save_daily_counts()
-        print(f"  [RPD] Compteurs journaliers remis à zéro ({today} UTC)", flush=True)
+        print(f"  [RPD] Daily counters reset ({today} UTC)", flush=True)
 
 def get_quota_status() -> dict:
     """
-    Retourne l'état du quota pour chaque clé.
-    Utilisable sans faire d'appel API.
+    Returns quota status for each key.
+    Can be called without making an API request.
     """
     _reset_daily_counts_if_needed()
     status = {}
     for i, key in enumerate(_api_keys):
         used = _key_daily_counts.get(i, 0)
         status[f"cle_{i+1}"] = {
-            "utilisés": used,
-            "restants": max(0, MAX_CALLS_PER_DAY - used),
-            "épuisée": used >= MAX_CALLS_PER_DAY,
+            "used": used,
+            "remaining": max(0, MAX_CALLS_PER_DAY - used),
+            "exhausted": used >= MAX_CALLS_PER_DAY,
             "key_hint": key[:8] + "..." + key[-4:],
         }
     total_used = sum(_key_daily_counts.get(i, 0) for i in range(len(_api_keys)))
     total_max = MAX_CALLS_PER_DAY * len(_api_keys)
     status["_total"] = {
-        "utilisés": total_used,
-        "restants": max(0, total_max - total_used),
-        "générations_estimées": max(0, total_max - total_used) // 30,
+        "used": total_used,
+        "remaining": max(0, total_max - total_used),
+        "estimated_generations": max(0, total_max - total_used) // 30,
     }
     return status
 
-# Compat : client global (utilisé par quelques imports directs)
+# Compat: global client (used by a few direct imports)
 client = _paid_client if not _clients else _clients[0]
 
 MAX_CALLS_PER_MINUTE = int(os.getenv("GEMINI_RPM_LIMIT", "4"))        # Free: 5 RPM/clé (source: ai.google.dev/pricing)
 MAX_CALLS_PER_DAY = int(os.getenv("GEMINI_RPD_LIMIT", "19"))          # Free: 20 RPD/clé — payant: GEMINI_RPD_LIMIT=9999
 WINDOW_SECONDS = 60        # Fenêtre RPM = 1 minute
 
-# Pause globale partagée entre tous les threads — quand une clé déclenche la pause,
-# TOUS les threads en cours la respectent. Évite les cascades de 429 multi-thread.
+# Global pause shared across all threads — when one key triggers the pause,
+# ALL in-flight threads respect it. Prevents cascading 429s in multi-thread scenarios.
 _api_pause_until: float = 0.0
 
 def _get_current_client() -> tuple[int, object]:
-    """Retourne (idx, client) de la clé courante."""
+    """Returns (idx, client) for the current key."""
     with _key_lock:
         return _current_key_idx, _clients[_current_key_idx]
 
 def _rotate_key(failed_idx: int) -> tuple[int, object]:
     """
-    Passe à la clé suivante si failed_idx est encore la clé courante.
-    Retourne (new_idx, new_client).
+    Rotates to the next key if failed_idx is still the current key.
+    Returns (new_idx, new_client).
     """
     global _current_key_idx
     with _key_lock:
         if _current_key_idx == failed_idx:
             _current_key_idx = (failed_idx + 1) % len(_api_keys)
-            # Log serveur uniquement — ne pas polluer le flux SSE
+            # Server-only log — do not pollute the SSE stream
             print(
-                f"  [Rotation clé] Clé {failed_idx+1}/{len(_api_keys)} épuisée "
-                f"→ passage à la clé {_current_key_idx+1}",
+                f"  [Key rotation] Key {failed_idx+1}/{len(_api_keys)} exhausted "
+                f"→ switching to key {_current_key_idx+1}",
                 flush=True,
             )
         return _current_key_idx, _clients[_current_key_idx]
@@ -216,20 +216,20 @@ def _get_available_client() -> tuple[int, object]:
         wait = WINDOW_SECONDS - (now - oldest) + 0.5
 
     # Attente hors du lock pour ne pas bloquer les autres threads
-    print(f"  [Rate limit] Clés gratuites saturées — attente {wait:.1f}s", flush=True)
+    print(f"  [Rate limit] Free keys saturated — waiting {wait:.1f}s", flush=True)
     time.sleep(max(wait, 1.0))
     return _get_available_client()
 
 
 class _AllFreeKeysExhausted(Exception):
-    """Toutes les clés gratuites sont épuisées — l'appelant doit basculer sur la clé payante."""
+    """All free keys are exhausted — caller must fall back to paid key."""
     pass
 
 
 def _get_paid_client_rate_limited():
     """
-    Retourne le client payant en respectant son RPM.
-    Attends si la fenêtre RPM est pleine.
+    Returns the paid client respecting its RPM limit.
+    Waits if the RPM window is full.
     """
     global _paid_timestamps
     while True:
@@ -241,7 +241,7 @@ def _get_paid_client_rate_limited():
                 return _paid_client
             oldest = _paid_timestamps[0]
             wait = WINDOW_SECONDS - (now - oldest) + 0.5
-        print(f"  [Paid RPM] Clé payante saturée — attente {wait:.1f}s", flush=True)
+        print(f"  [Paid RPM] Paid key saturated — waiting {wait:.1f}s", flush=True)
         time.sleep(max(wait, 1.0))
 
 
@@ -316,9 +316,9 @@ def call_gemini_paid(
     model: str = None,
 ) -> str:
     """
-    Appel Gemini sur la clé PAYANTE exclusivement (agent créateur — 9 couches).
-    Pas de fallback sur clés gratuites, pas de RPD cap.
-    Rate-limité sur son propre compteur RPM (MAX_CALLS_PER_MINUTE_PAID).
+    Calls Gemini on the PAID key exclusively (creator agent — 9-layer generation).
+    No fallback to free keys, no RPD cap.
+    Rate-limited on its own RPM counter.
     """
     if len(prompt) > 120000:
         print(f"  [I6] Prompt très long : {len(prompt)} chars — risque de troncature input", flush=True)
@@ -369,12 +369,10 @@ def call_gemini(
     model: str = None,
 ) -> str:
     """
-    Appel Gemini sur les clés GRATUITES d'abord.
-    Si épuisées → fallback clé payante en MODE CLASSIQUE (disable_thinking=True forcé).
-    Le mode pro (thinking activé) est réservé à call_gemini_paid() utilisé par le créateur.
-
-    disable_thinking=True : désactive le thinking de Gemini 2.5-Flash pour préserver
-    le budget de tokens pour la génération de code (évite les troncatures).
+    Calls Gemini on FREE keys first.
+    If exhausted → fallback to paid key in CLASSIC mode (thinking disabled).
+    The pro mode (thinking enabled) is reserved for call_gemini_paid() used by the creator.
+    disable_thinking=True: disables Gemini 2.5-Flash thinking to preserve token budget.
     """
     if len(prompt) > 120000:
         print(f"  [I6] Prompt très long : {len(prompt)} chars — risque de troncature input", flush=True)
@@ -451,7 +449,7 @@ def call_gemini(
 
     # ── Fallback sur clé payante en MODE CLASSIQUE (thinking désactivé) ──
     # Le mode pro (thinking) est réservé à call_gemini_paid() utilisé par le créateur.
-    print(f"  [Fallback payant] Clé payante mode classique (non-créateur)", flush=True)
+    print(f"  [Paid fallback] Paid key classic mode (non-creator)", flush=True)
     return call_gemini_paid(
         prompt=prompt, temperature=temperature, system_instruction=system_instruction,
         json_mode=json_mode, max_tokens=max_tokens, disable_thinking=True,
@@ -461,9 +459,9 @@ def call_gemini(
 
 def call_gemini_json(prompt: str, temperature: float = 0.2, system_instruction: str = None, max_tokens: int = 24000, disable_thinking: bool = True) -> dict:
     """
-    Appel Gemini avec retour JSON parsé automatiquement.
-    max_tokens élevé par défaut pour éviter la troncature silencieuse du JSON.
-    disable_thinking=True par défaut : évite les délais 30-90s du thinking sur les agents de support.
+    Calls Gemini and returns auto-parsed JSON.
+    High max_tokens by default to avoid silent JSON truncation.
+    disable_thinking=True by default: avoids 30–90s thinking delays on support agents.
     """
     raw = call_gemini(
         prompt=prompt,
@@ -504,8 +502,8 @@ def call_gemini_paid_json(
     model: str = None,
 ) -> dict:
     """
-    Appel clé PAYANTE avec retour JSON — pour Diagnosticien et agents critiques Phase 5.
-    Garantit la qualité même si les clés gratuites sont épuisées.
+    Calls PAID key and returns JSON — for Diagnostician and critical Phase 5 agents.
+    Guarantees quality even if free keys are exhausted.
     """
     raw = call_gemini_paid(
         prompt=prompt,
@@ -552,7 +550,7 @@ def _get_anthropic_client():
 
 def call_claude(prompt: str, system: str = "", max_tokens: int = 4000, temperature: float = 0.5) -> str:
     """
-    Appel Claude (Anthropic) avec retry exponentiel et fallback Gemini.
+    Calls Claude (Anthropic) with exponential retry and Gemini fallback.
     """
     client_a = _get_anthropic_client()
     if client_a is None:
@@ -589,9 +587,9 @@ def call_claude(prompt: str, system: str = "", max_tokens: int = 4000, temperatu
 
 def with_fallback(default_value):
     """
-    Décorateur : retourne default_value si l'agent plante,
-    au lieu de faire crasher tout le pipeline.
-    Logue l'erreur dans le SSE stream si disponible.
+    Decorator: returns default_value if the agent crashes,
+    instead of bringing down the entire pipeline.
+    Logs the error to the SSE stream if available.
     """
     def decorator(fn):
         @functools.wraps(fn)

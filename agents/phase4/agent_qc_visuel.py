@@ -1,7 +1,7 @@
 """
-Agent QC Visuel — Phase 4
-Évalue la qualité visuelle et artistique du jeu en lisant le code.
-Les critères s'adaptent au style visuel attendu pour le genre.
+Visual QC Agent — Phase 4
+Evaluates the visual and artistic quality of the game by reading the code.
+Criteria adapt to the expected visual style for the genre.
 """
 
 import json

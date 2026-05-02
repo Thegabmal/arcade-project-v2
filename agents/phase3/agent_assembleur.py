@@ -1,8 +1,8 @@
 """
-Agent Assembleur — Phase 3
-Assemble les modules JavaScript générés en un fichier HTML autonome complet.
-Chaque module est entouré de marqueurs pour permettre le patch ciblé.
-Algorithme pur (pas d'appel LLM) — déterministe et fiable.
+Assembler Agent — Phase 3
+Assembles the generated JavaScript modules into a complete standalone HTML file.
+Each module is surrounded by markers to allow targeted patching.
+Pure algorithm (no LLM call) — deterministic and reliable.
 """
 
 from genre_profile import GeneratedModules, ModuleArchitecture, ConceptionContext

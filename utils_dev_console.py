@@ -1,13 +1,13 @@
 """
-Dev Console — Overlay de modification en temps réel.
-Injecté dans tous les jeux sauvegardés par agent_sauvegarde.py.
+Dev Console — Real-time modification overlay.
+Injected into all saved games by agent_sauvegarde.py.
 
-La console s'ouvre avec la touche ` (backtick) ou ² (clavier AZERTY).
-Elle envoie le prompt à /api/game-patch → reçoit un snippet JS → eval() live.
+The console opens with the ` (backtick) or ² (AZERTY keyboard) key.
+It sends the prompt to /api/game-patch → receives a JS snippet → eval() live.
 
-Architecture d'accès aux variables du jeu :
-  Les variables (hero, playerStats, gameState...) sont déclarées avec `let` à l'intérieur
-  du DOMContentLoaded → invisibles depuis une IIFE externe.
+Game variable access architecture:
+  Variables (hero, playerStats, gameState...) are declared with `let` inside
+  DOMContentLoaded → invisible from an external IIFE.
   Solution : on injecte window.__devPatch = function(code){ eval(code); } DANS le
   DOMContentLoaded (via _inject_patch_bridge), puis la console appelle ce bridge.
 """

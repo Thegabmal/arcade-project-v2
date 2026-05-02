@@ -1,10 +1,10 @@
 """
-Coordinateur — Point d'entrée principal du système.
-Orchestre les 5 phases et la boucle ReAct.
+Coordinator — Main entry point of the system.
+Orchestrates the 5 phases and the ReAct loop.
 
-Usage :
+Usage:
     python coordinateur.py "un jeu de plateforme avec des ennemis robots"
-    python coordinateur.py  (mode interactif)
+    python coordinateur.py  (interactive mode)
 """
 
 import sys
@@ -14,7 +14,7 @@ import time
 import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Imports fondamentaux
+# Core imports
 from logger import coordinateur_log, init_session, get_thread_event_queue, set_thread_event_queue, get_session_log, push_event
 from genre_profile import GenreProfile, ConceptionContext, EvaluationBundle, EvaluationResult
 import memory
@@ -26,8 +26,8 @@ def _export_failure_log(
     issues: list, log_content: str = "", label: str = "failed"
 ) -> None:
     """
-    Tâche P — Exporte un log d'échec structuré dans failures_log.json.
-    Utilisé par auto_learner et pour le dashboard /api/stats.
+    Task P — Exports a structured failure log to failures_log.json.
+    Used by auto_learner and for the /api/stats dashboard.
     """
     import json, os
     failures_path = os.path.join(os.path.dirname(__file__), "failures_log.json")
@@ -52,7 +52,7 @@ def _export_failure_log(
             for i in issues[:10]
         ],
     })
-    # Garder les 100 derniers échecs
+    # Keep the last 100 failures
     failures = failures[-100:]
     with open(failures_path, "w", encoding="utf-8") as f:
         json.dump(failures, f, ensure_ascii=False, indent=2)
@@ -60,9 +60,9 @@ def _export_failure_log(
 
 def _make_minimal_fallback_game(titre: str, genre: str) -> str:
     """
-    Session 14 — Génère un jeu minimal garanti fonctionnel en pur Python.
-    Utilisé quand TOUS les itérations ont échoué avec exec < 4.5 ET code syntaxiquement invalide.
-    C'est un jeu simple mais qui FONCTIONNE à 100%.
+    Session 14 — Generates a minimal guaranteed-functional game in pure Python.
+    Used when ALL iterations have failed with exec < 4.5 AND syntactically invalid code.
+    It's a simple game but it WORKS 100%.
     """
     import html as _html_mod
     titre_safe = _html_mod.escape(titre[:40])
@@ -207,10 +207,10 @@ requestAnimationFrame(gameLoop);
 
 def _parallel(tasks: list, max_workers: int = 4, stagger_seconds: float = 1.0) -> dict:
     """
-    Exécute des tâches en parallèle en propageant la queue SSE aux sous-threads.
-    tasks = [(nom, fn, [args...]), ...]
-    stagger_seconds : délai entre chaque soumission pour éviter les spikes RPM.
-    Retourne {nom: résultat}.
+    Runs tasks in parallel, propagating the SSE queue to sub-threads.
+    tasks = [(name, fn, [args...]), ...]
+    stagger_seconds: delay between each submission to avoid RPM spikes.
+    Returns {name: result}.
     """
     import time as _time
     current_queue = get_thread_event_queue()
@@ -233,19 +233,19 @@ def _parallel(tasks: list, max_workers: int = 4, stagger_seconds: float = 1.0) -
                 results[name] = result
             except Exception as e:
                 name = futures[future]
-                coordinateur_log.error(f"Tâche parallèle '{name}' échouée : {e}")
+                coordinateur_log.error(f"Parallel task '{name}' failed: {e}")
                 results[name] = None
     return results
 
 # Phase 1 — Intelligence
 from agents.phase1 import (
-    agent_intelligence_genre,   # fusion chercheur + veilleur
+    agent_intelligence_genre,   # merged researcher + watcher
     agent_enrichisseur,
     agent_architecte,
     agent_moderateur_classificateur,
 )
 
-# Phase 2 — Conception
+# Phase 2 — Design
 from agents.phase2 import (
     agent_game_designer,
     agent_tech_architect,
@@ -255,54 +255,54 @@ from agents.phase2 import (
     agent_scenariste,
 )
 
-# Phase 3 — Génération
+# Phase 3 — Generation
 from agents.phase3 import agent_createur, agent_assembleur, agent_js_linter
 
-# Phase 4 — Évaluation
+# Phase 4 — Evaluation
 from agents.phase4 import (
     agent_qc_technique,
-    agent_qc_gameplay,   # inclut désormais anti_pattern
+    agent_qc_gameplay,   # now includes anti_pattern
     agent_qc_visuel,
     agent_executeur,
     agent_playtester,
     agent_testeur_modules,
 )
 
-# Phase 5 — Itération
+# Phase 5 — Iteration
 from agents.phase5 import agent_diagnosticien, agent_patcher, agent_pre_patcher
 
 # Support
-from agents.support import agent_verdict_final, agent_sauvegarde, agent_auto_learner  # verdict_final = benchmark + neutre
+from agents.support import agent_verdict_final, agent_sauvegarde, agent_auto_learner  # verdict_final = benchmark + neutral
 
 # ─────────────────────────────────────────────
 # CONFIGURATION
 # ─────────────────────────────────────────────
-MAX_ITERATIONS = 3          # 3 itérations : génération + 2 passes de patch/fix
-SCORE_SEUIL_SAUVEGARDE = 7.0   # Score minimum pour marquer "approuvé"
-SCORE_SORTIE_ANTICIPEE = 8.0   # Score pour sortir sans itérer
-SCORE_STAGNATION_DELTA = 0.2   # Si le score progresse de moins de ça → stagnation
-SCORE_MIN_VIABLE_SAVE  = 2.0   # En dessous de ça, inutile de sauvegarder (code vide)
-# Nombre d'itérations consécutives sans progrès avant stagnation déclarée
-MAX_ITERATIONS_SANS_PROGRES = 2  # tolérer 1 itération "bloquée" — A2 fix peut débloquer
-# E4 : seuil pour autoriser les passes 3 et 4 (économie quota)
-SCORE_SEUIL_ITERATIONS_SUP = 7.0  # Au-dessus → 2 passes suffisent
-# C1 : seuils minimums par dimension (bloquer sauvegarde si non atteints)
-SCORE_MIN_EXECUTION = 5.0   # C1 : execution doit être ≥ 5.0
-SCORE_MIN_TECHNIQUE = 5.5   # C1 : technique doit être ≥ 5.5
-# I7 : limite erreurs_passees
+MAX_ITERATIONS = 3          # 3 iterations: generation + 2 patch/fix passes
+SCORE_SEUIL_SAUVEGARDE = 7.0   # Minimum score to mark as "approved"
+SCORE_SORTIE_ANTICIPEE = 8.0   # Score to exit early without iterating
+SCORE_STAGNATION_DELTA = 0.2   # If score improves by less than this → stagnation
+SCORE_MIN_VIABLE_SAVE  = 2.0   # Below this, no point saving (empty code)
+# Number of consecutive iterations without progress before stagnation is declared
+MAX_ITERATIONS_SANS_PROGRES = 2  # tolerate 1 "stuck" iteration — A2 fix can unblock
+# E4: threshold to allow passes 3 and 4 (quota savings)
+SCORE_SEUIL_ITERATIONS_SUP = 7.0  # Above this → 2 passes are enough
+# C1: minimum scores per dimension (block save if not reached)
+SCORE_MIN_EXECUTION = 5.0   # C1: execution must be >= 5.0
+SCORE_MIN_TECHNIQUE = 5.5   # C1: technique must be >= 5.5
+# I7: limit past_errors
 MAX_ERREURS_PASSEES = 20
 
 
 def _js_check_quick(html: str) -> tuple:
-    """Vérification syntaxe JS rapide pour valider un patch avant de l'appliquer."""
+    """Quick JS syntax check to validate a patch before applying it."""
     try:
         from js_syntax_checker import check_and_report as _chk
         issues, broken = _chk(html)
         return issues, broken
     except ImportError:
-        return [], False  # checker non installé — accepter par défaut
+        return [], False  # checker not installed — accept by default
     except Exception as e:
-        coordinateur_log.warning(f"_js_check_quick erreur inattendue : {e} — patch accepté par défaut")
+        coordinateur_log.warning(f"_js_check_quick unexpected error: {e} — patch accepted by default")
         return [], False
 
 
@@ -316,55 +316,55 @@ STYLE_GRAPHIQUE_MAP = {
     "3d_lowpoly":          "3D low-poly",
 }
 
-def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
+def run(user_prompt: str, style_graphique: str = "", stop_event=None,
         _max_iterations: int | None = None) -> dict:
     """
-    Pipeline principale. Prend un prompt en entrée et retourne un dict avec :
+    Main pipeline. Takes a prompt as input and returns a dict with:
     - genre_profile, gdd, code, scores, verdict, html_path
-    style_graphique : clé optionnelle (ex: "pixel_art_gameboy") — écrase la détection auto.
-    stop_event : threading.Event optionnel — si déclenché, la pipeline s'arrête proprement.
-    _max_iterations : override interne pour run_quick() (1 passe sans remediation).
+    style_graphique: optional key (e.g. "pixel_art_gameboy") — overrides auto-detection.
+    stop_event: optional threading.Event — if triggered, the pipeline stops cleanly.
+    _max_iterations: internal override for run_quick() (1 pass without remediation).
     """
     def _check_stop():
         if stop_event and stop_event.is_set():
-            raise RuntimeError("Génération annulée (timeout SSE)")
+            raise RuntimeError("Generation cancelled (SSE timeout)")
     init_session()
     memory.init_memory()
     start_time = time.time()
 
-    coordinateur_log.section(f"ARCADE AI -- Generation de jeu")
-    coordinateur_log.info(f"Prompt : '{prompt_utilisateur}'")
-    coordinateur_log.info(f"Démarré à : {datetime.datetime.now().strftime('%H:%M:%S')}")
+    coordinateur_log.section(f"ARCADE AI -- Game Generation")
+    coordinateur_log.info(f"Prompt: '{user_prompt}'")
+    coordinateur_log.info(f"Started at: {datetime.datetime.now().strftime('%H:%M:%S')}")
     push_event("timer_start", {"timestamp": start_time})
 
     # ─────────────────────────────────────────────
-    # PHASE 1 : MODÉRATION
+    # PHASE 1: MODERATION
     # ─────────────────────────────────────────────
-    coordinateur_log.section("PHASE 1 — Intelligence & Enrichissement")
+    coordinateur_log.section("PHASE 1 — Intelligence & Enrichment")
 
-    # Round 1 : modération + classification en UN SEUL appel (optimisation)
-    mod_class = agent_moderateur_classificateur.run(prompt_utilisateur) or {}
+    # Round 1: moderation + classification in ONE SINGLE call (optimization)
+    mod_class = agent_moderateur_classificateur.run(user_prompt) or {}
 
     if not mod_class.get("valide", True):
-        coordinateur_log.error(f"Prompt rejeté : {mod_class.get('raison_rejet', '?')}")
+        coordinateur_log.error(f"Prompt rejected: {mod_class.get('raison_rejet', '?')}")
         return {"erreur": mod_class.get("raison_rejet"), "code": None}
 
-    prompt_nettoye = mod_class.get("prompt_nettoye", prompt_utilisateur) or prompt_utilisateur
+    cleaned_prompt = mod_class.get("prompt_nettoye", user_prompt) or user_prompt
 
     for avert in mod_class.get("avertissements", []):
-        coordinateur_log.warning(f"Avertissement : {avert}")
+        coordinateur_log.warning(f"Warning: {avert}")
 
-    # Si le classificateur a échoué (fallback), détecter le genre par mots-clés
+    # If the classifier failed (fallback), detect genre by keywords
     _genre_raw = mod_class.get("genre_principal", "arcade")
     if _genre_raw == "arcade":
         import re as _re
-        _p = prompt_nettoye.lower()
-        # Correspondance mot entier pour éviter les faux positifs ("xp" dans "explosions", etc.)
+        _p = cleaned_prompt.lower()
+        # Whole-word matching to avoid false positives ("xp" in "explosions", etc.)
         def _kw_match(kw, text):
-            if len(kw) <= 3:  # mots courts → vérifier les frontières de mots
+            if len(kw) <= 3:  # short words → check word boundaries
                 return bool(_re.search(r'\b' + _re.escape(kw) + r'\b', text))
             return kw in text
-        # Ordre : genres les plus spécifiques en premier
+        # Order: most specific genres first
         _genre_kw = {
             "shooter":       ["shooter", "shoot them up", "shmup", "bullet hell", "vaisseau", "tir automatique", "shoot"],
             "platformer":    ["platformer", "plateforme", "saut", "jump", "mario"],
@@ -379,25 +379,25 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
         for genre, kws in _genre_kw.items():
             if any(_kw_match(kw, _p) for kw in kws):
                 _genre_raw = genre
-                coordinateur_log.info(f"Genre détecté par mots-clés (fallback classificateur) : {_genre_raw}")
+                coordinateur_log.info(f"Genre detected by keywords (classifier fallback): {_genre_raw}")
                 break
 
-    # Construire un objet Classification compatible depuis la réponse fusionnée
+    # Build a compatible Classification object from the merged response
     from genre_profile import Classification
 
-    # Style graphique : forcé par l'utilisateur ou détecté automatiquement
+    # Graphic style: forced by the user or auto-detected
     _style_force = STYLE_GRAPHIQUE_MAP.get(style_graphique, "") if style_graphique else ""
     if _style_force:
-        # Style explicitement choisi — on ignore la détection automatique
+        # Style explicitly chosen — ignore auto-detection
         est_3d = style_graphique == "3d_lowpoly"
         style_visuel = _style_force
-        coordinateur_log.info(f"Style graphique forcé : {style_visuel}")
+        coordinateur_log.info(f"Graphic style forced: {style_visuel}")
     else:
-        # Détection automatique depuis le prompt
+        # Auto-detection from the prompt
         est_3d = mod_class.get("technologie", "canvas2d") == "threejs"
         _kw_pixel = ["pixel art", "pixel-art", "rétro", "retro", "zelda", "pokemon",
                      "nes", "game boy", "gameboy", "8-bit", "16-bit", "8bit", "16bit"]
-        _prompt_lower = prompt_nettoye.lower()
+        _prompt_lower = cleaned_prompt.lower()
         est_pixel = any(kw in _prompt_lower for kw in _kw_pixel)
         if est_3d:
             style_visuel = "3D low-poly"
@@ -416,41 +416,41 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
         raisonnement="",
     )
 
-    # Round 2 : intelligence genre (fusion chercheur + veilleur en 1 appel)
-    research, tendances = agent_intelligence_genre.run(classification)
-    tendances = tendances or ""
+    # Round 2: genre intelligence (merged researcher + watcher in 1 call)
+    research, trends = agent_intelligence_genre.run(classification)
+    trends = trends or ""
 
-    if tendances:
-        coordinateur_log.info(f"Intelligence genre : {len(tendances)} chars de contexte")
+    if trends:
+        coordinateur_log.info(f"Genre intelligence: {len(trends)} chars of context")
 
-    # Récupérer les patterns réussis + erreurs passées pour ce genre
-    patterns_reussis = memory.get_patterns_for_genre(classification.genre_principal)
-    if patterns_reussis:
-        coordinateur_log.info(f"{len(patterns_reussis)} pattern(s) réussi(s) trouvé(s) en mémoire")
+    # Retrieve successful patterns + past errors for this genre
+    successful_patterns = memory.get_patterns_for_genre(classification.genre_principal)
+    if successful_patterns:
+        coordinateur_log.info(f"{len(successful_patterns)} successful pattern(s) found in memory")
 
-    erreurs_passees = memory.get_errors_for_genre(classification.genre_principal)
-    # Ajouter les erreurs structurelles connues (du validateur)
+    past_errors = memory.get_errors_for_genre(classification.genre_principal)
+    # Add known structural errors (from the validator)
     validator_errors = memory.get_validator_errors_for_genre(classification.genre_principal, n=3)
     if validator_errors:
-        erreurs_passees = list(erreurs_passees) + [f"[STRUCTUREL] {e}" for e in validator_errors]
-    # B3 : déduplication immédiate pour éviter pollution des prompts entre itérations
-    erreurs_passees = list(dict.fromkeys(erreurs_passees))
-    if erreurs_passees:
-        coordinateur_log.info(f"{len(erreurs_passees)} erreur(s) passée(s) récupérée(s) pour '{classification.genre_principal}'")
+        past_errors = list(past_errors) + [f"[STRUCTUREL] {e}" for e in validator_errors]
+    # B3: immediate deduplication to avoid prompt pollution between iterations
+    past_errors = list(dict.fromkeys(past_errors))
+    if past_errors:
+        coordinateur_log.info(f"{len(past_errors)} past error(s) retrieved for '{classification.genre_principal}'")
 
-    # Q13 — Tracking des erreurs corrigées vs récurrentes
-    # Chaque erreur est soit str soit dict {msg, fixed, iteration}
-    # On normalise en liste de str avec préfixes [CORRIGÉ] / [RÉCURRENT] pour les prompts
+    # Q13 — Tracking fixed vs recurring errors
+    # Each error is either a str or a dict {msg, fixed, iteration}
+    # Normalize to a list of str with [FIXED] / [RECURRING] prefixes for prompts
     _erreurs_tracker: dict = {}  # msg_lower → {count, fixed}
 
     def _mark_error_fixed(issue_desc: str):
-        """Marque une erreur comme corrigée dans le tracker."""
+        """Marks an error as fixed in the tracker."""
         key = issue_desc[:80].lower()
         if key in _erreurs_tracker:
             _erreurs_tracker[key]['fixed'] = True
 
     def _record_error(issue_desc: str, iteration: int):
-        """Enregistre une nouvelle erreur rencontrée."""
+        """Records a newly encountered error."""
         key = issue_desc[:80].lower()
         if key not in _erreurs_tracker:
             _erreurs_tracker[key] = {'msg': issue_desc, 'count': 1, 'fixed': False, 'iter': iteration}
@@ -458,55 +458,55 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
             _erreurs_tracker[key]['count'] += 1
             _erreurs_tracker[key]['fixed'] = False
 
-    # Enrichissement — création du GenreProfile
-    genre_profile = agent_enrichisseur.run(prompt_nettoye, classification, research)
+    # Enrichment — create the GenreProfile
+    genre_profile = agent_enrichisseur.run(cleaned_prompt, classification, research)
 
-    # Propager la détection 3D du classificateur vers le GenreProfile
+    # Propagate 3D detection from classifier to GenreProfile
     if est_3d:
         genre_profile.technologie_rendu = "threejs"
     else:
         genre_profile.technologie_rendu = "canvas2d"
 
-    # Propager la détection narrative
+    # Propagate narrative detection
     _is_narrative_raw = mod_class.get("is_narrative", False)
     genre_profile.is_narrative = bool(_is_narrative_raw)
 
-    coordinateur_log.success(f"Phase 1 terminée : {genre_profile.summary()}")
+    coordinateur_log.success(f"Phase 1 complete: {genre_profile.summary()}")
 
     # ─────────────────────────────────────────────
-    # PHASE 2 : CONCEPTION
+    # PHASE 2: DESIGN
     # ─────────────────────────────────────────────
     _check_stop()
-    coordinateur_log.section("PHASE 2 — Conception")
+    coordinateur_log.section("PHASE 2 — Design")
 
-    # I14 : Phase 2 entièrement en parallèle — GDD + tech + ux + game_logics + level_designer
-    # Game Designer tourne en parallèle avec les autres sur le genre_profile uniquement
-    # puis tech/ux/level/logics reçoivent le GDD via résultat
+    # I14: Phase 2 fully in parallel — GDD + tech + ux + game_logics + level_designer
+    # Game Designer runs in parallel with others on genre_profile only
+    # then tech/ux/level/logics receive the GDD via result
     p2_gdd = _parallel([
         ("gdd", agent_game_designer.run, [genre_profile]),
     ], max_workers=1)
     gdd = p2_gdd["gdd"] or {}
-    coordinateur_log.info(f"Jeu : '{gdd.get('titre', '?')}'")
+    coordinateur_log.info(f"Game: '{gdd.get('titre', '?')}'")
 
-    # G5 + B9 : validation GDD structure minimale — retry si vide (timeout/JSON malformé)
+    # G5 + B9: minimal GDD structure validation — retry if empty (timeout/malformed JSON)
     _gdd_title = (gdd.get('titre') or gdd.get('title') or gdd.get('nom') or '')
     _gdd_mechanics = (gdd.get('mecaniques_principales') or gdd.get('core_mechanics')
                       or gdd.get('mecaniques') or gdd.get('mechanics') or [])
     _gdd_systems = (gdd.get('systemes_jeu') or gdd.get('systemes_principaux')
                     or gdd.get('systems') or gdd.get('systemes') or gdd.get('game_systems') or {})
     if not _gdd_title:
-        coordinateur_log.warning("B9/G5 : GDD sans titre — retry agent_game_designer")
+        coordinateur_log.warning("B9/G5: GDD without title — retry agent_game_designer")
         _gdd_retry = agent_game_designer.run(genre_profile)
         if _gdd_retry and (_gdd_retry.get('titre') or _gdd_retry.get('title') or _gdd_retry.get('nom')):
             gdd = _gdd_retry
             _gdd_title = gdd.get('titre') or gdd.get('title') or gdd.get('nom') or ''
-            coordinateur_log.success(f"B9 : retry GDD OK — '{_gdd_title}'")
+            coordinateur_log.success(f"B9: GDD retry OK — '{_gdd_title}'")
         else:
-            coordinateur_log.warning("B9 : retry GDD vide aussi — continue avec titre générique")
+            coordinateur_log.warning("B9: GDD retry also empty — continuing with generic title")
     elif not _gdd_mechanics and not _gdd_systems:
-        coordinateur_log.warning("G5 : GDD sans mécaniques ni systèmes détectés (clé inattendue ?)")
+        coordinateur_log.warning("G5: GDD without mechanics or systems detected (unexpected key?)")
 
-    # I14 : les 4 autres agents de Phase 2 en parallèle (max_workers=4)
+    # I14: the 4 other Phase 2 agents in parallel (max_workers=4)
     p2 = _parallel([
         ("tech",         agent_tech_architect.run, [genre_profile, gdd]),
         ("ux",           agent_ux_designer.run,    [genre_profile, gdd]),
@@ -518,15 +518,15 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
     game_logics   = p2["game_logics"]  or ""
     level_design  = p2["level_design"] or {}
 
-    # Agent Scénariste (optionnel — si jeu narratif)
+    # Narrative agent (optional — if narrative game)
     narrative_context = None
     if genre_profile.is_narrative:
-        coordinateur_log.info("Mode narratif détecté — appel agent scénariste")
+        coordinateur_log.info("Narrative mode detected — calling narrative agent")
         push_event("agent_start", {"agent": "Scénariste", "phase": "PHASE2", "description": "Création histoire, quêtes et personnages"})
         narrative_context = agent_scenariste.run(genre_profile)
         push_event("agent_done", {"agent": "Scénariste", "phase": "PHASE2", "result": f"Histoire : {narrative_context.titre}"})
 
-    # Assembler le contexte de conception
+    # Assemble the design context
     context = ConceptionContext(
         genre_profile=genre_profile,
         gdd=gdd,
@@ -536,147 +536,147 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
         narrative_context=narrative_context,
     )
 
-    coordinateur_log.success("Phase 2 terminée — contexte complet assemblé")
+    coordinateur_log.success("Phase 2 complete — full context assembled")
 
     # ─────────────────────────────────────────────
-    # PHASE 3 : GÉNÉRATION (modulaire)
+    # PHASE 3: GENERATION (modular)
     # ─────────────────────────────────────────────
     _check_stop()
-    coordinateur_log.section("PHASE 3 — Génération du jeu")
+    coordinateur_log.section("PHASE 3 — Game Generation")
 
     genre_principal_lower = (genre_profile.genre_principal or "").lower()
     sous_genre_lower = (genre_profile.sous_genre or "").lower()
     est_3d_genre = genre_profile.technologie_rendu == "threejs"
 
-    # Stratégie de génération :
-    # - Monolithique pour TOUS les jeux 2D (plus fiable, moins de points de défaillance)
-    # - Modulaire UNIQUEMENT pour les jeux 3D (Three.js) où la complexité le justifie
+    # Generation strategy:
+    # - Monolithic for ALL 2D games (more reliable, fewer failure points)
+    # - Modular ONLY for 3D games (Three.js) where complexity justifies it
     use_modular = est_3d_genre
 
-    CODE_MIN_VIABLE = 15000  # un vrai jeu 2D jouable fait >15K chars minimum
+    CODE_MIN_VIABLE = 15000  # a real playable 2D game is >15K chars minimum
 
     # ─────────────────────────────────────────────
-    # GÉNÉRATION DU CODE
+    # CODE GENERATION
     # ─────────────────────────────────────────────
     if use_modular:
-        # Jeux 3D — architecture modulaire Three.js
-        coordinateur_log.info("Route 3D : génération modulaire Three.js")
+        # 3D games — modular Three.js architecture
+        coordinateur_log.info("3D route: modular Three.js generation")
         architecture = agent_architecte.run(context)
 
         from agents.phase3.agent_createur import run_modulaire
         generated = run_modulaire(
             context,
             architecture,
-            patterns_reussis=patterns_reussis,
-            tendances=tendances,
-            erreurs_passees=erreurs_passees,
+            patterns_reussis=successful_patterns,
+            tendances=trends,
+            erreurs_passees=past_errors,
             game_logics=game_logics,
         )
 
-        # Test de modules puis assemblage
+        # Module testing then assembly
         generated = agent_testeur_modules.run(generated)
         code = agent_assembleur.run(generated, context)
-        coordinateur_log.success(f"Code 3D assemblé : {len(code)} caractères")
+        coordinateur_log.success(f"3D code assembled: {len(code)} characters")
     else:
-        # Jeux 2D — TOUJOURS via le système 5 couches (jamais monolithique)
-        coordinateur_log.info("Route 2D : génération 5 couches (layered)")
+        # 2D games — ALWAYS via the 5-layer system (never monolithic)
+        coordinateur_log.info("2D route: 5-layer generation (layered)")
         from agents.phase3._layer_gen import run_layered
         code = run_layered(
             context,
-            patterns_reussis=patterns_reussis,
-            erreurs_passees=erreurs_passees,
-            game_logics=game_logics,        # A — mécaniques détaillées
-            level_design=level_design,       # 4 — structure de niveaux
+            patterns_reussis=successful_patterns,
+            erreurs_passees=past_errors,
+            game_logics=game_logics,        # A — detailed mechanics
+            level_design=level_design,       # 4 — level structure
         )
-        coordinateur_log.success(f"Code 2D layered : {len(code)} caractères")
+        coordinateur_log.success(f"2D layered code: {len(code)} characters")
 
-    # Sanité de base : vérifier qu'on a du code viable
-    titre_jeu = context.gdd.get("titre", "Arcade Game")
-    genre_jeu = genre_profile.genre_principal
+    # Basic sanity check: verify we have viable code
+    game_title = context.gdd.get("titre", "Arcade Game")
+    game_genre = genre_profile.genre_principal
 
     if not code or len(code) < 1000:
-        coordinateur_log.warning("Code trop court — fallback minimal garanti")
+        coordinateur_log.warning("Code too short — guaranteed minimal fallback")
         if not use_modular:
             from agents.phase3._layer_gen import _run_compact_fallback
-            code = _run_compact_fallback(context, erreurs_passees=erreurs_passees)
+            code = _run_compact_fallback(context, erreurs_passees=past_errors)
         if not code or len(code) < 1000:
-            code = _make_minimal_fallback_game(titre_jeu, genre_jeu)
+            code = _make_minimal_fallback_game(game_title, game_genre)
 
-    coordinateur_log.success(f"Phase 3 terminée : {len(code)} caractères")
+    coordinateur_log.success(f"Phase 3 complete: {len(code)} characters")
 
-    # K4 — Factorisation coherence_check + A1_linter en fonction réutilisable
+    # K4 — Factored coherence_check + A1_linter into a reusable function
     def _post_generation_cleanup(html_code: str, ep: list) -> tuple[str, list]:
-        """Cohérence check + A1 JS linter — s'applique après toute génération (init + E1)."""
+        """Coherence check + A1 JS linter — applied after any generation (init + E1)."""
         _ep = list(ep or [])
         if not use_modular:
             from agents.phase3._layer_gen import coherence_check as _coh_check
             _coh_issues = _coh_check(html_code)
             if _coh_issues:
-                coordinateur_log.warning(f"Cohérence check : {len(_coh_issues)} problème(s) détecté(s)")
+                coordinateur_log.warning(f"Coherence check: {len(_coh_issues)} problem(s) detected")
                 for _ci in _coh_issues[:5]:
                     coordinateur_log.warning(f"  → {_ci}")
                 _coh_patched = agent_pre_patcher.run(html_code, _coh_issues)
                 _, _coh_broken = _js_check_quick(_coh_patched)
                 if _coh_broken:
-                    coordinateur_log.warning("Coherence pre-patch invalide — ignoré (syntaxe cassée)")
+                    coordinateur_log.warning("Coherence pre-patch invalid — ignored (broken syntax)")
                 else:
                     html_code = _coh_patched
                 _ep = (_ep + _coh_issues[:3])[-MAX_ERREURS_PASSEES:]
             else:
-                coordinateur_log.success("Cohérence check OK — jeu structurellement sain")
+                coordinateur_log.success("Coherence check OK — game is structurally sound")
 
         _lint_issues = agent_js_linter.run(html_code)
         if _lint_issues:
-            coordinateur_log.warning(f"A1 JS Linter : {len(_lint_issues)} problème(s) — pre-patch automatique")
+            coordinateur_log.warning(f"A1 JS Linter: {len(_lint_issues)} problem(s) — automatic pre-patch")
             _lint_patched = agent_pre_patcher.run(html_code, _lint_issues)
             _, _lint_broken = _js_check_quick(_lint_patched)
             if _lint_broken:
-                coordinateur_log.warning("A1 : lint pre-patch invalide — ignoré (syntaxe cassée)")
+                coordinateur_log.warning("A1: lint pre-patch invalid — ignored (broken syntax)")
             else:
                 html_code = _lint_patched
-                coordinateur_log.success(f"A1 : {len(_lint_issues)} issue(s) lint pré-corrigée(s) avant Phase 4")
+                coordinateur_log.success(f"A1: {len(_lint_issues)} lint issue(s) pre-fixed before Phase 4")
         else:
-            coordinateur_log.info("A1 JS Linter : aucun bug runtime détecté")
+            coordinateur_log.info("A1 JS Linter: no runtime bugs detected")
         return html_code, _ep
 
-    code, erreurs_passees = _post_generation_cleanup(code, erreurs_passees)
+    code, past_errors = _post_generation_cleanup(code, past_errors)
 
-    # E1 — Live preview : stocker le code généré pour /api/preview
+    # E1 — Live preview: store generated code for /api/preview
     try:
         from logger import store_code_preview
         store_code_preview(code)
     except Exception as e:
-        coordinateur_log.warning(f"Code preview non stocké : {e}")
+        coordinateur_log.warning(f"Code preview not stored: {e}")
 
-    # G2 : Cohérence technologie_rendu — si le code contient THREE mais genre_profile dit canvas2d
+    # G2: technologie_rendu consistency — if code contains THREE but genre_profile says canvas2d
     _code_has_three = 'THREE.' in code or 'new THREE.' in code
     if _code_has_three and genre_profile.technologie_rendu != "threejs":
-        coordinateur_log.warning("G2 : code Three.js détecté mais genre_profile.technologie_rendu=canvas2d — correction auto")
+        coordinateur_log.warning("G2: Three.js code detected but genre_profile.technologie_rendu=canvas2d — auto-correction")
         genre_profile.technologie_rendu = "threejs"
     elif not _code_has_three and genre_profile.technologie_rendu == "threejs":
-        coordinateur_log.warning("G2 : genre_profile dit threejs mais code sans THREE — correction vers canvas2d")
+        coordinateur_log.warning("G2: genre_profile says threejs but code has no THREE — correcting to canvas2d")
         genre_profile.technologie_rendu = "canvas2d"
 
     # ─────────────────────────────────────────────
-    # BOUCLE REACT (Phases 4 + 5)
+    # REACT LOOP (Phases 4 + 5)
     # ─────────────────────────────────────────────
     coordinateur_log.section("PHASES 4-5 — Evaluation & Iteration")
 
-    score_precedent = 0.0
+    previous_score = 0.0
     bundle = None
-    iterations_sans_progres = 0
+    stagnation_count = 0
 
     def _safe_result(r, name: str) -> EvaluationResult:
-        """Extrait un EvaluationResult depuis une valeur brute (dict ou objet)."""
+        """Extracts an EvaluationResult from a raw value (dict or object)."""
         if isinstance(r, EvaluationResult):
             return r
         if isinstance(r, dict):
-            # Certains agents retournent {"gameplay": EvaluationResult, ...}
+            # Some agents return {"gameplay": EvaluationResult, ...}
             for key in r:
                 if isinstance(r[key], EvaluationResult):
                     return r[key]
-        # B1 : score 1.5 (pas 5.0) — agent crashé → score bas visible, pas gonflé artificiellement
-        coordinateur_log.error(f"Agent '{name}' crashé ou retourne None — score fallback 1.5")
+        # B1: score 1.5 (not 5.0) — agent crashed → low visible score, not artificially inflated
+        coordinateur_log.error(f"Agent '{name}' crashed or returned None — fallback score 1.5")
         return EvaluationResult(agent_name=name, score=1.5,
                                 commentaire_global=f"Agent {name} non disponible (crash ou timeout)")
 
@@ -685,10 +685,10 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
         _check_stop()
         coordinateur_log.section(f"Iteration {iteration}/{_iters}")
 
-        # ── PHASE 4 : ÉVALUATION (5 agents en parallèle) ──
-        coordinateur_log.section("PHASE 4 — Evaluation multi-dimensionnelle")
+        # ── PHASE 4: EVALUATION (5 agents in parallel) ──
+        coordinateur_log.section("PHASE 4 — Multi-dimensional evaluation")
 
-        # I10 : max_workers=5 — tous les QC en parallèle (~30s au lieu de 90s)
+        # I10: max_workers=5 — all QC in parallel (~30s instead of 90s)
         p4 = _parallel([
             ("qc_technique", agent_qc_technique.run, [code, genre_profile]),
             ("qc_gameplay",  agent_qc_gameplay.run,  [code, genre_profile, context.gdd]),
@@ -697,7 +697,7 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
             ("playtester",   agent_playtester.run,    [code, genre_profile, context.gdd]),
         ], max_workers=5)
 
-        # qc_gameplay retourne {"gameplay": ..., "anti_pattern": ...}
+        # qc_gameplay returns {"gameplay": ..., "anti_pattern": ...}
         _gp_raw = p4.get("qc_gameplay", {})
         _gp_result = _gp_raw if isinstance(_gp_raw, dict) else {}
 
@@ -713,8 +713,8 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
         score = bundle.score_global()
         exec_score = bundle.execution.score
 
-        # C1 : seuils minimums par dimension — bloquer si non atteints
-        # (note : exec < 4.5 est toujours couvert ici car 4.5 < SCORE_MIN_EXECUTION=5.0)
+        # C1: minimum thresholds per dimension — block if not reached
+        # (note: exec < 4.5 is always covered here since 4.5 < SCORE_MIN_EXECUTION=5.0)
         _tech_score = bundle.qc_technique.score
         if exec_score < SCORE_MIN_EXECUTION or _tech_score < SCORE_MIN_TECHNIQUE:
             _blocking_reasons = []
@@ -722,30 +722,30 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
                 _blocking_reasons.append(f"execution={exec_score:.1f} < {SCORE_MIN_EXECUTION}")
             if _tech_score < SCORE_MIN_TECHNIQUE:
                 _blocking_reasons.append(f"technique={_tech_score:.1f} < {SCORE_MIN_TECHNIQUE}")
-            coordinateur_log.warning(f"C1 seuils non atteints : {', '.join(_blocking_reasons)} — score plafonné à 4.5")
+            coordinateur_log.warning(f"C1 thresholds not met: {', '.join(_blocking_reasons)} — score capped at 4.5")
             score = min(score, 4.5)
 
-        # E1 : régénération complète si execution < 4.0 dès la première itération
-        # (le patcher ne peut pas réparer un jeu architecturalement cassé)
+        # E1: full regeneration if execution < 4.0 on the first iteration
+        # (the patcher cannot repair an architecturally broken game)
         if iteration == 1 and exec_score < 4.0:
-            coordinateur_log.warning(f"E1 : execution={exec_score:.1f} < 4.0 — régénération complète avant patch")
+            coordinateur_log.warning(f"E1: execution={exec_score:.1f} < 4.0 — full regeneration before patch")
             _err_from_exec = [c.get("commentaire", "") for c in bundle.execution.criteres if c.get("score", 1) == 0]
-            erreurs_passees = list(erreurs_passees or []) + _err_from_exec[:3]
-            # Limiter erreurs_passees (I7)
-            erreurs_passees = erreurs_passees[-MAX_ERREURS_PASSEES:]
+            past_errors = list(past_errors or []) + _err_from_exec[:3]
+            # Limit past_errors (I7)
+            past_errors = past_errors[-MAX_ERREURS_PASSEES:]
             if not use_modular:
                 from agents.phase3._layer_gen import run_layered as _rl_e1
-                _regen_code = _rl_e1(context, patterns_reussis=patterns_reussis,
-                                     erreurs_passees=erreurs_passees, game_logics=game_logics,
+                _regen_code = _rl_e1(context, patterns_reussis=successful_patterns,
+                                     erreurs_passees=past_errors, game_logics=game_logics,
                                      level_design=level_design)
                 if _regen_code and len(_regen_code) >= CODE_MIN_VIABLE:
                     code = _regen_code
-                    coordinateur_log.success(f"E1 régénération terminée : {len(code)} chars")
-                    # K4 — appliquer coherence+linter sur le code E1 (bypasse la boucle principale)
-                    code, erreurs_passees = _post_generation_cleanup(code, erreurs_passees)
-                    continue  # relancer Phase 4 avec le nouveau code
+                    coordinateur_log.success(f"E1 regeneration complete: {len(code)} chars")
+                    # K4 — apply coherence+linter on E1 code (bypasses main loop)
+                    code, past_errors = _post_generation_cleanup(code, past_errors)
+                    continue  # restart Phase 4 with the new code
 
-        # Log des scores
+        # Log scores
         coordinateur_log.score("Score global", score)
         coordinateur_log.score("Technique",    bundle.qc_technique.score)
         coordinateur_log.score("Gameplay",     bundle.qc_gameplay.score)
@@ -757,10 +757,10 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
         push_event("score", {"label": "Score global", "value": round(score, 2)})
         push_event("score", {"label": "Execution",    "value": round(exec_score, 2)})
 
-        # A2 — Auto-fix réactif : extraire les "X is not defined" des erreurs Playwright
-        # et injecter var X = <default>; pour débloquer la prochaine itération.
-        # _a2_fixed_vars persiste jusqu'à la construction de all_issues_str
-        # pour que le Diagnosticien ne reçoive pas les issues déjà corrigées.
+        # A2 — Reactive auto-fix: extract "X is not defined" from Playwright errors
+        # and inject var X = <default>; to unblock the next iteration.
+        # _a2_fixed_vars persists until all_issues_str is built
+        # so the Diagnostician does not receive already-fixed issues.
         _a2_fixed_vars = set()
         if exec_score < SCORE_MIN_EXECUTION and iteration < _iters:
             _exec_criteres = bundle.execution.criteres if bundle.execution else []
@@ -775,46 +775,46 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
                 if _a2_fixed:
                     _a2_fixed_vars = _undef_vars
                     coordinateur_log.success(
-                        f"A2 auto-fix {len(_undef_vars)} var(s) undef post-Playwright : "
+                        f"A2 auto-fix {len(_undef_vars)} undef var(s) post-Playwright: "
                         f"{', '.join(sorted(_undef_vars)[:6])}"
                     )
-                    iterations_sans_progres = max(0, iterations_sans_progres - 1)
+                    stagnation_count = max(0, stagnation_count - 1)
 
-        # Sortie anticipée si score excellent
+        # Early exit if score is excellent
         if score >= SCORE_SORTIE_ANTICIPEE:
-            coordinateur_log.success(f"Score {score:.2f} >= {SCORE_SORTIE_ANTICIPEE} -> sortie anticipee")
+            coordinateur_log.success(f"Score {score:.2f} >= {SCORE_SORTIE_ANTICIPEE} -> early exit")
             break
 
-        # Stagnation ?
-        delta = score - score_precedent
+        # Stagnation?
+        delta = score - previous_score
         if iteration > 1:
             if delta < SCORE_STAGNATION_DELTA:
-                iterations_sans_progres += 1
-                coordinateur_log.warning(f"Stagnation ({delta:+.2f}) [{iterations_sans_progres}]")
-                if iterations_sans_progres >= MAX_ITERATIONS_SANS_PROGRES:
-                    coordinateur_log.warning("Stagnation persistante -> arret des iterations")
+                stagnation_count += 1
+                coordinateur_log.warning(f"Stagnation ({delta:+.2f}) [{stagnation_count}]")
+                if stagnation_count >= MAX_ITERATIONS_SANS_PROGRES:
+                    coordinateur_log.warning("Persistent stagnation -> stopping iterations")
                     break
             else:
-                iterations_sans_progres = 0
-        score_precedent = score
+                stagnation_count = 0
+        previous_score = score
 
-        # E4 : économie quota — passes 3+ uniquement si score < 7.0 après 2 passes
+        # E4: quota savings — passes 3+ only if score < 7.0 after 2 passes
         if iteration >= 2 and score >= SCORE_SEUIL_ITERATIONS_SUP:
-            coordinateur_log.info(f"E4 : score {score:.2f} >= {SCORE_SEUIL_ITERATIONS_SUP} après {iteration} passes — arrêt")
+            coordinateur_log.info(f"E4: score {score:.2f} >= {SCORE_SEUIL_ITERATIONS_SUP} after {iteration} passes — stopping")
             break
 
-        # Dernière itération → pas de patch
+        # Last iteration → no new patch
         if iteration == _iters:
-            coordinateur_log.info("Derniere iteration — pas de nouveau patch")
+            coordinateur_log.info("Last iteration — no new patch")
             break
 
-        # ── PHASE 5 : PATCH ──
+        # ── PHASE 5: PATCH ──
         coordinateur_log.section(f"PHASE 5 — Patch iteration {iteration}")
 
         all_issues = bundle.all_issues()
-        # Ne passer au pre-patcher que les issues critique + majeur.
-        # Les issues mineures ne valent pas un appel LLM — elles sont ignorées ici
-        # (elles restent visibles dans le diagnostic pour le patcher principal).
+        # Only pass critical + major issues to the pre-patcher.
+        # Minor issues are not worth an LLM call — they are ignored here
+        # (they remain visible in the diagnostic for the main patcher).
         _issues_for_prepatch = [
             i for i in all_issues
             if (i.get("severite", "mineur") if isinstance(i, dict) else "mineur") in ("critique", "majeur")
@@ -822,17 +822,17 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
         _issues_mineurs_count = len(all_issues) - len(_issues_for_prepatch)
         if _issues_mineurs_count:
             coordinateur_log.info(
-                f"Pre-patcher : {_issues_mineurs_count} issue(s) mineure(s) ignorées "
-                f"(garde {len(_issues_for_prepatch)} critique+majeur)"
+                f"Pre-patcher: {_issues_mineurs_count} minor issue(s) ignored "
+                f"(keeping {len(_issues_for_prepatch)} critical+major)"
             )
-        # B4 : déduplication all_issues_str — même issue ne doit pas être traitée deux fois
+        # B4: all_issues_str deduplication — same issue must not be handled twice
         all_issues_str = list(dict.fromkeys(
             i.get("description", str(i)) if isinstance(i, dict) else str(i)
             for i in _issues_for_prepatch
         ))
 
-        # A2-filter : exclure du Diagnosticien les issues déjà corrigées par A2 (variables injectées)
-        # Evite que le Patcher réécrive drawBackground pour "corriger" gridSize déjà déclaré par A2
+        # A2-filter: exclude from Diagnostician issues already fixed by A2 (injected variables)
+        # Prevents the Patcher from rewriting drawBackground to "fix" gridSize already declared by A2
         if _a2_fixed_vars:
             _before_filter = len(all_issues_str)
             all_issues_str = [
@@ -845,11 +845,11 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
             _filtered_count = _before_filter - len(all_issues_str)
             if _filtered_count:
                 coordinateur_log.info(
-                    f"[A2-filter] {_filtered_count} issue(s) exclues du Diagnosticien "
-                    f"(déjà corrigées : {', '.join(sorted(_a2_fixed_vars)[:4])})"
+                    f"[A2-filter] {_filtered_count} issue(s) excluded from Diagnostician "
+                    f"(already fixed: {', '.join(sorted(_a2_fixed_vars)[:4])})"
                 )
 
-        # B5 : règles déterministes en premier — résolvent 30-40% des issues sans LLM
+        # B5: deterministic rules first — resolve 30-40% of issues without LLM
         try:
             from agents.phase5._auto_fix_rules import apply_all_rules as _auto_rules
             from agents.phase3._layer_gen import _extract_js_from_html as _b5_extract
@@ -862,67 +862,67 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
                     lambda m: m.group(1) + _js_after_rules + m.group(3),
                     code, flags=_re_b5.DOTALL
                 )
-                coordinateur_log.info(f"B5 auto-fix pré-LLM : {len(_rules_applied)} règle(s) — {', '.join(_rules_applied[:3])}")
+                coordinateur_log.info(f"B5 pre-LLM auto-fix: {len(_rules_applied)} rule(s) — {', '.join(_rules_applied[:3])}")
         except Exception as _e_b5:
-            coordinateur_log.warning(f"B5 auto-fix non critique : {_e_b5}")
+            coordinateur_log.warning(f"B5 auto-fix non-critical: {_e_b5}")
 
-        # Pré-patcher LLM : corrections sur les issues restantes
-        # Sauvegarder AVANT pre_patcher — rollback ici si patcher échoue (pas post-pre_patch)
+        # LLM pre-patcher: corrections on remaining issues
+        # Save BEFORE pre_patcher — rollback here if patcher fails (not post-pre_patch)
         code_before_prepatch = code
         code_prepatch = agent_pre_patcher.run(code, all_issues_str)
-        # Valider que le pre_patcher n'a pas introduit de syntaxe cassée
+        # Validate that the pre_patcher has not introduced broken syntax
         _prepatch_issues, _prepatch_broken = _js_check_quick(code_prepatch)
         if _prepatch_broken:
-            coordinateur_log.warning("Pre-patcher output invalide — pre_patch ignoré (syntaxe cassée)")
+            coordinateur_log.warning("Pre-patcher output invalid — pre_patch ignored (broken syntax)")
             code_prepatch = code_before_prepatch
         code = code_prepatch
 
-        # Diagnosticien → plan de corrections
+        # Diagnostician → correction plan
         diagnostic = agent_diagnosticien.run(
             code, genre_profile, bundle, iteration,
-            corrections_deja_tentees=erreurs_passees,
+            corrections_deja_tentees=past_errors,
         )
 
-        # Si diagnosticien n'a rien trouvé (fallback ou API failure), ne pas patcher
+        # If diagnostician found nothing useful (fallback or API failure), skip patching
         _diag_corrections = diagnostic.get("corrections_prioritaires", []) if diagnostic else []
         _diag_indispo = "indisponible" in diagnostic.get("probleme_principal", "").lower() if diagnostic else True
         if not _diag_corrections or _diag_indispo:
-            coordinateur_log.warning("Diagnosticien sans corrections utiles — patch ignoré pour préserver le code")
-            code_patche = None
+            coordinateur_log.warning("Diagnostician has no useful corrections — patch skipped to preserve code")
+            patched_code = None
         else:
-            # Patcher : corrections LLM ciblées
-            code_patche = agent_patcher.run(code, diagnostic, genre_profile, iteration)
+            # Patcher: targeted LLM corrections
+            patched_code = agent_patcher.run(code, diagnostic, genre_profile, iteration)
 
-        if code_patche and len(code_patche) >= CODE_MIN_VIABLE:
-            # Vérification rapide : le patch ne doit pas introduire de syntax error
-            _patch_issues, _patch_broken = _js_check_quick(code_patche)
+        if patched_code and len(patched_code) >= CODE_MIN_VIABLE:
+            # Quick check: the patch must not introduce a syntax error
+            _patch_issues, _patch_broken = _js_check_quick(patched_code)
             if _patch_broken:
-                coordinateur_log.warning("Patch rejeté — syntaxe invalide (rollback vers code PRÉ-pre_patcher)")
-                code = code_before_prepatch  # rollback complet, pas post-pre_patch
+                coordinateur_log.warning("Patch rejected — invalid syntax (rollback to PRE-pre_patcher code)")
+                code = code_before_prepatch  # full rollback, not post-pre_patch
             else:
-                code = code_patche
-                coordinateur_log.success(f"Code patche : {len(code)} caracteres")
-                # H3 — Marquer les issues patchées comme corrigées dans le tracker Q13
+                code = patched_code
+                coordinateur_log.success(f"Patched code: {len(code)} characters")
+                # H3 — Mark patched issues as fixed in the Q13 tracker
                 for _pi in _issues_for_prepatch:
                     _mark_error_fixed(_pi.get("description", "") if isinstance(_pi, dict) else str(_pi))
-                # P4 — Re-run pre-patcher après agent_patcher
-                # agent_patcher (LLM sur tout le code) peut introduire de nouvelles erreurs syntaxiques
+                # P4 — Re-run pre-patcher after agent_patcher
+                # agent_patcher (LLM over the full code) can introduce new syntax errors
                 _p4_issues, _p4_broken = _js_check_quick(code)
                 if not _p4_broken and _p4_issues:
-                    coordinateur_log.info(f"P4 : {len(_p4_issues)} issue(s) post-patch — re-run pre-patcher")
+                    coordinateur_log.info(f"P4: {len(_p4_issues)} post-patch issue(s) — re-run pre-patcher")
                     _p4_patched = agent_pre_patcher.run(code, _p4_issues)
                     _p4_recheck, _p4_rebroken = _js_check_quick(_p4_patched)
                     if not _p4_rebroken:
                         code = _p4_patched
-                        coordinateur_log.info("P4 : pre-patcher post-patch OK")
-                # P4b — ESLint no-undef post-patcher : attrape les variables non déclarées
-                # introduites par le Patcher LLM, avant que Phase 4 ne les voit
+                        coordinateur_log.info("P4: post-patch pre-patcher OK")
+                # P4b — ESLint no-undef post-patcher: catches undeclared variables
+                # introduced by the LLM Patcher, before Phase 4 sees them
                 from js_syntax_checker import fix_all_auto as _fix_all_post_patch
                 code, _p4b_fixed, _p4b_descs = _fix_all_post_patch(code)
                 if _p4b_fixed:
-                    coordinateur_log.success(f"P4b post-patch auto-fix : {len(_p4b_descs)} correction(s)")
+                    coordinateur_log.success(f"P4b post-patch auto-fix: {len(_p4b_descs)} correction(s)")
         else:
-            # C — Patch ciblé par type d'erreur avant de régénérer entièrement
+            # C — Targeted patch by error type before full regeneration
             issue_descs = [
                 i.get("description", str(i)) if isinstance(i, dict) else str(i)
                 for i in all_issues[:8]
@@ -936,72 +936,72 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
                 any(kw in d.lower() for kw in _render_keywords) for d in issue_descs
             )
 
-            # Q13 — Enregistrer les erreurs avec tracking fixed/récurrent
+            # Q13 — Record errors with fixed/recurring tracking
             for _ed in issue_descs[:5]:
                 _record_error(_ed, iteration)
-            # Construire erreurs_passees enrichies avec préfixes [RÉCURRENT] / [CORRIGÉ]
+            # Build enriched past_errors with [RECURRING] / [FIXED] prefixes
             _enriched = []
             for _info in list(_erreurs_tracker.values())[-15:]:
                 _prefix = "[CORRIGÉ] " if _info['fixed'] else (f"[RÉCURRENT x{_info['count']}] " if _info['count'] > 1 else "")
                 _enriched.append(_prefix + _info['msg'])
-            erreurs_passees = _enriched
-            # I7 : limiter erreurs_passees à 20 max pour éviter pollution des prompts
-            erreurs_passees = erreurs_passees[-MAX_ERREURS_PASSEES:]
+            past_errors = _enriched
+            # I7: limit past_errors to 20 max to avoid prompt pollution
+            past_errors = past_errors[-MAX_ERREURS_PASSEES:]
 
             if not use_modular:
                 from agents.phase3._layer_gen import run_layered as _rl
                 if has_logic_errors and not has_render_errors:
-                    # Erreurs logiques → hint ciblé L2 dans les erreurs
-                    coordinateur_log.warning("Patch insuffisant — regeneration ciblee (erreurs logique L2)")
-                    erreurs_passees.append("[L2-CIBLE] Regenère la logique avec ces corrections : " + "; ".join(issue_descs[:3]))
+                    # Logic errors → targeted L2 hint in the errors
+                    coordinateur_log.warning("Patch insufficient — targeted regeneration (L2 logic errors)")
+                    past_errors.append("[L2-CIBLE] Regenère la logique avec ces corrections : " + "; ".join(issue_descs[:3]))
                     import memory as _mem
-                    _mem.save_layer_errors(genre_jeu, 2, issue_descs[:3])
+                    _mem.save_layer_errors(game_genre, 2, issue_descs[:3])
                 else:
-                    coordinateur_log.warning("Patch insuffisant — regeneration complete layered")
-                nouveau_code = _rl(
+                    coordinateur_log.warning("Patch insufficient — full layered regeneration")
+                new_code = _rl(
                     context,
-                    patterns_reussis=patterns_reussis,
-                    erreurs_passees=erreurs_passees,
+                    patterns_reussis=successful_patterns,
+                    erreurs_passees=past_errors,
                     game_logics=game_logics,
                     level_design=level_design,
                 )
-                if nouveau_code and len(nouveau_code) >= CODE_MIN_VIABLE:
-                    code = nouveau_code
-                    coordinateur_log.success(f"Regeneration layered : {len(code)} caracteres")
-                    code, erreurs_passees = _post_generation_cleanup(code, erreurs_passees)
+                if new_code and len(new_code) >= CODE_MIN_VIABLE:
+                    code = new_code
+                    coordinateur_log.success(f"Layered regeneration: {len(code)} characters")
+                    code, past_errors = _post_generation_cleanup(code, past_errors)
 
     # ─────────────────────────────────────────────
     # PHASE 5 : FINALISATION
     # ─────────────────────────────────────────────
     coordinateur_log.section("PHASE 5 — Finalisation")
 
-    duree = time.time() - start_time
-    exec_score_final = bundle.execution.score if bundle else 0.0
-    all_issues_final = bundle.all_issues() if bundle else []
+    duration = time.time() - start_time
+    final_exec_score = bundle.execution.score if bundle else 0.0
+    final_issues = bundle.all_issues() if bundle else []
 
-    # Verdict final — doit tourner avant score_final pour que bundle.benchmark soit peuplé
-    verdict_full = agent_verdict_final.run(genre_profile, context.gdd, bundle) if bundle else {}
-    # verdict_full = {"evaluation": EvaluationResult, "verdict": dict}
-    if bundle and verdict_full:
-        bundle.benchmark = verdict_full.get("evaluation", bundle.benchmark)
-    verdict = verdict_full.get("verdict", {}) if verdict_full else {}
+    # Verdict final — must run before final_score so that bundle.benchmark is populated
+    full_verdict = agent_verdict_final.run(genre_profile, context.gdd, bundle) if bundle else {}
+    # full_verdict = {"evaluation": EvaluationResult, "verdict": dict}
+    if bundle and full_verdict:
+        bundle.benchmark = full_verdict.get("evaluation", bundle.benchmark)
+    verdict = full_verdict.get("verdict", {}) if full_verdict else {}
 
-    # H1 — score_final calculé APRÈS injection benchmark (sinon benchmark=0 → score sous-estimé)
-    score_final = bundle.score_global() if bundle else 0.0
-    approuve = score_final >= SCORE_SEUIL_SAUVEGARDE
+    # H1 — final_score computed AFTER benchmark injection (otherwise benchmark=0 → underestimated score)
+    final_score = bundle.score_global() if bundle else 0.0
+    approved = final_score >= SCORE_SEUIL_SAUVEGARDE
 
     # C2 : Veto si le verdict final déclare le jeu "non jouable" ou "ne se lance pas"
     _veto_kws = ["non jouable", "injouable", "ne se lance pas", "écran noir", "crash au démarrage",
                  "unplayable", "black screen", "doesn't launch", "does not launch", "broken game", "crashes on"]
     _vd_text = ((verdict.get("justification", "") or "") + " " + (verdict.get("recommandation", "") or "")).lower()
-    if approuve and any(kw in _vd_text for kw in _veto_kws):
-        approuve = False
+    if approved and any(kw in _vd_text for kw in _veto_kws):
+        approved = False
         coordinateur_log.warning("C2 : veto agent neutre — jeu déclaré non jouable malgré score suffisant")
 
-    coordinateur_log.info(f"Score final : {score_final:.2f} | Approuve : {approuve}")
+    coordinateur_log.info(f"Final score: {final_score:.2f} | Approved: {approved}")
 
-    # 5 — Extraire et mémoriser les snippets des jeux très réussis
-    if score_final >= 8.0 and not use_modular:
+    # 5 — Extract and memorize snippets from highly successful games
+    if final_score >= 8.0 and not use_modular:
         try:
             import re as _re
             js_match = _re.search(r'<script[^>]*>(.*?)</script>', code, _re.DOTALL)
@@ -1027,66 +1027,66 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
                     snippets.append(js_body[start:end])
                 if snippets:
                     combined = '\n\n'.join(snippets[:3])[:3000]
-                    memory.save_pattern(genre_profile, score_final, combined, notes="auto-extrait score>=8")
+                    memory.save_pattern(genre_profile, final_score, combined, notes="auto-extrait score>=8")
                     coordinateur_log.success(f"Snippet réussi mémorisé ({len(snippets)} fonctions extraites)")
         except Exception as e:
             coordinateur_log.warning(f"Extraction snippet non critique : {e}")
 
-    # Export log d'échec si exec < 4.5 (problème d'exécution)
-    if exec_score_final < 4.5:
+    # Export failure log if exec < 4.5 (execution problem)
+    if final_exec_score < 4.5:
         _export_failure_log(
-            genre=genre_jeu,
-            titre=titre_jeu,
-            score=score_final,
-            exec_score=exec_score_final,
-            issues=all_issues_final,
+            genre=game_genre,
+            titre=game_title,
+            score=final_score,
+            exec_score=final_exec_score,
+            issues=final_issues,
             label="exec_failure",
         )
 
-    # Sauvegarder
+    # Save
     log_content = "\n".join(get_session_log())
     html_path = ""
-    if score_final >= SCORE_MIN_VIABLE_SAVE:
+    if final_score >= SCORE_MIN_VIABLE_SAVE:
         html_path = agent_sauvegarde.run(
             code=code,
             genre_profile=genre_profile,
             gdd=context.gdd,
             bundle=bundle,
             verdict=verdict,
-            duree_secondes=duree,
+            duree_secondes=duration,
             log_content=log_content,
-            approuve=approuve,
+            approuve=approved,
         )
         if html_path:
-            coordinateur_log.success(f"Jeu sauvegarde : {html_path}")
+            coordinateur_log.success(f"Game saved: {html_path}")
             html_basename = os.path.basename(html_path)
         else:
             html_basename = ""
     else:
-        coordinateur_log.warning(f"Score {score_final:.2f} < {SCORE_MIN_VIABLE_SAVE} — jeu non sauvegarde")
+        coordinateur_log.warning(f"Score {final_score:.2f} < {SCORE_MIN_VIABLE_SAVE} — game not saved")
         html_basename = ""
 
-    # Auto-learner (asynchrone)
+    # Auto-learner (async)
     try:
         agent_auto_learner.run(
             html=code,
-            score=score_final,
-            approuve=approuve,
-            genre=genre_jeu,
-            titre=titre_jeu,
+            score=final_score,
+            approuve=approved,
+            genre=game_genre,
+            titre=game_title,
             logs=log_content,
         )
     except Exception as e:
-        coordinateur_log.warning(f"Auto-learner non critique : {e}")
+        coordinateur_log.warning(f"Auto-learner non-critical: {e}")
 
     push_event("complete", {
-        "score": round(score_final, 2),
-        "approuve": approuve,
+        "score": round(final_score, 2),
+        "approuve": approved,
         "html_basename": html_basename,
-        "titre": titre_jeu,
+        "titre": game_title,
     })
 
-    coordinateur_log.section(f"Termine en {duree:.1f}s — Score : {score_final:.2f}/10")
+    coordinateur_log.section(f"Done in {duration:.1f}s — Score: {final_score:.2f}/10")
 
     return {
         "genre_profile": genre_profile,
@@ -1094,24 +1094,24 @@ def run(prompt_utilisateur: str, style_graphique: str = "", stop_event=None,
         "code": code,
         "bundle": bundle,
         "verdict": verdict,
-        "score": score_final,
-        "approuve": approuve,
+        "score": final_score,
+        "approved": approved,
         "html_path": html_path,
         "html_basename": html_basename,
-        "duree": duree,
+        "duration": duration,
     }
 
 
-def run_quick(prompt_utilisateur: str, style_graphique: str = "", stop_event=None) -> dict:
+def run_quick(user_prompt: str, style_graphique: str = "", stop_event=None) -> dict:
     """
-    Pipeline allégée : Phase 1 + 2 + 3 complètes + Phase 4 une seule passe,
-    sans boucle diagnosticien/patcher. Retourne le même format que run().
-    Clé 'duree_secondes' incluse pour compatibilité avec /api/quick-generate.
+    Lightweight pipeline: Phase 1 + 2 + 3 complete + Phase 4 single pass,
+    no diagnostician/patcher loop. Returns the same format as run().
+    Key 'duree_secondes' included for compatibility with /api/quick-generate.
     """
-    result = run(prompt_utilisateur, style_graphique=style_graphique,
+    result = run(user_prompt, style_graphique=style_graphique,
                  stop_event=stop_event, _max_iterations=1)
-    if "duree" in result and "duree_secondes" not in result:
-        result["duree_secondes"] = result["duree"]
+    if "duration" in result and "duree_secondes" not in result:
+        result["duree_secondes"] = result["duration"]
     return result
 
 
@@ -1122,17 +1122,17 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         prompt = " ".join(sys.argv[1:])
     else:
-        prompt = input("Prompt : ").strip()
+        prompt = input("Prompt: ").strip()
         if not prompt:
-            print("Prompt vide — arret.")
+            print("Empty prompt — aborting.")
             sys.exit(1)
 
-    resultat = run(prompt)
-    if resultat.get("erreur"):
-        print(f"\nErreur : {resultat['erreur']}")
+    result = run(prompt)
+    if result.get("erreur"):
+        print(f"\nError: {result['erreur']}")
         sys.exit(1)
 
-    print(f"\nScore final : {resultat['score']:.2f}/10")
-    print(f"Approuve    : {resultat['approuve']}")
-    if resultat.get("html_path"):
-        print(f"Fichier     : {resultat['html_path']}")
+    print(f"\nFinal score: {result['score']:.2f}/10")
+    print(f"Approved    : {result['approved']}")
+    if result.get("html_path"):
+        print(f"File        : {result['html_path']}")

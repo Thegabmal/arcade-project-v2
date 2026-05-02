@@ -1,12 +1,12 @@
 """
-_auto_fix_rules.py — Bibliothèque de correctifs programmatiques déterministes (P6).
+_auto_fix_rules.py — Library of deterministic programmatic fixes (P6).
 
-Chaque règle est une fonction (script: str) -> tuple[str, str | None]
-  - retourne (script_corrigé, description) si une correction a été appliquée
-  - retourne (script_original, None) si rien à faire
+Each rule is a function (script: str) -> tuple[str, str | None]
+  - returns (fixed_script, description) if a correction was applied
+  - returns (original_script, None) if nothing to do
 
-Toutes les règles sont sans LLM — purement regex/AST-léger.
-Elles couvrent les patterns récurrents qui n't besoin pas d'intelligence pour être corrigés.
+All rules are LLM-free — purely regex/lightweight-AST.
+They cover recurring patterns that don't need intelligence to fix.
 """
 
 import re

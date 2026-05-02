@@ -6,28 +6,28 @@ import threading
 from typing import Optional
 
 # ─────────────────────────────────────────────
-# QUEUE SSE — thread-local pour le streaming Flask
+# SSE QUEUE — thread-local for Flask streaming
 # ─────────────────────────────────────────────
 _thread_local = threading.local()
 
 
 def set_thread_event_queue(q):
-    """Associe une queue d'événements SSE au thread courant."""
+    """Associate an SSE event queue with the current thread."""
     _thread_local.event_queue = q
 
 
 def clear_thread_event_queue():
-    """Désassocie la queue du thread courant."""
+    """Disassociate the SSE queue from the current thread."""
     _thread_local.event_queue = None
 
 
 def get_thread_event_queue():
-    """Retourne la queue SSE du thread courant (pour propagation aux sous-threads)."""
+    """Return the SSE queue of the current thread (for propagation to sub-threads)."""
     return getattr(_thread_local, "event_queue", None)
 
 
 def _push_event(event_type: str, data: dict):
-    """Envoie un événement dans la queue SSE du thread courant (si définie)."""
+    """Push an event into the SSE queue of the current thread (if set)."""
     q = getattr(_thread_local, "event_queue", None)
     if q is not None:
         try:
@@ -35,7 +35,7 @@ def _push_event(event_type: str, data: dict):
         except Exception:
             pass
 
-# Forcer UTF-8 sur Windows
+# Force UTF-8 on Windows
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 if sys.stderr.encoding != 'utf-8':
@@ -45,13 +45,13 @@ LOG_FILE = "session_log.txt"
 
 
 def push_event(event_type: str, data: dict):
-    """Pousse un événement SSE depuis n'importe quel contexte (accès direct)."""
+    """Push an SSE event from any context (direct access)."""
     _push_event(event_type, data)
 
 
 # ─────────────────────────────────────────────
-# PREVIEW CODE — stockage global par session_id
-# Accessible depuis n'importe quel thread (route Flask incluse)
+# PREVIEW CODE — global storage by session_id
+# Accessible from any thread (including Flask routes)
 # ─────────────────────────────────────────────
 
 _preview_store: dict[str, str] = {}      # session_id → html
@@ -59,12 +59,12 @@ _preview_store_lock = threading.Lock()
 
 
 def set_preview_session_id(session_id: str):
-    """Associe le thread courant à une session_id pour le stockage preview."""
+    """Associate the current thread with a session_id for preview storage."""
     _thread_local.preview_session_id = session_id
 
 
 def store_code_preview(html: str):
-    """Stocke le code HTML généré en Phase 3 pour le live preview."""
+    """Store the HTML code generated in Phase 3 for live preview."""
     _thread_local.preview_code = html  # backward compat
     sid = getattr(_thread_local, "preview_session_id", None)
     if sid:
@@ -73,18 +73,18 @@ def store_code_preview(html: str):
 
 
 def get_code_preview() -> str | None:
-    """Retourne le code HTML prévisualisable du thread courant (backward compat)."""
+    """Return the previewable HTML code for the current thread (backward compat)."""
     return getattr(_thread_local, "preview_code", None)
 
 
 def get_preview_by_session(session_id: str) -> str | None:
-    """Retourne le preview d'une session depuis n'importe quel thread."""
+    """Return the preview for a session from any thread."""
     with _preview_store_lock:
         return _preview_store.get(session_id)
 
 
 def clear_code_preview():
-    """Efface le code de preview du thread courant et du store global."""
+    """Clear the preview code for the current thread and the global store."""
     _thread_local.preview_code = None
     sid = getattr(_thread_local, "preview_session_id", None)
     if sid:
@@ -142,11 +142,11 @@ def _write_log(level: str, phase: str, message: str):
 
 
 def get_session_log() -> str:
-    """Retourne le log accumulé pour la session courante."""
+    """Return the log accumulated for the current session."""
     buf = getattr(_thread_local, "log_buffer", None)
     if buf is not None:
         return "".join(buf)
-    # Fallback : lire le fichier
+    # Fallback: read the file
     try:
         with open(LOG_FILE, "r", encoding="utf-8") as f:
             return f.read()
@@ -217,7 +217,7 @@ class Logger:
         _push_event("agent_done", {"agent": agent_name, "phase": self.phase, "result": result_summary})
 
 
-# Loggers par phase
+# Phase loggers
 coordinateur_log = Logger("COORDINATEUR")
 phase1_log = Logger("PHASE1")
 phase2_log = Logger("PHASE2")
@@ -228,15 +228,15 @@ support_log = Logger("SUPPORT")
 
 
 def init_session():
-    """Initialise le fichier de log pour la session.
-    Append au fichier existant (ne pas écraser les runs précédents).
+    """Initialize the log file for the session.
+    Appends to the existing file (does not overwrite previous runs).
     """
     _thread_local.log_buffer = []
     header = (
         f"\n{'='*70}\n"
-        f"SESSION DÉMARRÉE : {datetime.datetime.now().isoformat()}\n"
+        f"SESSION STARTED: {datetime.datetime.now().isoformat()}\n"
         f"{'='*70}\n"
     )
-    with open(LOG_FILE, "a", encoding="utf-8") as f:  # "a" = append, pas "w"
+    with open(LOG_FILE, "a", encoding="utf-8") as f:  # "a" = append, not "w"
         f.write(header)
     _thread_local.log_buffer.append(header)

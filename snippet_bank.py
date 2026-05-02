@@ -1,7 +1,7 @@
 """
-Snippet Bank — extrait et stocke les implémentations validées des jeux high-score.
-Fournit des exemples de code JS réels au créateur pour réduire les hallucinations
-sur les patterns complexes (collisions, physique, génération de niveaux, etc.)
+Snippet Bank — extracts and stores validated implementations from high-score games.
+Provides real JS code examples to the creator to reduce hallucinations
+on complex patterns (collisions, physics, level generation, etc.)
 
 Stockage : snippet_bank.json
   {

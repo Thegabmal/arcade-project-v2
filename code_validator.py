@@ -1,12 +1,12 @@
 """
-Code Validator — validation et corrections automatiques sans LLM.
-Applique des correctifs programmatiques sur le code JS généré.
+Code Validator — automatic validation and fixes without LLM.
+Applies programmatic corrections to the generated JS code.
 
-API publique :
+Public API:
     validate_and_fix(html: str) -> tuple[str, list[str], bool]
-        - html_fixé : HTML avec corrections appliquées
-        - issues    : liste de "[AUTO-FIX] ..." et "CRITIQUE: ..." strings
-        - has_critical : True si des problèmes critiques persistent
+        - fixed_html    : HTML with applied corrections
+        - issues        : list of "[AUTO-FIX] ..." and "CRITICAL: ..." strings
+        - has_critical  : True if critical issues remain
 """
 
 import re

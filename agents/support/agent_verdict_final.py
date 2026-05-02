@@ -1,13 +1,13 @@
 """
-Agent Verdict Final — Support
-Fusion de agent_benchmark + agent_neutre en un seul appel.
+Final Verdict Agent — Support
+Merges agent_benchmark + agent_neutre into a single call.
 
-Combine :
-  - La comparaison aux standards du genre (benchmark)
-  - Le verdict d'approbation final (neutre)
+Combines:
+  - Comparison against genre standards (benchmark)
+  - Final approval verdict (neutral)
 
-Avantage : un seul appel au lieu de deux, verdict cohérent sans contradiction possible
-entre le benchmark et le neutre (qui parfois se contredisaient).
+Advantage: one call instead of two, coherent verdict without possible contradiction
+between the benchmark and the neutral agent (which sometimes disagreed).
 
 Retourne {"evaluation": EvaluationResult, "verdict": dict}
 - evaluation : EvaluationResult pour bundle.benchmark (score de comparaison genre)

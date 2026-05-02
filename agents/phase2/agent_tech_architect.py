@@ -1,8 +1,8 @@
 """
 Agent Tech Architect — Phase 2
-Définit l'architecture technique du jeu :
-physique, rendu, state management, inputs, optimisations.
-Adapte les choix techniques au genre et à la complexité du jeu.
+Defines the technical architecture of the game:
+physics, rendering, state management, inputs, optimizations.
+Adapts technical choices to the genre and complexity of the game.
 """
 
 import json

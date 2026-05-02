@@ -1,6 +1,6 @@
 """
-Agent Enrichisseur Code — Phase 3 (enrichissement progressif)
-Prend un jeu HTML5 existant et y ajoute des systèmes en profondeur via JSON patches.
+Code Enricher Agent — Phase 3 (progressive enrichment)
+Takes an existing HTML5 game and adds depth systems via JSON patches.
 
 Passe 2 : systèmes de profondeur (boss phases, quêtes, shop, power-ups, inventaire)
 Passe 3 : polish visuel (particules avancées, WebAudio, animations, secrets)

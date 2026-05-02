@@ -1,10 +1,10 @@
 """
 JS Syntax Checker — Node.js based
-Utilise `node --check` pour détecter les erreurs de syntaxe JS précises
-(Unexpected token, SyntaxError, etc.) avec numéro de ligne exact.
+Uses `node --check` to detect precise JS syntax errors
+(Unexpected token, SyntaxError, etc.) with exact line numbers.
 
-Avantage sur les regex : un vrai parseur JS, 100% fiable sur les virgules
-manquantes, accolades déséquilibrées, template literals mal fermés, etc.
+Advantage over regex: a real JS parser, 100% reliable on missing commas,
+unbalanced braces, unclosed template literals, etc.
 """
 
 import re

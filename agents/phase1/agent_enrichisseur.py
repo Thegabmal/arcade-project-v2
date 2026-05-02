@@ -1,10 +1,10 @@
 """
-Agent Enrichisseur — Phase 1
-Combine la classification et la recherche pour produire :
-- Un GenreProfile complet avec critères d'évaluation adaptatifs
-- Un prompt ultra-détaillé pour le Game Designer
-- Un prompt technique pour le Créateur
-C'est l'agent le plus important de la Phase 1.
+Enricher Agent — Phase 1
+Combines classification and research to produce:
+- A complete GenreProfile with adaptive evaluation criteria
+- An ultra-detailed prompt for the Game Designer
+- A technical prompt for the Creator
+This is the most important agent in Phase 1.
 """
 
 import json

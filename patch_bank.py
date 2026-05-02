@@ -1,8 +1,8 @@
 """
-patch_bank.py — Banque de corrections validées inter-jeux.
+patch_bank.py — Bank of validated cross-game corrections.
 
-Stocke les patches qui ont passé le guard exec (score non régressé) pour les réutiliser
-sur les prochains jeux sans repasser par le LLM.
+Stores patches that passed the exec guard (score not regressed) to reuse them
+on future games without going through the LLM again.
 
 Format JSON :
 {

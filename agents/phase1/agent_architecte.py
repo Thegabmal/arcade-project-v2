@@ -1,8 +1,8 @@
 """
-Agent Architecte — Phase 1 (fin)
-Décompose le jeu en modules JavaScript indépendants.
-Chaque module est < 8000 chars, avec des interfaces claires.
-Produit une ModuleArchitecture utilisée par le Créateur modulaire.
+Code Architect Agent — Phase 1 (end)
+Decomposes the game into independent JavaScript modules.
+Each module is < 8000 chars, with clear interfaces.
+Produces a ModuleArchitecture used by the modular Creator.
 """
 
 import json

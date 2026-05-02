@@ -1,15 +1,15 @@
 """
-Agent Intelligence Genre — Phase 1
-Fusion de agent_chercheur + agent_veilleur en un seul appel API.
+Genre Intelligence Agent — Phase 1
+Merges agent_chercheur + agent_veilleur into a single API call.
 
-Produit en une requête :
-  - Research structurée (mécaniques, références, pièges, standards, notes techniques)
-  - Document Tendances texte (ce qui cartonne, core loop gagnant, ce qui est daté)
+Produces in one request:
+  - Structured research (mechanics, references, pitfalls, standards, technical notes)
+  - Trends text document (what's hot, winning core loop, what's dated)
 
-Avantage vs les deux agents séparés :
-  - 1 appel API au lieu de 2 (économie de 6s sur le rate limiter)
-  - Analyse plus cohérente : tendances et mécaniques viennent de la même source
-  - Jeux de référence enrichis avec mecanique_signature utilisée dans le doc tendances
+Advantage vs two separate agents:
+  - 1 API call instead of 2 (saves 6s on the rate limiter)
+  - More coherent analysis: trends and mechanics come from the same source
+  - Reference games enriched with mecanique_signature used in the trends doc
 """
 
 from config import call_gemini_json, with_fallback
@@ -17,24 +17,24 @@ from genre_profile import Classification, Research
 from logger import phase1_log
 import rag
 
-SYSTEM = """Tu es un expert en game design, game studies et tendances du marché du jeu vidéo.
-Tu combines analyse structurée et veille marché pour donner une base de connaissance complète.
-Tu connais les mécaniques fondamentales de chaque genre ET ce qui est populaire aujourd'hui.
-Tu réponds UNIQUEMENT en JSON valide."""
+SYSTEM = """You are an expert in game design, game studies, and video game market trends.
+You combine structured analysis and market research to provide a comprehensive knowledge base.
+You know the fundamental mechanics of each genre AND what is popular today.
+You respond ONLY with valid JSON."""
 
 
 def run(classification: Classification) -> tuple[Research, str]:
     """
-    Analyse le genre et retourne (Research, tendances_text).
-    - Research : données structurées pour l'Enrichisseur
-    - tendances_text : document formaté injecté dans le Créateur
+    Analyzes the genre and returns (Research, trends_text).
+    - Research: structured data for the Enricher
+    - trends_text: formatted document injected into the Creator
     """
     phase1_log.agent_start(
-        "Intelligence Genre",
-        f"Analyse {classification.genre_principal} / {classification.sous_genre}"
+        "Genre Intelligence",
+        f"Analyzing {classification.genre_principal} / {classification.sous_genre}"
     )
 
-    # Enrichissement via mechanics_kb (ChromaDB RAG) — fallback silencieux
+    # Enrichment via mechanics_kb (ChromaDB RAG) — silent fallback
     mechanics_refs = rag.search_mechanics(
         genre=classification.genre_principal,
         query=f"{classification.sous_genre} {classification.type_gameplay} {classification.ton}",
@@ -58,16 +58,16 @@ def run(classification: Classification) -> tuple[Research, str]:
     tendances_text = _build_tendances_text(result, classification)
 
     phase1_log.agent_done(
-        "Intelligence Genre",
-        f"{len(research.mecaniques_populaires)} mécaniques, "
-        f"{len(research.jeux_reference)} références, "
-        f"{len(tendances_text)} chars tendances"
+        "Genre Intelligence",
+        f"{len(research.mecaniques_populaires)} mechanics, "
+        f"{len(research.jeux_reference)} references, "
+        f"{len(tendances_text)} chars trends"
     )
     return research, tendances_text
 
 
 def _build_tendances_text(result: dict, classification: Classification) -> str:
-    """Construit le document tendances à partir des champs JSON retournés."""
+    """Builds the trends document from the returned JSON fields."""
     genre = classification.genre_principal.upper()
 
     jeux_section = ""
@@ -83,26 +83,26 @@ def _build_tendances_text(result: dict, classification: Classification) -> str:
     dates = "\n".join(f"- {d}" for d in result.get("ce_qui_est_date", result.get("pieges_courants", [])))
     recette = "\n".join(f"- {r}" for r in result.get("recette_succes_html5", []))
 
-    return f"""=== INTELLIGENCE GENRE : {genre} ===
+    return f"""=== GENRE INTELLIGENCE: {genre} ===
 
-JEUX RÉFÉRENCE ACTUELS :{jeux_section}
+CURRENT REFERENCE GAMES:{jeux_section}
 
-MÉCANIQUES QUI CARTONNENT EN CE MOMENT :
+TRENDING MECHANICS RIGHT NOW:
 {mecaniques}
 
-CORE LOOP GAGNANT :
+WINNING CORE LOOP:
 {result.get("core_loop_typique", "")}
 
-PATTERNS DE PROGRESSION :
+PROGRESSION PATTERNS:
 {result.get("progression_typique", "")}
 
-CE QUI EST DATÉ / À ÉVITER :
+WHAT'S DATED / TO AVOID:
 {dates}
 
-RECETTE SUCCÈS POUR UN JEU HTML5 :
+SUCCESS RECIPE FOR AN HTML5 GAME:
 {recette}
 
-NOTES TECHNIQUES :
+TECHNICAL NOTES:
 {result.get("notes_techniques", "")}"""
 
 
@@ -122,9 +122,9 @@ def _fallback_research() -> Research:
 
 def _fallback_tendances(classification: Classification) -> str:
     return (
-        f"=== TENDANCES {classification.genre_principal.upper()} ===\n"
-        f"Analyse non disponible — utiliser les standards généraux du genre.\n"
-        f"ESSENTIELS : core loop clair, feedback immédiat, progression visible, rejouabilité."
+        f"=== TRENDS {classification.genre_principal.upper()} ===\n"
+        f"Analysis unavailable — use general genre standards.\n"
+        f"ESSENTIALS: clear core loop, immediate feedback, visible progression, replayability."
     )
 
 
@@ -142,68 +142,68 @@ def _fallback_tendances(classification: Classification) -> str:
     "recette_succes_html5": [],
 })
 def _call(classification: Classification, mechanics_refs: list = None) -> dict:
-    # Construire le bloc de référence mechanics_kb si disponible
+    # Build the mechanics_kb reference block if available
     mechanics_context = ""
     if mechanics_refs:
         lines = []
         for ref in mechanics_refs:
             name = ref.get("game_name", "?")
             doc = ref.get("document", "")
-            # Extraire les 3 premières lignes du document pour rester concis
+            # Extract the first 3 lines of the document to stay concise
             short = "\n".join(doc.splitlines()[:6]) if doc else ""
             lines.append(f"--- {name} ---\n{short}")
         mechanics_context = (
-            "\n\n=== RÉFÉRENCES MÉCANIQUES (base de connaissance interne) ===\n"
+            "\n\n=== MECHANICS REFERENCES (internal knowledge base) ===\n"
             + "\n\n".join(lines)
-            + "\n=== FIN RÉFÉRENCES ===\n"
+            + "\n=== END REFERENCES ===\n"
         )
 
-    prompt = f"""Analyse experte complète du genre de jeu suivant pour guider la création d'un jeu HTML5.
+    prompt = f"""Complete expert analysis of the following game genre to guide the creation of an HTML5 game.
 
-GENRE : {classification.genre_principal}
-SOUS-GENRE : {classification.sous_genre}
-TON : {classification.ton}
-PUBLIC : {classification.public_cible}
-STYLE VISUEL ATTENDU : {classification.style_visuel_attendu}
-TYPE GAMEPLAY : {classification.type_gameplay}
+GENRE: {classification.genre_principal}
+SUB-GENRE: {classification.sous_genre}
+TONE: {classification.ton}
+AUDIENCE: {classification.public_cible}
+EXPECTED VISUAL STYLE: {classification.style_visuel_attendu}
+GAMEPLAY TYPE: {classification.type_gameplay}
 
-Fournis une analyse en deux parties :
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PARTIE 1 — ANALYSE STRUCTURÉE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. MÉCANIQUES POPULAIRES (5-8) : mécaniques fondamentales qui définissent ce genre aujourd'hui
-2. MÉCANIQUES TENDANCE (3-5) : ce qui est moderne et excitant dans ce genre actuellement
-3. JEUX RÉFÉRENCE (5-7) : les incontournables avec leur point fort ET leur mécanique signature unique
-4. PIÈGES COURANTS (4-6) : erreurs typiques qui ruinent les jeux de ce genre
-5. STANDARDS VISUELS : ce que les joueurs attendent visuellement pour ce genre
-6. TECHNIQUES RECOMMANDÉES : approches JS/Canvas spécifiques à ce genre
-7. CORE LOOP : la boucle de gameplay fondamentale en une phrase ACTION → RÉCOMPENSE → TENSION
-8. PROGRESSION : comment ce genre structure la montée en difficulté
-9. NOTES TECHNIQUES : spécificités HTML5 Canvas pour implémenter ce genre
+Provide an analysis in two parts:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PARTIE 2 — TENDANCES & RECETTES
+PART 1 — STRUCTURED ANALYSIS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-10. CE QUI EST DATÉ / À ÉVITER (4-5) : patterns qui font paraître le jeu vieux ou amateur
-11. RECETTE SUCCÈS HTML5 (4-5) : recommandations concrètes pour maximiser la qualité perçue
-    en tenant compte des contraintes HTML5 (pas d'assets externes, code unique, pas de son natif)
+1. POPULAR MECHANICS (5-8): fundamental mechanics that define this genre today
+2. TRENDING MECHANICS (3-5): what is modern and exciting in this genre currently
+3. REFERENCE GAMES (5-7): the must-knows with their key strength AND their unique signature mechanic
+4. COMMON PITFALLS (4-6): typical mistakes that ruin games in this genre
+5. VISUAL STANDARDS: what players visually expect for this genre
+6. RECOMMENDED TECHNIQUES: JS/Canvas approaches specific to this genre
+7. CORE LOOP: the fundamental gameplay loop in one sentence ACTION → REWARD → TENSION
+8. PROGRESSION: how this genre structures the difficulty ramp-up
+9. TECHNICAL NOTES: HTML5 Canvas specifics for implementing this genre
 
-Réponds en JSON :
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2 — TRENDS & RECIPES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+10. WHAT'S DATED / TO AVOID (4-5): patterns that make the game look old or amateurish
+11. HTML5 SUCCESS RECIPE (4-5): concrete recommendations to maximize perceived quality
+    taking into account HTML5 constraints (no external assets, single file, no native audio)
+
+Respond in JSON:
 {{
-  "mecaniques_populaires": ["mécanique 1", "mécanique 2"],
-  "mecaniques_tendance": ["tendance 1", "tendance 2"],
+  "mecaniques_populaires": ["mechanic 1", "mechanic 2"],
+  "mecaniques_tendance": ["trend 1", "trend 2"],
   "jeux_reference": [
-    {{"nom": "...", "points_forts": "pourquoi il est populaire", "mecanique_signature": "ce qui le rend unique"}}
+    {{"nom": "...", "points_forts": "why it is popular", "mecanique_signature": "what makes it unique"}}
   ],
-  "pieges_courants": ["piège 1", "piège 2"],
+  "pieges_courants": ["pitfall 1", "pitfall 2"],
   "standards_visuels": ["standard 1", "standard 2"],
   "techniques_recommandees": ["technique 1", "technique 2"],
-  "core_loop_typique": "ACTION → RÉCOMPENSE → TENSION → ACTION",
-  "progression_typique": "comment la difficulté évolue dans ce genre",
-  "notes_techniques": "spécificités techniques importantes pour HTML5/Canvas/JS",
-  "ce_qui_est_date": ["pattern daté 1", "pattern daté 2"],
-  "recette_succes_html5": ["recommandation 1", "recommandation 2"]
+  "core_loop_typique": "ACTION → REWARD → TENSION → ACTION",
+  "progression_typique": "how difficulty evolves in this genre",
+  "notes_techniques": "important technical specifics for HTML5/Canvas/JS",
+  "ce_qui_est_date": ["dated pattern 1", "dated pattern 2"],
+  "recette_succes_html5": ["recommendation 1", "recommendation 2"]
 }}"""
 
     return call_gemini_json(prompt, temperature=0.4, system_instruction=SYSTEM, max_tokens=16000)

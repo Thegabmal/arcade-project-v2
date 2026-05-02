@@ -1,11 +1,11 @@
 """
-Agent Pre-Patcher — Phase 3→4 transition
-Correcteur chirurgical pré-évaluation.
+Pre-Patcher Agent — Phase 3→4 transition
+Surgical pre-evaluation corrector.
 
-Stratégie : ne JAMAIS réécrire le fichier entier.
-Pour chaque issue critique, on extrait le snippet problématique (50-100 lignes),
-on demande à Gemini de corriger UNIQUEMENT ce snippet, puis on le réinjecte.
-Pour les corrections triviales (RAF manquant, etc.), on le fait sans LLM.
+Strategy: NEVER rewrite the entire file.
+For each critical issue, extract the problematic snippet (50-100 lines),
+ask Gemini to fix ONLY that snippet, then re-inject it.
+For trivial fixes (missing RAF, etc.), apply without an LLM call.
 """
 
 import re

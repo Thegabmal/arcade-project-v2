@@ -1,10 +1,10 @@
 """
-snapshot.py — Système de snapshots de la pipeline.
+snapshot.py — Pipeline snapshot system.
 
-Usage :
-    python snapshot.py save "description-courte"    # commit + tag stable/vN
-    python snapshot.py list                          # liste les snapshots
-    python snapshot.py restore stable/v3             # restaure un snapshot
+Usage:
+    python snapshot.py save "short-description"     # commit + tag stable/vN
+    python snapshot.py list                          # list snapshots
+    python snapshot.py restore stable/v3             # restore a snapshot
     python snapshot.py diff stable/v2                # diff vs snapshot
 """
 import subprocess

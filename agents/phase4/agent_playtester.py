@@ -1,8 +1,8 @@
 """
-Agent Playtester — Phase 4
-Simule l'expérience d'un joueur en lisant le code.
-Évalue le fun factor, l'engagement, la courbe de difficulté et la rejouabilité.
-Adapté au genre et au public cible.
+Playtester Agent — Phase 4
+Simulates a player's experience by reading the code.
+Evaluates fun factor, engagement, difficulty curve, and replayability.
+Adapted to the genre and target audience.
 """
 
 import json

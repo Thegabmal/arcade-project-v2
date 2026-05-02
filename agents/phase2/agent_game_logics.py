@@ -1,8 +1,8 @@
 """
 Agent Game Logics — Phase 2
-Expert en mécaniques de jeu concrètes basées sur des jeux réels.
-Interroge Claude pour produire des game logics précises et implémentables.
-Adapte selon le genre : boss, ennemis, power-ups, classes, quêtes, PNJ, formules.
+Expert in concrete game mechanics based on real games.
+Queries Claude to produce precise, implementable game logic.
+Adapts by genre: bosses, enemies, power-ups, classes, quests, NPCs, formulas.
 """
 
 import json

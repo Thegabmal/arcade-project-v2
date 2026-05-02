@@ -1,7 +1,7 @@
 """
 Agent Level Designer — Phase 2
-Conçoit le contenu réel : vagues précises, rooms, events, courbe de difficulté fine.
-Objectif : fournir au Créateur un "script de jeu" détaillé, pas des vœux pieux.
+Designs real game content: precise waves, rooms, events, fine difficulty curve.
+Goal: provide the Creator with a detailed "game script", not vague wishes.
 """
 
 import json

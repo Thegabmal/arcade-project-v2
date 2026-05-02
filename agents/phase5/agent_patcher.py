@@ -1,8 +1,8 @@
 """
-Agent Patcher — Phase 5
-Corrige le code du jeu selon le diagnostic du Diagnosticien.
-Ne réécrit PAS tout le jeu — fait des corrections chirurgicales ciblées.
-Préserve ce qui fonctionne bien.
+Patcher Agent — Phase 5
+Fixes the game code based on the Diagnostician's diagnosis.
+Does NOT rewrite the entire game — makes targeted surgical corrections.
+Preserves what is working well.
 """
 
 import json

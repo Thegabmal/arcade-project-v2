@@ -1,8 +1,8 @@
 """
-test_quick.py — Script de test économique : 3 genres simples en séquence.
+test_quick.py — Lightweight test script: 3 simple genres in sequence.
 
-Valide la baseline de la pipeline avant de tester des genres complexes.
-Utilise run_quick() pour minimiser les appels API.
+Validates the pipeline baseline before testing complex genres.
+Uses run_quick() to minimize API calls.
 
 Usage :
     python test_quick.py
@@ -104,7 +104,7 @@ def run_test(test: dict) -> dict:
     bundle = result.get("bundle")
     score = result.get("score", 0.0)
     exec_score = bundle.execution.score if bundle else 0.0
-    approuve = result.get("approuve", False)
+    approuve = result.get("approved", result.get("approuve", False))
     titre = result.get("gdd", {}).get("titre", "?") if result.get("gdd") else "?"
 
     # Scores par agent

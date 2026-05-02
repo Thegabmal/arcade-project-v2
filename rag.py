@@ -1,7 +1,7 @@
 """
 RAG — ChromaDB integration.
-Stocke et récupère les patterns de jeux réussis pour améliorer la génération.
-Fallback silencieux si ChromaDB est indisponible.
+Stores and retrieves patterns from successful games to improve generation.
+Silent fallback if ChromaDB is unavailable.
 """
 
 import os

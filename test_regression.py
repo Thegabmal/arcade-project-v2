@@ -1,6 +1,6 @@
 """
-Session 16 — Tests de régression rapides (sans appels API Gemini)
-Vérifie que les fixes critiques de la pipeline fonctionnent correctement.
+Rapid regression tests (no Gemini API calls)
+Verifies that critical pipeline fixes are working correctly.
 
 Usage :
     python test_regression.py           # Run all tests

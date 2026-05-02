@@ -1,6 +1,6 @@
 """
-Mémoire persistante entre les sessions.
-Stocke les patterns réussis, les erreurs fréquentes, les stats globales.
+Persistent memory across sessions.
+Stores successful patterns, frequent errors, and global statistics.
 """
 
 import os

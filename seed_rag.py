@@ -1,7 +1,7 @@
 """
-Session 12 — Seed RAG manuel
-Lit tous les jeux sauvegardés dans jeux_sauvegardes/ et injecte les patterns
-dans ChromaDB pour amorcer la boucle d'apprentissage sans attendre de nouveaux runs.
+Manual RAG Seed
+Reads all saved games in jeux_sauvegardes/ and injects their patterns
+into ChromaDB to bootstrap the learning loop without waiting for new runs.
 
 Usage :
     python seed_rag.py                 # All saved games

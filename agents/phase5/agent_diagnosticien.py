@@ -1,9 +1,9 @@
 """
-Agent Diagnosticien — Phase 5
-Agrège tous les résultats d'évaluation et produit un diagnostic précis :
-- Quels problèmes corriger en priorité
-- Comment les corriger concrètement
-- Ce qu'il faut absolument préserver
+Diagnostician Agent — Phase 5
+Aggregates all evaluation results and produces a precise diagnosis:
+- Which problems to fix with highest priority
+- How to fix them concretely
+- What must absolutely be preserved
 """
 
 import json

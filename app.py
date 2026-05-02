@@ -1,6 +1,6 @@
 """
-Arcade AI — Interface Flask
-Génération de jeux avec streaming SSE en temps réel.
+Arcade AI — Flask Web Interface
+Game generation with real-time SSE streaming.
 """
 
 import os
@@ -18,13 +18,13 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.urandom(24)
 
 SAVE_DIR = "jeux_sauvegardes"
-GENERATION_TIMEOUT = 900   # 15 minutes en secondes
+GENERATION_TIMEOUT = 900   # 15 minutes in seconds
 MAX_PROMPT_LENGTH = 500
-SESSION_TTL = 1800         # 30 minutes — purge les sessions terminées après ce délai
-MAX_CONCURRENT_GENERATIONS = 3  # F3 : limiter les générations simultanées (coût API)
+SESSION_TTL = 1800         # 30 minutes — purge completed sessions after this delay
+MAX_CONCURRENT_GENERATIONS = 3  # F3: limit concurrent generations (API cost)
 
 # ─────────────────────────────────────────────
-# GESTION DES SESSIONS
+# SESSION MANAGEMENT
 # ─────────────────────────────────────────────
 _sessions: dict = {}
 _sessions_lock = threading.Lock()
@@ -41,9 +41,9 @@ def _new_session(session_id: str) -> dict:
 
 
 def _session_cleanup_loop():
-    """Thread daemon : purge les sessions terminées plus vieilles que SESSION_TTL."""
+    """Daemon thread: purge completed sessions older than SESSION_TTL."""
     while True:
-        time.sleep(300)  # Vérification toutes les 5 minutes
+        time.sleep(300)  # Check every 5 minutes
         now = time.time()
         to_delete = []
         with _sessions_lock:
@@ -54,7 +54,7 @@ def _session_cleanup_loop():
             for sid in to_delete:
                 del _sessions[sid]
         if to_delete:
-            print(f"  [Sessions] {len(to_delete)} session(s) expirée(s) purgée(s)")
+            print(f"  [Sessions] {len(to_delete)} expired session(s) purged")
 
 
 # ─────────────────────────────────────────────
@@ -62,7 +62,7 @@ def _session_cleanup_loop():
 # ─────────────────────────────────────────────
 
 def _build_recommendations(scores: dict, issues: list) -> list:
-    """Génère des recommandations de prompt concrètes depuis les scores et issues."""
+    """Generate concrete prompt recommendations from scores and issues."""
     recs = []
 
     tech = scores.get("technique", 10)
@@ -70,69 +70,69 @@ def _build_recommendations(scores: dict, issues: list) -> list:
     visuel = scores.get("visuel", 10)
     execution = scores.get("execution", 10)
 
-    # Score technique faible → mécaniques trop vagues
+    # Low technical score → mechanics too vague
     if tech < 6:
         recs.append({
-            "label": "Détaille les mécaniques",
-            "texte": "Précise chaque mécanique : 'le joueur peut sauter, tirer, collecter des pièces, et mourir au contact des ennemis'",
+            "label": "Specify the mechanics",
+            "texte": "Describe each mechanic explicitly: 'the player can jump, shoot, collect coins, and die on enemy contact'",
             "icone": "⚙️",
         })
 
-    # Score gameplay faible → core loop flou
+    # Low gameplay score → unclear core loop
     if gameplay < 6:
         recs.append({
-            "label": "Décris le core loop",
-            "texte": "Décris l'objectif et la boucle de jeu : 'évite les obstacles, ramasse des bonus, survie le plus longtemps possible'",
+            "label": "Describe the core loop",
+            "texte": "Describe the objective and game loop: 'dodge obstacles, collect bonuses, survive as long as possible'",
             "icone": "🎯",
         })
 
-    # Score visuel faible → style non précisé
+    # Low visual score → style not specified
     if visuel < 6:
         recs.append({
-            "label": "Précise le style visuel",
-            "texte": "Ajoute un style visuel explicite : 'style pixel art rétro 8-bit avec des couleurs vives et néons'",
+            "label": "Specify the visual style",
+            "texte": "Add an explicit visual style: 'retro 8-bit pixel art with vivid neon colors'",
             "icone": "🎨",
         })
 
-    # Score d'exécution faible → problème de complexité technique
+    # Low execution score → technical complexity issue
     if execution < 5:
         recs.append({
-            "label": "Simplifie la demande",
-            "texte": "Ce type de jeu est très complexe. Essaie une version plus simple : 'un jeu 2D' au lieu de '3D FPS'",
+            "label": "Simplify the request",
+            "texte": "This game type is very complex. Try a simpler version: '2D game' instead of '3D FPS'",
             "icone": "🔧",
         })
 
-    # Issues critiques → blocage
+    # Critical issues → generation blocked
     has_critical = any(i.get("severite") == "critique" for i in issues)
     if has_critical:
         recs.append({
-            "label": "Changer de genre",
-            "texte": "Des erreurs critiques ont bloqué la génération. Essaie un genre plus simple : platformer, puzzle, ou shooter 2D",
+            "label": "Try a different genre",
+            "texte": "Critical errors blocked generation. Try a simpler genre: platformer, puzzle, or 2D shooter",
             "icone": "🔄",
         })
 
-    # Score global très bas → tout réorienter
+    # Very low global score → full reorientation needed
     global_score = sum(scores.values()) / len(scores) if scores else 0
     if global_score < 4 and not recs:
         recs.append({
-            "label": "Reformule plus simplement",
-            "texte": "Décris ton jeu en une phrase claire avec genre + action + contexte : 'un jeu de plateforme où un robot évite des pièges dans une usine'",
+            "label": "Rephrase more simply",
+            "texte": "Describe your game in one clear sentence with genre + action + context: 'a platformer where a robot avoids traps in a factory'",
             "icone": "✏️",
         })
 
-    # Toujours ajouter un conseil général si peu de recs
+    # Always add a general tip if few recommendations
     if len(recs) < 2:
         recs.append({
-            "label": "Ajoute plus de détails",
-            "texte": "Plus ton prompt est précis, meilleur sera le jeu. Ajoute : ennemis, power-ups, ambiance, difficulté, thème visuel",
+            "label": "Add more details",
+            "texte": "The more precise your prompt, the better the game. Add: enemies, power-ups, atmosphere, difficulty, visual theme",
             "icone": "💡",
         })
 
-    return recs[:4]  # max 4 recommandations
+    return recs[:4]  # max 4 recommendations
 
 
 # ─────────────────────────────────────────────
-# ROUTES PAGES
+# PAGE ROUTES
 # ─────────────────────────────────────────────
 
 @app.route("/")
@@ -157,13 +157,13 @@ def serve_game_file(filename):
 
 @app.route("/debug/<path:filename>")
 def debug_game(filename):
-    """Page de debug — scores détaillés, issues par agent, analyse du jeu."""
+    """Debug page — detailed scores, per-agent issues, game analysis."""
     base = filename.replace(".html", "")
     json_path = os.path.join(SAVE_DIR, f"{base}.json")
     log_path = os.path.join(SAVE_DIR, f"{base}_log.txt")
 
     if not os.path.exists(json_path):
-        return f"<h1>Metadata introuvable pour {filename}</h1>", 404
+        return f"<h1>Metadata not found for {filename}</h1>", 404
 
     with open(json_path, encoding="utf-8") as f:
         meta = json.load(f)
@@ -173,7 +173,7 @@ def debug_game(filename):
         with open(log_path, encoding="utf-8") as f:
             log_content = f.read()
 
-    # Scores détaillés par agent avec poids
+    # Detailed per-agent scores with weights
     AGENT_WEIGHTS = {
         "technique": ("QC Technique", 20),
         "gameplay": ("QC Gameplay", 25),
@@ -212,25 +212,25 @@ def debug_game(filename):
 def api_generate():
     data = request.get_json(force=True, silent=True) or {}
 
-    # Validation du prompt
+    # Validate prompt
     prompt = str(data.get("prompt", "")).strip()
     if not prompt:
-        return jsonify({"error": "Le prompt est vide."}), 400
+        return jsonify({"error": "Prompt is empty."}), 400
     if len(prompt) > MAX_PROMPT_LENGTH:
         prompt = prompt[:MAX_PROMPT_LENGTH]
 
-    # Nettoyage minimal : pas d'injection de balises
-    # F2 : inclure les guillemets pour prévenir les injections dans les prompts LLM
+    # Minimal sanitization: strip tags and injection vectors
+    # F2: include quotes to prevent injections in LLM prompts
     prompt = prompt.replace("<", "").replace(">", "").replace("`", "").replace('"', "'").replace("\\", "")
 
-    # Type de jeu optionnel
+    # Optional game type
     game_type = str(data.get("game_type", "")).strip()
     if game_type and game_type != "tout type":
         full_prompt = f"Jeu de type {game_type} : {prompt}"
     else:
         full_prompt = prompt
 
-    # Style graphique optionnel (ex: "pixel_art_gameboy", "3d_lowpoly", ...)
+    # Optional graphic style (e.g. "pixel_art_gameboy", "3d_lowpoly", ...)
     graphic_style = str(data.get("graphic_style", "")).strip()
 
     session_id = str(uuid.uuid4())
@@ -244,10 +244,10 @@ def api_generate():
         from logger import set_thread_event_queue, clear_thread_event_queue, clear_code_preview, set_preview_session_id
         set_thread_event_queue(session["queue"])
         set_preview_session_id(session_id)
-        # F3 : sémaphore — bloquer si MAX_CONCURRENT_GENERATIONS atteint
+        # F3: semaphore — block if MAX_CONCURRENT_GENERATIONS reached
         if not _generation_semaphore.acquire(blocking=True, timeout=5):
             session["queue"].put({"type": "error", "data": {
-                "message": f"Serveur occupé ({MAX_CONCURRENT_GENERATIONS} générations en cours). Réessayez dans quelques minutes."
+                "message": f"Server busy ({MAX_CONCURRENT_GENERATIONS} generations running). Please retry in a few minutes."
             }})
             session["queue"].put(None)
             return
@@ -281,7 +281,7 @@ def api_generate():
                 "html_path": html_path,
                 "html_basename": html_basename,
                 "titre": gdd.get("titre", "Jeu généré") if isinstance(gdd, dict) else "Jeu généré",
-                "approuve": result.get("approuve", False),
+                "approuve": result.get("approved", result.get("approuve", False)),
                 "erreur": result.get("erreur"),
                 "duree": int(result.get("duree_secondes", 0)),
                 "scores_detail": scores_detail,
@@ -298,13 +298,13 @@ def api_generate():
 
         except Exception as exc:
             err_msg = str(exc)
-            # E4 : message clair si quotas Gemini épuisés
+            # E4: clear message when Gemini quotas are exhausted
             _exc_lower = err_msg.lower()
             if "allfreekeysexhausted" in type(exc).__name__.lower() or \
                "allfreekeysexhausted" in _exc_lower or \
-               ("quota" in _exc_lower and "épuisé" in _exc_lower):
-                err_msg = ("Quotas API épuisés — toutes les clés gratuites ont atteint leur limite journalière. "
-                           "Réessayez demain ou configurez une clé payante (GEMINI_RPD_LIMIT=9999).")
+               ("quota" in _exc_lower and ("épuisé" in _exc_lower or "exhausted" in _exc_lower)):
+                err_msg = ("API quotas exhausted — all free keys have hit their daily limit. "
+                           "Retry tomorrow or configure a paid key (GEMINI_RPD_LIMIT=9999).")
             with _sessions_lock:
                 if session_id in _sessions:
                     _sessions[session_id]["status"] = "error"
@@ -331,7 +331,7 @@ def api_stream(session_id):
         session = _sessions.get(session_id)
 
     if not session:
-        return jsonify({"error": "Session inconnue"}), 404
+        return jsonify({"error": "Unknown session"}), 404
 
     def generate():
         yield "data: {\"type\": \"connected\"}\n\n"
@@ -345,7 +345,7 @@ def api_stream(session_id):
                     break
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
             except queue.Empty:
-                # Signaler au thread de génération de s'arrêter
+                # Signal the generation thread to stop
                 with _sessions_lock:
                     sess = _sessions.get(session_id, {})
                     se = sess.get("stop_event")
@@ -353,7 +353,7 @@ def api_stream(session_id):
                         se.set()
                     if session_id in _sessions:
                         _sessions[session_id]["status"] = "error"
-                print(f"  [Timeout] Session {session_id[:8]} — stop_event déclenché", flush=True)
+                print(f"  [Timeout] Session {session_id[:8]} — stop_event triggered", flush=True)
                 yield "data: {\"type\": \"timeout\", \"data\": {\"message\": \"Timeout 15 minutes\"}}\n\n"
                 break
 
@@ -392,12 +392,12 @@ def api_history():
 
 @app.route("/api/game-log/<path:filename>")
 def api_game_log(filename):
-    """Retourne le log texte de la pipeline pour un jeu sauvegardé."""
-    # filename peut être "titre_20240101_120000.html" → chercher "_log.txt"
+    """Return the pipeline text log for a saved game."""
+    # filename can be "title_20240101_120000.html" → look for "_log.txt"
     base = filename.replace(".html", "")
     log_path = os.path.join(SAVE_DIR, f"{base}_log.txt")
     if not os.path.exists(log_path):
-        return jsonify({"error": "Log non disponible pour ce jeu."}), 404
+        return jsonify({"error": "Log not available for this game."}), 404
     try:
         with open(log_path, encoding="utf-8") as f:
             content = f.read()
@@ -408,21 +408,21 @@ def api_game_log(filename):
 
 @app.route("/api/reevaluate", methods=["POST"])
 def api_reevaluate():
-    """Réévalue un jeu sauvegardé avec les agents Phase 4 et met à jour son metadata."""
+    """Re-evaluate a saved game with Phase 4 agents and update its metadata."""
     data = request.get_json(force=True, silent=True) or {}
     filename = str(data.get("filename", "")).strip()
 
-    # Sécurité : pas de traversal de répertoire
+    # Security: no directory traversal
     if not filename or ".." in filename or "/" in filename or "\\" in filename:
-        return jsonify({"error": "Nom de fichier invalide"}), 400
+        return jsonify({"error": "Invalid filename"}), 400
     if not filename.endswith(".html"):
-        return jsonify({"error": "Le fichier doit être un .html"}), 400
+        return jsonify({"error": "File must be a .html"}), 400
 
     html_path = os.path.join(SAVE_DIR, filename)
     json_path = html_path.replace(".html", ".json")
 
     if not os.path.exists(html_path):
-        return jsonify({"error": "Fichier HTML introuvable"}), 404
+        return jsonify({"error": "HTML file not found"}), 404
 
     session_id = str(uuid.uuid4())
     session = _new_session(session_id)
@@ -433,17 +433,17 @@ def api_reevaluate():
         from logger import set_thread_event_queue, clear_thread_event_queue, push_event
         set_thread_event_queue(session["queue"])
         try:
-            # Charger le HTML
+            # Load the HTML
             with open(html_path, encoding="utf-8") as f:
                 code = f.read()
 
-            # Charger le metadata existant
+            # Load existing metadata
             meta = {}
             if os.path.exists(json_path):
                 with open(json_path, encoding="utf-8") as f:
                     meta = json.load(f)
 
-            # Reconstruire un GenreProfile depuis le metadata
+            # Rebuild a GenreProfile from metadata
             from genre_profile import GenreProfile, EvaluationBundle, EvaluationResult
             is_3d = "THREE." in code and "WebGLRenderer" in code
             genre_profile = GenreProfile(
@@ -458,9 +458,9 @@ def api_reevaluate():
                 "concept": meta.get("concept", ""),
             }
 
-            push_event("phase_start", {"phase": "REEVALUATION", "title": "Réévaluation — Phase 4"})
+            push_event("phase_start", {"phase": "REEVALUATION", "title": "Re-evaluation — Phase 4"})
 
-            # Lancer les 5 agents d'évaluation en parallèle
+            # Run the 5 evaluation agents in parallel
             from coordinateur import _parallel
             from agents.phase4 import (
                 agent_qc_technique, agent_qc_gameplay, agent_qc_visuel,
@@ -499,7 +499,7 @@ def api_reevaluate():
 
             score_global = bundle.score_global()
 
-            # Mettre à jour le metadata JSON
+            # Update the JSON metadata
             new_scores = {
                 "technique":   round(bundle.qc_technique.score, 1),
                 "gameplay":    round(bundle.qc_gameplay.score, 1),
@@ -556,11 +556,11 @@ def api_reevaluate():
 
 def _extract_game_context(html: str) -> str:
     """
-    Extrait les variables d'état importantes du JS pour Gemini.
-    Stratégie ciblée : cherche les déclarations `let` (variables mutables = état du jeu),
-    puis un résumé des constantes-registres (HERO_CLASSES, ENEMY_TYPES...).
-    Extrait aussi : les signatures de fonctions 2D (nom + params), les tableaux (arrays),
-    et détecte automatiquement le type de jeu.
+    Extract key JS state variables for Gemini context.
+    Strategy: find `let` declarations (mutable variables = game state),
+    then summarize constant registries (HERO_CLASSES, ENEMY_TYPES...).
+    Also extracts: 2D function signatures (name + params), arrays,
+    and auto-detects the game type.
     """
     import re
 
@@ -574,7 +574,7 @@ def _extract_game_context(html: str) -> str:
 
     sections = []
 
-    # ── 1. Variables `let` mutables (état du jeu : score, lives, gameState, inventory...) ──
+    # ── 1. Mutable `let` variables (game state: score, lives, gameState, inventory...) ──
     let_decls = []
     seen_names = set()
     for m in re.finditer(
@@ -586,9 +586,9 @@ def _extract_game_context(html: str) -> str:
             seen_names.add(name)
             let_decls.append(m.group(1).strip())
     if let_decls:
-        sections.append("// Variables d'état (let — modifiables):\n" + '\n'.join(let_decls[:40]))
+        sections.append("// State variables (let — mutable):\n" + '\n'.join(let_decls[:40]))
 
-    # ── 2. Résumé des registres (HERO_CLASSES, ENEMY_TYPES, LOOT_TYPES...) ──
+    # ── 2. Registry summaries (HERO_CLASSES, ENEMY_TYPES, LOOT_TYPES...) ──
     for pattern, label in [
         (r'const\s+(HERO_CLASSES)\s*=\s*\[.*?\]', "HERO_CLASSES"),
         (r'const\s+(ENEMY_TYPES)\s*=\s*\{.*?\}', "ENEMY_TYPES"),
@@ -597,10 +597,10 @@ def _extract_game_context(html: str) -> str:
     ]:
         m = re.search(pattern, js, re.DOTALL)
         if m:
-            snippet = m.group(0)[:300]  # Premiers 300 chars suffisent pour les noms de clés
+            snippet = m.group(0)[:300]  # First 300 chars are enough to capture key names
             sections.append(f"// {label} (extrait) :\n{snippet}\n...")
 
-    # ── 3. Pour les jeux Three.js — extraire l'API spécifique du jeu ──
+    # ── 3. For Three.js games — extract game-specific API ──
     is_threejs = bool(re.search(r'THREE\.|WebGLRenderer', js))
     if is_threejs:
         threejs_info = []
@@ -644,9 +644,9 @@ def _extract_game_context(html: str) -> str:
         if threejs_info:
             sections.append('\n\n'.join(threejs_info))
 
-    # ── 4. Pour les jeux 2D — fonctions disponibles, tableaux, type de jeu ──
+    # ── 4. For 2D games — available functions, arrays, game type ──
     if not is_threejs:
-        # Fonctions nommées (pas arrow functions)
+        # Named functions (not arrow functions)
         _skip_fns = {
             'gameLoop', 'draw', 'update', 'animate', 'init', 'requestAnimationFrame',
             'cancelAnimationFrame', 'setTimeout', 'setInterval', 'clearInterval',
@@ -663,7 +663,7 @@ def _extract_game_context(html: str) -> str:
                 if len(fn_sigs) >= 20:
                     break
 
-        # Tableaux déclarés
+        # Declared arrays
         arr_names = []
         seen_arr_names = set()
         for m in re.finditer(r'\b(?:let|const)\s+(\w+)\s*=\s*(?:\[\]|new\s+Array)', js):
@@ -674,7 +674,7 @@ def _extract_game_context(html: str) -> str:
                 if len(arr_names) >= 15:
                     break
 
-        # Détection type de jeu
+        # Game type detection
         js_lower = js.lower()
         if 'towers' in js_lower:
             game_type_detected = 'tower_defense'
@@ -692,20 +692,20 @@ def _extract_game_context(html: str) -> str:
             game_type_detected = 'unknown'
 
         if fn_sigs or arr_names:
-            fn_block_lines = ["// Fonctions disponibles dans ce jeu :"]
+            fn_block_lines = ["// Available functions in this game:"]
             fn_block_lines.extend(fn_sigs)
             if arr_names:
-                fn_block_lines.append("// Tableaux (arrays) : " + ", ".join(f"{a}[]" for a in arr_names))
-            fn_block_lines.append(f"// Type de jeu détecté : {game_type_detected}")
+                fn_block_lines.append("// Arrays: " + ", ".join(f"{a}[]" for a in arr_names))
+            fn_block_lines.append(f"// Detected game type: {game_type_detected}")
             sections.append('\n'.join(fn_block_lines))
 
     return '\n\n'.join(sections)[:8000]
 
 
 def _detect_game_type(js_snippet: str) -> str:
-    """Détecte le type de jeu à partir du snippet de contexte extrait."""
+    """Detect the game type from the extracted context snippet."""
     import re as _re_dgt
-    m = _re_dgt.search(r'// Type de jeu détecté : (\w+)', js_snippet)
+    m = _re_dgt.search(r'// Detected game type: (\w+)', js_snippet)
     if m:
         return m.group(1)
     # Fallback : détecter depuis le texte brut du snippet
@@ -726,7 +726,7 @@ def _detect_game_type(js_snippet: str) -> str:
 
 
 def _extract_full_js_code(html: str, max_chars: int = 50000) -> str:
-    """Extrait le code JS complet (pas un résumé) du fichier HTML du jeu."""
+    """Extract the full JS code (not a summary) from the game HTML file."""
     import re
     js = ""
     for m in re.finditer(r'<script(?:\s(?!src)[^>]*)?>(.+?)</script>', html, re.DOTALL | re.IGNORECASE):
@@ -737,8 +737,8 @@ def _extract_full_js_code(html: str, max_chars: int = 50000) -> str:
 
 def _is_complex_request(prompt: str) -> bool:
     """
-    Détecte si la demande nécessite le code complet du jeu (nouveau système/mécanique/type).
-    Les demandes simples (modifier une stat, spawner un ennemi) n'en ont pas besoin.
+    Detect if the request requires the full game code (new system/mechanic/type).
+    Simple requests (modify a stat, spawn an enemy) don't need it.
     """
     import re
     p = prompt.lower()
@@ -771,14 +771,14 @@ def _is_complex_request(prompt: str) -> bool:
 
 @app.route("/api/quick-generate", methods=["POST"])
 def api_quick_generate():
-    """Pipeline allégée ~2min : Phase 1 + Phase 2 partielle + Phase 3 + éval 3 agents."""
+    """Lightweight pipeline ~2min: Phase 1 + partial Phase 2 + Phase 3 + 3-agent eval."""
     data = request.get_json(force=True, silent=True) or {}
     prompt = str(data.get("prompt", "")).strip()
     if not prompt:
-        return jsonify({"error": "Le prompt est vide."}), 400
+        return jsonify({"error": "Prompt is empty."}), 400
     if len(prompt) > MAX_PROMPT_LENGTH:
         prompt = prompt[:MAX_PROMPT_LENGTH]
-    # F2 : inclure les guillemets pour prévenir les injections dans les prompts LLM
+    # F2: include quotes to prevent injections in LLM prompts
     prompt = prompt.replace("<", "").replace(">", "").replace("`", "").replace('"', "'").replace("\\", "")
 
     game_type = str(data.get("game_type", "")).strip()
@@ -823,7 +823,7 @@ def api_quick_generate():
                 "score": round(result.get("score", 0), 2),
                 "html_path": html_path, "html_basename": html_basename,
                 "titre": gdd.get("titre", "Jeu généré") if isinstance(gdd, dict) else "Jeu généré",
-                "approuve": result.get("approuve", False),
+                "approuve": result.get("approved", result.get("approuve", False)),
                 "erreur": result.get("erreur"),
                 "duree": int(result.get("duree_secondes", 0)),
                 "scores_detail": scores_detail, "issues": issues_top,
@@ -855,63 +855,63 @@ def api_quick_generate():
 @app.route("/api/preview/<session_id>")
 def api_preview(session_id):
     """
-    Retourne le code HTML du jeu généré en Phase 3, avant l'évaluation.
-    Permet un live preview pendant que la pipeline continue à tourner.
+    Return the HTML game code generated in Phase 3, before evaluation.
+    Enables live preview while the pipeline continues running.
     """
     with _sessions_lock:
         session = _sessions.get(session_id)
     if not session:
-        return "Session inconnue", 404
+        return "Unknown session", 404
     from logger import get_preview_by_session
     html = get_preview_by_session(session_id)
     if not html:
-        return "Preview non encore disponible — la Phase 3 n'est pas terminée.", 202
+        return "Preview not yet available — Phase 3 is not complete.", 202
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
 @app.route("/api/game-patch", methods=["POST"])
 def api_game_patch():
     """
-    Modifie un jeu en temps réel via un prompt naturel.
-    Reçoit {filename, prompt, context} et retourne {code: "JS snippet"}.
-    Le jeu fait eval(code) pour appliquer la modification sans rechargement.
+    Modify a game in real time via a natural language prompt.
+    Receives {filename, prompt, context} and returns {code: "JS snippet"}.
+    The game calls eval(code) to apply the modification without reload.
     """
     data = request.get_json(force=True, silent=True) or {}
     filename = str(data.get("filename", "")).strip()
     user_prompt = str(data.get("prompt", "")).strip()
     context = data.get("context", {})
 
-    # Sécurité
+    # Security
     if not filename or ".." in filename or "/" in filename or "\\" in filename:
-        return jsonify({"error": "Nom de fichier invalide"}), 400
+        return jsonify({"error": "Invalid filename"}), 400
     if not filename.endswith(".html"):
-        return jsonify({"error": "Le fichier doit être un .html"}), 400
+        return jsonify({"error": "File must be a .html"}), 400
     if not user_prompt:
-        return jsonify({"error": "Prompt vide"}), 400
+        return jsonify({"error": "Empty prompt"}), 400
     if len(user_prompt) > 500:
         user_prompt = user_prompt[:500]
 
     html_path = os.path.join(SAVE_DIR, filename)
     if not os.path.exists(html_path):
-        return jsonify({"error": "Fichier introuvable"}), 404
+        return jsonify({"error": "File not found"}), 404
 
-    # Extraire un extrait du code pour le contexte Gemini
+    # Extract a code snippet for Gemini context
     try:
         with open(html_path, encoding="utf-8") as f:
             html = f.read()
     except Exception as e:
-        return jsonify({"error": f"Lecture impossible: {e}"}), 500
+        return jsonify({"error": f"Cannot read file: {e}"}), 500
 
-    # Extraire les variables/structures clés du JS pour donner le bon contexte à Gemini
+    # Extract key JS variables/structures to give Gemini proper context
     import re as _re
     js_snippet = _extract_game_context(html)
 
-    # Contexte runtime transmis par le jeu (optionnel)
+    # Runtime context passed from the game (optional)
     context_str = ""
     if context:
-        context_str = f"\nÉTAT ACTUEL DU JEU (runtime) :\n{json.dumps(context, ensure_ascii=False, indent=2)}"
+        context_str = f"\nCURRENT GAME STATE (runtime):\n{json.dumps(context, ensure_ascii=False, indent=2)}"
 
-    # ── Détecter le type de jeu pour choisir la bonne API doc ──────────────────
+    # ── Detect game type to choose the right API doc ────────────────────────────
     _is_threejs = bool(_re.search(r'three\.js|THREE\.|WebGLRenderer|new THREE\b', html, _re.IGNORECASE))
 
     if _is_threejs:
@@ -1085,28 +1085,28 @@ enemies.forEach(e => e.speed = 0); if (boss) boss.speed = 0;
 HERO_CLASSES.push({ id:'admin', name:'Admin GOD', color:'#FF0000', baseHp:9999, baseMp:9999, baseAtk:999, baseDef:999, baseSpd:150, atkName:'Frappe Divine', skillName:'Activer Leviers', atkCost:0, atkCooldown:0.05, skillCost:0, skillCooldown:2, skillDuration:1 });
 CUSTOM_SKILLS['admin'] = function() { interactables.filter(o=>o.type==='lever').forEach(l=>{l.activated=true;l.used=true;}); if(bossGate){bossGate.open=true;} hero.invincibilityTimer=9999; triggerShake(6,0.4); };"""
 
-    # ── Détection d'intention ──────────────────────────────────────────────────
+    # ── Intent detection ─────────────────────────────────────────────────────
     import re as _re2
 
     _creation_words  = r'\b(cr[ée]{1,2}r?|ajouter?|nouveau|nouvelle|faire|invente[rz]?|fais|génère[rz]?|conçois?|construis?)\b'
     _modif_words     = r'\b(modifie[rz]?|changer?|augmenter?|diminuer?|r[ée]duire?|am[ée]liore[rz]?|baisser?|mettre|rendre|rends?|augmente?|booster?|nerfe[rz]?|up(?:grade)?|buff|nerf|monte[rz]?|hausse[rz]?)\b'
     _class_words     = r'\b(classe|class|h[ée]ros?|personnage|perso|character)\b'
 
-    # Création : mot de création + mot classe, sans mot de modif
-    # Cas spécial : "nouvelle classe" ou "créer un perso" sans ambiguïté
+    # Creation: creation word + class word, without modification word
+    # Special case: "nouvelle classe" or "créer un perso" without ambiguity
     has_class_word    = bool(_re2.search(_class_words, user_prompt, _re2.IGNORECASE))
     has_creation_word = bool(_re2.search(_creation_words, user_prompt, _re2.IGNORECASE))
     has_modif_word    = bool(_re2.search(_modif_words, user_prompt, _re2.IGNORECASE))
     # "nouvelle classe" / "un nouveau perso" suffit même sans verbe explicite
     has_new_class     = bool(_re2.search(r'\b(nouveau|nouvelle|new)\b.*\b(classe|class|h[ée]ros?|perso)\b', user_prompt, _re2.IGNORECASE))
 
-    # Les jeux Three.js n'ont pas HERO_CLASSES — désactiver la détection de classe
+    # Three.js games don't have HERO_CLASSES — disable class detection
     is_class_creation = (not _is_threejs) and (
         (has_class_word and has_creation_word and not has_modif_word)
         or has_new_class
     )
 
-    # Modification d'une classe existante
+    # Modification of an existing class
     _class_stat_words = r'\b(classe|class|h[ée]ros?|personnage|perso|vitesse|speed|d[ée]g[aâ]ts?|attaque?|d[ée]fense?|hp|vie|mana|mp|comp[ée]tence|skill|rapide|lent|fort|puissant|faible|lente?)\b'
     is_class_modification = (
         not _is_threejs
@@ -1115,7 +1115,7 @@ CUSTOM_SKILLS['admin'] = function() { interactables.filter(o=>o.type==='lever').
         and bool(_re2.search(_class_stat_words, user_prompt, _re2.IGNORECASE))
     )
 
-    # ── Règles communes ────────────────────────────────────────────────────────
+    # ── Common rules ─────────────────────────────────────────────────────────
     RULES = """RÈGLES ABSOLUES :
 - Retourne UNIQUEMENT du code JavaScript pur, sans markdown, sans backticks, sans commentaires
 - Le code DOIT être syntaxiquement COMPLET — toutes accolades/parenthèses/crochets fermés
@@ -1183,7 +1183,7 @@ RÈGLES DÉFENSIVES OBLIGATOIRES dans CUSTOM_SKILLS et CUSTOM_ATTACKS :
 RÈGLE DESCRIPTION : le champ 'description' de HERO_CLASSES doit expliquer le thème du personnage ET sa compétence (max 60 chars).
 IMPÉRATIF : chaque ligne doit tenir en moins de 300 caractères. Fonctions ultra-compactes, pas d'espaces superflus."""
 
-        # Pour la création on n'a besoin que des IDs/noms des classes existantes
+        # For creation we only need the IDs/names of existing classes
         known_ids = context.get("heroClassIds", []) if context else []
         existing_summary = "Classes existantes : " + ", ".join(known_ids) if known_ids else js_snippet[:300]
         prompt = f"""{existing_summary}
@@ -1195,7 +1195,7 @@ Chaque ligne syntaxiquement COMPLÈTE, baseSpd entre 60 et 90, mécanique de com
         max_tok = 12000
 
     elif is_class_modification:
-        # Classes existantes connues via contexte runtime
+        # Existing classes known via runtime context
         known_ids = context.get("heroClassIds", []) if context else []
         known_ids_str = ", ".join(f"'{i}'" for i in known_ids) if known_ids else "voir HERO_CLASSES"
 
@@ -1226,23 +1226,23 @@ Génère le code JS qui MODIFIE la classe existante (pas de push) et applique le
         max_tok = 4000
 
     else:
-        # ── API doc dynamique pour jeux 2D Canvas ──────────────────────────────
+        # ── Dynamic API doc for 2D Canvas games ────────────────────────────────
         _game_type = _detect_game_type(js_snippet)
 
-        # Section variables (extraire depuis js_snippet les lignes de let)
+        # Variables section (extract let lines from js_snippet)
         import re as _re_eb
         _let_lines = [l for l in js_snippet.splitlines() if l.strip().startswith('let ')][:30]
         _let_block = '\n'.join(_let_lines) if _let_lines else "(voir contexte ci-dessus)"
 
-        # Section fonctions
+        # Functions section
         _fn_lines = [l for l in js_snippet.splitlines() if l.strip().startswith('// ') and '(' in l and 'Type de jeu' not in l and 'Tableaux' not in l and 'Variables' not in l][:20]
         _fn_block = '\n'.join(_fn_lines) if _fn_lines else "(voir contexte ci-dessus)"
 
-        # Section arrays
+        # Arrays section
         _arr_match = _re_eb.search(r'// Tableaux \(arrays\) : (.+)', js_snippet)
         _arr_block = _arr_match.group(1) if _arr_match else "(aucun détecté)"
 
-        # Recettes adaptées au type de jeu
+        # Recipes adapted to the game type
         if _game_type == 'tower_defense':
             _recettes = """=== RECETTES TOWER DEFENSE ===
 // Ajouter une tour :
@@ -1322,7 +1322,7 @@ if(_p) _p.speed = (_p.speed || 5) * 2;"""
 
 {_recettes}"""
 
-        # ── Demande complexe → code complet + function wrapping ──────────────
+        # ── Complex request → full code + function wrapping ─────────────────
         is_complex = _is_complex_request(user_prompt)
 
         if is_complex:
@@ -1442,11 +1442,11 @@ Génère le snippet JS minimal et syntaxiquement complet."""
 
 @app.route("/api/health")
 def api_health():
-    """Session 15 — Dashboard de santé de la pipeline."""
+    """Pipeline health dashboard."""
     import subprocess, shutil, os as _os
     health = {"status": "ok", "checks": {}}
 
-    # Check Node.js (requis pour js_syntax_checker)
+    # Check Node.js (required for js_syntax_checker)
     node_ok = shutil.which("node") is not None
     if node_ok:
         try:
@@ -1457,14 +1457,14 @@ def api_health():
     else:
         health["checks"]["node"] = {"ok": False, "version": None}
 
-    # Check Playwright (requis pour agent_executeur)
+    # Check Playwright (required for agent_executeur)
     try:
         from playwright.sync_api import sync_playwright
         health["checks"]["playwright"] = {"ok": True}
     except Exception as e:
         health["checks"]["playwright"] = {"ok": False, "error": str(e)}
 
-    # Check ChromaDB (RAG)
+    # Check ChromaDB (RAG vector database)
     try:
         import rag
         rag_stats = rag.get_stats()
@@ -1476,7 +1476,7 @@ def api_health():
     api_key_set = bool(_os.environ.get("GEMINI_API_KEY") or _os.environ.get("GOOGLE_API_KEY"))
     health["checks"]["gemini_api_key"] = {"ok": api_key_set}
 
-    # Check memory.json
+    # Check memory.json state file
     try:
         import memory
         stats = memory.get_stats()
@@ -1488,12 +1488,12 @@ def api_health():
     except Exception as e:
         health["checks"]["memory"] = {"ok": False, "error": str(e)}
 
-    # Check jeux_sauvegardes dir
+    # Check saved games directory
     save_dir = _os.path.join(_os.path.dirname(__file__), "jeux_sauvegardes")
     game_count = len([f for f in _os.listdir(save_dir) if f.endswith(".html")]) if _os.path.isdir(save_dir) else 0
     health["checks"]["save_dir"] = {"ok": True, "game_files": game_count}
 
-    # Check active sessions
+    # Check active session count
     health["checks"]["active_sessions"] = {"count": len(_sessions)}
 
     # Global status
@@ -1533,7 +1533,7 @@ def api_stats():
 
 @app.route("/api/quota")
 def api_quota():
-    """Retourne l'état du quota RPD par clé — sans faire d'appel API."""
+    """Return RPD quota status per key — no API call made."""
     try:
         from config import get_quota_status
         return jsonify(get_quota_status())
@@ -1542,21 +1542,21 @@ def api_quota():
 
 
 # ─────────────────────────────────────────────
-# POINT D'ENTRÉE
+# ENTRY POINT
 # ─────────────────────────────────────────────
 def _build_mechanics_kb_async():
-    """Peuple la base de mécaniques en arrière-plan au démarrage (si vide)."""
+    """Populate the mechanics knowledge base in the background at startup (if empty)."""
     try:
         import build_mechanics_kb
         n = build_mechanics_kb.build(force=False)
         if n > 0:
-            print(f"  [MechanicsKB] {n} entrées indexées dans ChromaDB.")
+            print(f"  [MechanicsKB] {n} entries indexed in ChromaDB.")
     except Exception as e:
-        print(f"  [MechanicsKB] Build ignoré : {e}")
+        print(f"  [MechanicsKB] Build skipped: {e}")
 
 
-# Démarrage des threads de fond (runs under both `python app.py` and gunicorn/WSGI)
-# Placé ici (hors __main__) pour s'exécuter aussi quand Flask est démarré par un WSGI server
+# Background threads (run under both `python app.py` and gunicorn/WSGI)
+# Placed here (outside __main__) so they also run when Flask is started by a WSGI server
 threading.Thread(target=_build_mechanics_kb_async, daemon=True, name="mechanics-kb-build").start()
 threading.Thread(target=_session_cleanup_loop, daemon=True, name="session-cleanup").start()
 
@@ -1566,7 +1566,7 @@ if __name__ == "__main__":
     os.makedirs("static/css", exist_ok=True)
     os.makedirs("static/js", exist_ok=True)
     print("\n" + "=" * 60)
-    print("  ARCADE AI — Interface Web")
+    print("  ARCADE AI — Web Interface")
     print("  http://localhost:5000")
     print("=" * 60 + "\n")
     app.run(debug=False, port=5000, threaded=True, use_reloader=False)

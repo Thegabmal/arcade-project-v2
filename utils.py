@@ -1,6 +1,6 @@
 """
-Utilitaires partagés — arcade-project-v2
-Fonctions communes utilisées par plusieurs agents.
+Shared utilities — arcade-project-v2
+Common functions used by multiple agents.
 """
 
 import re

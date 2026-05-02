@@ -1,9 +1,9 @@
 """
-Genre Score Profiler — suit les scores par dimension pour chaque genre.
-Identifie automatiquement les dimensions faibles et injecte des conseils ciblés
-dans le prompt du créateur pour corriger les points systématiquement bas.
+Genre Score Profiler — tracks scores by dimension for each genre.
+Automatically identifies weak dimensions and injects targeted tips
+into the creator's prompt to fix systematically low scores.
 
-Stockage : genre_scores.json (même dossier que ce fichier)
+Storage: genre_scores.json (same directory as this file)
   {
     "rpg": {
       "count": 5,

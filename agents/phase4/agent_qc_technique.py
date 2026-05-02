@@ -1,7 +1,7 @@
 """
 Agent QC Technique — Phase 4
-Évalue le code sur des critères techniques adaptatifs au genre.
-Les critères viennent du GenreProfile (générés en Phase 1).
+Evaluates code on adaptive technical criteria based on genre.
+Criteria come from the GenreProfile (generated in Phase 1).
 """
 
 import json
@@ -9,130 +9,130 @@ from config import call_gemini_json, with_fallback
 from genre_profile import GenreProfile, EvaluationResult
 from logger import phase4_log
 
-SYSTEM_2D = """Tu es un expert en développement de jeux HTML5 Canvas/JavaScript. Tu analyses du code
-avec précision et objectivité. Tu identifies les forces et faiblesses techniques.
-Tu réponds UNIQUEMENT en JSON valide."""
+SYSTEM_2D = """You are an expert in HTML5 Canvas/JavaScript game development. You analyze code
+with precision and objectivity. You identify technical strengths and weaknesses.
+You respond ONLY in valid JSON."""
 
-SYSTEM_3D = """Tu es un expert en développement de jeux 3D web avec Three.js. Tu analyses du code
-Three.js/WebGL avec précision. Tu connais les patterns Three.js : Scene, Camera, Renderer, Clock,
-géométries, matériaux, éclairage, collisions 3D. Tu réponds UNIQUEMENT en JSON valide."""
+SYSTEM_3D = """You are an expert in 3D web game development with Three.js. You analyze
+Three.js/WebGL code with precision. You know Three.js patterns: Scene, Camera, Renderer, Clock,
+geometries, materials, lighting, 3D collisions. You respond ONLY in valid JSON."""
 
-CRITERES_UNIVERSELS_2D = """RUBRIQUE DE SCORE (guide ton évaluation — sois précis et sévère) :
-- 0-3 : Jeu non fonctionnel (crash, écran noir, stub vide, aucune logique de jeu)
-- 4-5 : Jeu basique qui tourne mais sans profondeur (1 type d'ennemi, pas de boss, pas de particules)
-- 6   : Correct — core loop fonctionnelle, quelques features mais manque de systèmes riches
-- 7   : Bon — code propre, 2-3 types d'ennemis, boss ou système de vagues, collisions correctes
-- 8   : Très bon — boss avec phases, combo/power-ups/particules implémentés, restart propre, highscore
-- 9   : Excellent — tous les systèmes du genre présents, polish visible (shake, glow, floatTexts, transitions)
-- 10  : Exceptionnel (réserve pour un jeu vraiment remarquable — rare)
+CRITERES_UNIVERSELS_2D = """SCORING RUBRIC (guide your evaluation — be precise and strict):
+- 0-3 : Non-functional game (crash, black screen, empty stub, no game logic)
+- 4-5 : Basic game that runs but lacks depth (1 enemy type, no boss, no particles)
+- 6   : Correct — functional core loop, some features but lacks rich systems
+- 7   : Good — clean code, 2-3 enemy types, boss or wave system, working collisions
+- 8   : Very good — boss with phases, combo/power-ups/particles implemented, clean restart, highscore
+- 9   : Excellent — all genre systems present, visible polish (shake, glow, floatTexts, transitions)
+- 10  : Exceptional (reserve for a truly remarkable game — rare)
 
-Critères BLOQUANTS — pénalité sévère si absent (jeu non fonctionnel) :
-- DOMContentLoaded wrappant TOUT le code (canvas récupéré après le DOM)
-- requestAnimationFrame pour la game loop (pas setInterval ni setTimeout)
-- Delta time calculé et utilisé dans les mouvements (pas de vitesses fixes)
-- Canvas récupéré via getElementById DANS le callback DOMContentLoaded
-- Pas de .clear() sur des tableaux (TypeError) — utiliser .length = 0
-- LOOP VAR INIT : `for (let i = arr.length-1; i >= 0; i--)` → corps commence par `const X = arr[i]`
-- FOR-OF SPLICE : `for (const x of arr)` ne doit JAMAIS contenir `arr.splice()`
-- CONST REASSIGNMENT : `const score = 0` puis `score += 10` → TypeError — scalaires mutables = `let`
-- DT PASSING : fonctions qui utilisent `dt` DOIVENT l'avoir en paramètre (updateEnemies, updateBoss, etc.)
-- `dist` calculée AVANT d'être utilisée dans if(dist < ...) — pas de variable tombée du ciel
-- PAS d'eval(), window.__devPatch, new Function() en production
-- Fonctions clés NON-STUB : updatePlayer(), updateEnemies(), checkCollisions() avec corps réel (pas juste des commentaires)
-- Menu démarrable : SPACE ou Enter → gameState = 'playing'
-- Initialisation au démarrage : initGame() appelle spawnEnemies()/generateLevel() — pas d'arrays vides
+BLOCKING criteria — severe penalty if absent (non-functional game):
+- DOMContentLoaded wrapping ALL code (canvas retrieved after DOM)
+- requestAnimationFrame for the game loop (not setInterval or setTimeout)
+- Delta time calculated and used in movement (no fixed speeds)
+- Canvas retrieved via getElementById INSIDE the DOMContentLoaded callback
+- No .clear() on arrays (TypeError) — use .length = 0
+- LOOP VAR INIT: `for (let i = arr.length-1; i >= 0; i--)` → body starts with `const X = arr[i]`
+- FOR-OF SPLICE: `for (const x of arr)` must NEVER contain `arr.splice()`
+- CONST REASSIGNMENT: `const score = 0` then `score += 10` → TypeError — mutable scalars = `let`
+- DT PASSING: functions that use `dt` MUST have it as a parameter (updateEnemies, updateBoss, etc.)
+- `dist` calculated BEFORE being used in if(dist < ...) — no variable appearing out of thin air
+- NO eval(), window.__devPatch, new Function() in production
+- Key functions NON-STUB: updatePlayer(), updateEnemies(), checkCollisions() with real body (not just comments)
+- Startable menu: SPACE or Enter → gameState = 'playing'
+- Initialization at start: initGame() calls spawnEnemies()/generateLevel() — no empty arrays
 
-Critères QUALITÉ DE BASE (fondamentaux — pénalité si absent) :
-- Machine à états propre : gameState ∈ {menu, playing, paused, gameover} utilisé partout
-- Restart complet sans location.reload() — toutes les variables remises à zéro
-- Collisions fonctionnelles (AABB ou distance) — pas de collisions fantômes ni manquées
-- Score + highscore en localStorage — affiché sur menu ET en jeu
-- Canvas responsive (window.innerWidth/innerHeight)
-- Objet keys{} cohérent avec les mêmes noms partout (eviter keys['ArrowLeft'] vs keys.left)
+BASIC QUALITY criteria (fundamentals — penalty if absent):
+- Clean state machine: gameState ∈ {menu, playing, paused, gameover} used everywhere
+- Complete restart without location.reload() — all variables reset to zero
+- Working collisions (AABB or distance) — no ghost or missed collisions
+- Score + highscore in localStorage — displayed on menu AND in game
+- Responsive canvas (window.innerWidth/innerHeight)
+- Consistent keys{} object with same names everywhere (avoid keys['ArrowLeft'] vs keys.left)
 
-Critères PROFONDEUR GAMEPLAY (impact majeur sur le score — ce qui distingue un bon jeu) :
-- VARIÉTÉ ENNEMIS : ≥ 3 types d'ennemis distincts (comportements différents, pas juste des recolors) → +1pt
-- BOSS SYSTEM : boss avec HP élevé, pattern d'attaque distinct, ET ≥ 2 phases (HP% seuils) → +1pt
-- SYSTÈME DE VAGUES : difficulté progressive (vitesse/count/types selon wave) → +0.5pt
-- POWER-UPS : ≥ 2 types collectables avec effets distincts (durée, activation, visuel) → +0.5pt
-- COMBO/MULTIPLICATEUR : système combo (kills consecutifs → score multiplié) → +0.5pt
-- PARTICULES : spawnExplosion/spawnParticles + updateParticles() réellement appelé → +0.5pt
-- FEEDBACK VISUEL RICHE : screen shake (triggerShake), floating texts (spawnFloatText), flash overlay → +0.5pt
-- PROGRESSION JOUEUR : XP/niveau OU upgrade OU déblocage de capacité au fil du jeu → +0.5pt
+GAMEPLAY DEPTH criteria (major impact on score — what distinguishes a good game):
+- ENEMY VARIETY: ≥ 3 distinct enemy types (different behaviors, not just recolors) → +1pt
+- BOSS SYSTEM: boss with high HP, distinct attack pattern, AND ≥ 2 phases (HP% thresholds) → +1pt
+- WAVE SYSTEM: progressive difficulty (speed/count/types per wave) → +0.5pt
+- POWER-UPS: ≥ 2 collectable types with distinct effects (duration, activation, visual) → +0.5pt
+- COMBO/MULTIPLIER: combo system (consecutive kills → multiplied score) → +0.5pt
+- PARTICLES: spawnExplosion/spawnParticles + updateParticles() actually called → +0.5pt
+- RICH VISUAL FEEDBACK: screen shake (triggerShake), floating texts (spawnFloatText), flash overlay → +0.5pt
+- PLAYER PROGRESSION: XP/level OR upgrade OR ability unlock during gameplay → +0.5pt
 
-Critères DUNGEON/RPG (si le genre est RPG, dungeon, aventure — vérifier impérativement) :
-- Knockback ennemi : les ennemis reçoivent une impulsion quand frappés ET ne traversent pas les murs (knockbackVX/VY avec stop mural)
-- Contraste visuel : sol clair vs mur sombre (différence perceptible), ennemis de couleur différente du sol
-- Salle du boss rendue visible : BOSS_WALL pas noir pur, sol de la salle boss distinct
-- Couloirs ≥ 3 tuiles de large : vérifier dans la génération procédurale que les corridors ont une largeur ≥ 3
-- Loot varié : les coffres utilisent une loot table avec ≥ 4 types d'items différents (rollLoot / LOOT_TABLE)
-- Level up impactant : checkLevelUp() augmente HP max d'au moins 15% + soin complet + floating text avec les gains
-- Balance vitesses : speed ennemi normal ≤ 90% vitesse joueur — vérifier les valeurs numériques
-- Textes lisibles : font ≥ 7px en pixel art, ≥ 13px en canvas plein écran
-- Callbacks de registre avec optional chaining : ENEMY_TYPES[x].onAttack?.() pas onAttack() — vérifier tous les appels de méthodes sur des objets-type
-- Timers initialisés : tout xyzTimer utilisé dans updateBoss/updateEnemy doit être initialisé dans createEnemy/spawnBoss (ex: cloneTimer, summonTimer, teleportTimer)
-- Pas de double const/let dans la même fonction : chercher deux déclarations du même nom dans generateDungeon, update, draw...
-- Boss spawn dans generateDungeon() : pas de spawn lazy conditionnel qui peut rater
-- Pas de calcul lourd dans draw()/update() : drawMap() itère seulement sur tuiles visibles (frustum culling)
-- Screen shake dosé : triggerShake mag ≤ 2 sur dégâts normaux, ≥ 6 seulement sur mort/boss transition
-- Animations d'attaque : hero.attackFlash ou arc de balayage visible lors d'une attaque
-- Cooldown compétence affiché : barre ou timer visible dans le HUD pour chaque compétence à cooldown
-- Source de dégâts boss UNIQUE : les dégâts du boss viennent soit du check de collision soit de onAttack — PAS des deux (double dégât = mort instantanée)
-- Stats boss équilibrées : boss.attack ≤ 15% maxHP joueur, boss.attackRadius ≤ TILE_SIZE, boss.speed phase1 ≤ vitesse joueur * 0.5
-- Recul boss post-attaque : boss._recoilTimer > 0 → boss s'éloigne 0.6–1.0s après chaque hit (fenêtre d'évasion pour le joueur)
-- Visuel boss distinctif : aura pulsante (arc semi-transparent animé), indicateur ★ BOSS ★ au-dessus, mini barre de vie sur le sprite, sizeFactor ≥ 2.0"""
+DUNGEON/RPG criteria (if genre is RPG, dungeon, adventure — check imperatively):
+- Enemy knockback: enemies receive an impulse when hit AND do not pass through walls (knockbackVX/VY with wall stop)
+- Visual contrast: light floor vs dark wall (perceptible difference), enemies a different color from the floor
+- Boss room made visible: BOSS_WALL not pure black, boss room floor distinct
+- Corridors ≥ 3 tiles wide: verify in procedural generation that corridors have width ≥ 3
+- Varied loot: chests use a loot table with ≥ 4 different item types (rollLoot / LOOT_TABLE)
+- Impactful level up: checkLevelUp() increases max HP by at least 15% + full heal + floating text with gains
+- Speed balance: normal enemy speed ≤ 90% player speed — check numeric values
+- Readable texts: font ≥ 7px in pixel art, ≥ 13px in full-screen canvas
+- Registry callbacks with optional chaining: ENEMY_TYPES[x].onAttack?.() not onAttack() — check all method calls on type objects
+- Timers initialized: any xyzTimer used in updateBoss/updateEnemy must be initialized in createEnemy/spawnBoss (e.g. cloneTimer, summonTimer, teleportTimer)
+- No double const/let in same function: look for two declarations of the same name in generateDungeon, update, draw...
+- Boss spawns in generateDungeon(): no lazy conditional spawn that can fail
+- No heavy computation in draw()/update(): drawMap() iterates only over visible tiles (frustum culling)
+- Screen shake dosed: triggerShake mag ≤ 2 on normal damage, ≥ 6 only on death/boss transition
+- Attack animations: hero.attackFlash or visible sweep arc during an attack
+- Skill cooldown displayed: visible bar or timer in HUD for each skill with cooldown
+- UNIQUE boss damage source: boss damage comes either from collision check or onAttack — NOT both (double damage = instant death)
+- Balanced boss stats: boss.attack ≤ 15% player maxHP, boss.attackRadius ≤ TILE_SIZE, boss.speed phase1 ≤ player speed * 0.5
+- Post-attack boss recoil: boss._recoilTimer > 0 → boss retreats 0.6–1.0s after each hit (evasion window for player)
+- Distinctive boss visuals: pulsing aura (animated semi-transparent arc), ★ BOSS ★ indicator above, mini health bar on sprite, sizeFactor ≥ 2.0"""
 
-CRITERES_UNIVERSELS_3D = """Critères BLOQUANTS (erreur = jeu non fonctionnel) :
-- DOMContentLoaded wrappant tout le code Three.js (JAMAIS THREE.* au top-level)
-- THREE.WebGLRenderer créé et ajouté au body (document.body.appendChild(renderer.domElement))
-- AmbientLight présent (sinon tout noir)
-- DirectionalLight présent (sinon pas d'ombres/relief)
-- THREE.Clock utilisé pour le delta time (clock.getDelta(), capped à 0.05)
-- requestAnimationFrame pour la game loop — gameLoop() lancé immédiatement dans DOMContentLoaded
-- scene.background défini (Color ou Texture) — sinon fond transparent
-- Pas de .clear() sur des tableaux — utiliser .length = 0
-- scene.remove(mesh) appelé à la suppression d'entités (sinon memory leak)
+CRITERES_UNIVERSELS_3D = """BLOCKING criteria (error = non-functional game):
+- DOMContentLoaded wrapping all Three.js code (NEVER THREE.* at top-level)
+- THREE.WebGLRenderer created and added to body (document.body.appendChild(renderer.domElement))
+- AmbientLight present (otherwise all black)
+- DirectionalLight present (otherwise no shadows/relief)
+- THREE.Clock used for delta time (clock.getDelta(), capped at 0.05)
+- requestAnimationFrame for the game loop — gameLoop() launched immediately in DOMContentLoaded
+- scene.background defined (Color or Texture) — otherwise transparent background
+- No .clear() on arrays — use .length = 0
+- scene.remove(mesh) called when removing entities (otherwise memory leak)
 
-Critères QUALITÉ (impact sur le score) :
-- Collisions 3D via THREE.Box3.setFromObject() + intersectsBox() (pas juste distance-based)
-- HUD HTML overlay (divs fixed par-dessus le canvas — pas de canvas 2D)
-- Restart propre : scene.remove() pour tous les meshes + arrays.length = 0 + reset vars
-- Canvas responsive : window.addEventListener('resize') avec camera.aspect + renderer.setSize
-- Meilleur score en localStorage
-- Au moins 3 géométries Three.js distinctes (BoxGeometry, SphereGeometry, CylinderGeometry...)
-- MeshPhongMaterial ou MeshStandardMaterial (pas uniquement MeshBasicMaterial)
-- Particules Three.js (THREE.Points) ou au moins un effet visuel dynamique
-- renderer.shadowMap.enabled + castShadow/receiveShadow sur les objets principaux"""
+QUALITY criteria (impact on score):
+- 3D collisions via THREE.Box3.setFromObject() + intersectsBox() (not just distance-based)
+- HTML overlay HUD (fixed divs over canvas — not a 2D canvas)
+- Clean restart: scene.remove() for all meshes + arrays.length = 0 + reset vars
+- Responsive canvas: window.addEventListener('resize') with camera.aspect + renderer.setSize
+- Best score in localStorage
+- At least 3 distinct Three.js geometries (BoxGeometry, SphereGeometry, CylinderGeometry...)
+- MeshPhongMaterial or MeshStandardMaterial (not only MeshBasicMaterial)
+- Three.js particles (THREE.Points) or at least one dynamic visual effect
+- renderer.shadowMap.enabled + castShadow/receiveShadow on main objects"""
 
 
 def _detect_orphan_functions(code: str) -> list[str]:
     """
-    F1 : Détecte les fonctions définies mais jamais appelées NULLE PART dans le code.
-    Recherche fn( dans l'intégralité du code — couvre forEach/map/for loops, callbacks, etc.
-    Retourne une liste de noms de fonctions orphelines.
+    F1: Detects functions defined but never called ANYWHERE in the code.
+    Searches for fn( throughout the entire code — covers forEach/map/for loops, callbacks, etc.
+    Returns a list of orphan function names.
     """
     import re
-    # Extraire tous les noms de fonctions définies
+    # Extract all defined function names
     defined = set(re.findall(r'function\s+([a-zA-Z_$][\w$]*)\s*\(', code))
-    # Ignorer les fonctions built-in et de structure (M3 : liste étendue)
+    # Ignore built-in and structural functions (M3: extended list)
     ignore = {
         'init', 'gameLoop', 'animate', 'loop', 'tick', 'render', 'main',
         'DOMContentLoaded', 'onload', 'onclick', 'onkeydown', 'onkeyup',
         'addEventListener', 'removeEventListener',
-        # Fonctions canvas/web standard
+        # Standard canvas/web functions
         'requestAnimationFrame', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
-        # Handlers événements courants
+        # Common event handlers
         'onmousedown', 'onmouseup', 'onmousemove', 'ontouchstart', 'ontouchmove', 'ontouchend',
         'onresize', 'onblur', 'onfocus', 'oncontextmenu',
-        # Fonctions de structure communes (peuvent être appelées indirectement)
+        # Common structural functions (may be called indirectly)
         'update', 'draw', 'start', 'stop', 'pause', 'resume', 'reset', 'restart',
         'setup', 'preload', 'create', 'destroy',
     }
     candidates = defined - ignore
     orphans = []
     for fn in candidates:
-        # M3 : Recherche fn( dans TOUT le code (pas seulement gameLoop)
-        # — couvre forEach, map, for-loops, callbacks, appels imbriqués
+        # M3: Search for fn( in ALL code (not just gameLoop)
+        # — covers forEach, map, for-loops, callbacks, nested calls
         call_pattern = re.compile(r'\b' + re.escape(fn) + r'\s*\(')
         def_pattern = re.compile(r'function\s+' + re.escape(fn) + r'\s*\(')
         all_occurrences = len(call_pattern.findall(code))
@@ -145,45 +145,45 @@ def _detect_orphan_functions(code: str) -> list[str]:
 
 def run(code: str, genre_profile: GenreProfile) -> EvaluationResult:
     est_3d = genre_profile.technologie_rendu == "threejs"
-    phase4_log.agent_start("QC Technique", f"Analyse technique {'Three.js 3D' if est_3d else 'Canvas 2D'}")
+    phase4_log.agent_start("QC Technique", f"Technical analysis {'Three.js 3D' if est_3d else 'Canvas 2D'}")
 
     criteres = genre_profile.criteres_qc_technique
-    criteres_str = json.dumps(criteres, ensure_ascii=False) if criteres else "critères standards"
+    criteres_str = json.dumps(criteres, ensure_ascii=False) if criteres else "standard criteria"
     criteres_universels = CRITERES_UNIVERSELS_3D if est_3d else CRITERES_UNIVERSELS_2D
     system = SYSTEM_3D if est_3d else SYSTEM_2D
     techno_label = "Three.js (3D)" if est_3d else "Canvas 2D"
 
-    # F4 : Extraction code complète 40KB (au lieu de 24KB tronqué)
+    # F4: Full code extraction 40KB (instead of 24KB truncated)
     from utils import extract_js_sample
     code_extrait = extract_js_sample(code, 40000)
 
-    # F1 : Détecter les fonctions orphelines avant appel LLM
+    # F1: Detect orphan functions before LLM call
     _orphans = _detect_orphan_functions(code)
     _orphan_hint = ""
     if _orphans:
-        phase4_log.warning(f"F1 : {len(_orphans)} fonction(s) orpheline(s) : {', '.join(_orphans[:6])}")
+        phase4_log.warning(f"F1: {len(_orphans)} orphan function(s): {', '.join(_orphans[:6])}")
         _orphan_hint = (
-            f"\n\nFONCTIONS ORPHELINES DÉTECTÉES (définies mais jamais appelées — à signaler comme issues critiques) :\n"
+            f"\n\nORPHAN FUNCTIONS DETECTED (defined but never called — flag as critical issues):\n"
             + "\n".join(f"  - {fn}()" for fn in _orphans[:10])
-            + "\nCes fonctions ne contribuent JAMAIS au jeu. Ajouter une issue critique pour chacune."
+            + "\nThese functions NEVER contribute to the game. Add a critical issue for each one."
         )
 
-    prompt = f"""Analyse technique ce code de jeu HTML5 ({techno_label}) pour un {genre_profile.genre_principal}.
+    prompt = f"""Technically analyze this HTML5 game code ({techno_label}) for a {genre_profile.genre_principal}.
 
-CODE (extrait) :
+CODE (excerpt):
 ```html
 {code_extrait}
 ```
 
-CRITÈRES SPÉCIFIQUES AU GENRE {genre_profile.genre_principal.upper()} :
+CRITERIA SPECIFIC TO GENRE {genre_profile.genre_principal.upper()}:
 {criteres_str}
 
-CRITÈRES TECHNIQUES {techno_label.upper()} à vérifier :
+TECHNICAL CRITERIA {techno_label.upper()} to check:
 {criteres_universels}{_orphan_hint}
 
-Pour chaque critère, donne un score de 0.0 à son poids max et un commentaire.
+For each criterion, give a score from 0.0 to its maximum weight and a comment.
 
-Réponds en JSON :
+Respond in JSON:
 {{
   "criteres_evalues": [
     {{
@@ -197,10 +197,10 @@ Réponds en JSON :
   "issues": [
     {{
       "severite": "critique / majeur / mineur",
-      "description": "Description précise : quelle variable/pattern est cassé",
-      "fonction_concernee": "nom exact de la fonction JS concernée (ex: updateEnemies, loadGame, checkCollisions)",
-      "pattern_a_chercher": "extrait de code exact à trouver (ex: 'for (let i = 0; i < enemies.length' ou 'localStorage.getItem')",
-      "suggestion": "correction concrète en 1-2 lignes"
+      "description": "Precise description: which variable/pattern is broken",
+      "fonction_concernee": "exact name of the concerned JS function (e.g. updateEnemies, loadGame, checkCollisions)",
+      "pattern_a_chercher": "exact code excerpt to find (e.g. 'for (let i = 0; i < enemies.length' or 'localStorage.getItem')",
+      "suggestion": "concrete fix in 1-2 lines"
     }}
   ],
   "points_forts": ["...", "..."],
@@ -211,15 +211,15 @@ Réponds en JSON :
     result = _call(prompt, system)
     ev = _parse(result, "QC Technique")
 
-    # F1 : Injecter les fonctions orphelines comme issues critiques automatiques
+    # F1: Inject orphan functions as automatic critical issues
     if _orphans:
         for _fn in _orphans[:5]:
             ev.issues.insert(0, {
                 "severite": "critique",
-                "description": f"F1 : fonction orpheline '{_fn}()' — définie mais jamais appelée depuis gameLoop/update/draw",
+                "description": f"F1: orphan function '{_fn}()' — defined but never called from gameLoop/update/draw",
                 "fonction_concernee": _fn,
                 "pattern_a_chercher": f"function {_fn}(",
-                "suggestion": f"Appeler {_fn}() dans gameLoop() ou dans la fonction update/draw appropriée"
+                "suggestion": f"Call {_fn}() in gameLoop() or in the appropriate update/draw function"
             })
 
     return ev
@@ -237,18 +237,18 @@ def _parse(result: dict, agent_name: str) -> EvaluationResult:
     phase4_log.score("QC Technique", ev.score)
     critiques = [i for i in ev.issues if i.get("severite") == "critique"]
     if critiques:
-        phase4_log.warning(f"{len(critiques)} issue(s) critique(s) détectée(s)")
+        phase4_log.warning(f"{len(critiques)} critical issue(s) detected")
     return ev
 
 
-# _sample_code remplacé par utils.extract_js_sample (extraction JS + échantillonnage)
+# _sample_code replaced by utils.extract_js_sample (JS extraction + sampling)
 
 @with_fallback({
     "criteres_evalues": [],
-    "issues": [{"severite": "majeur", "description": "Analyse QC technique échouée", "suggestion": "Réessayer"}],
+    "issues": [{"severite": "majeur", "description": "Technical QC analysis failed", "suggestion": "Retry"}],
     "points_forts": [],
     "score_total": 5.0,
-    "commentaire_global": "Analyse indisponible"
+    "commentaire_global": "Analysis unavailable"
 })
 def _call(prompt: str, system: str = SYSTEM_2D) -> dict:
     return call_gemini_json(prompt, temperature=0.2, system_instruction=system)

@@ -1,13 +1,13 @@
 """
-Agent JS Linter — Phase 3.5
-Analyse statique du JavaScript généré AVANT l'évaluation complète.
+JS Linter Agent — Phase 3.5
+Static analysis of generated JavaScript BEFORE full evaluation.
 
-Rôle : détecter les bugs runtime évidents que le code_validator (regex) ne peut pas voir :
-  - Variables/fonctions utilisées sans être déclarées
-  - Propriétés d'objets inexistantes (ex: ball.speedMultiplier sans déclaration)
-  - Fonctions appelées avant d'être définies (hors hoisting)
-  - Incohérences dans la state machine (états référencés mais non gérés)
-  - Patterns connus cassés (ex: canvas.width dans la boucle RAF sans caching)
+Role: detect obvious runtime bugs that code_validator (regex) cannot see:
+  - Variables/functions used without being declared
+  - Non-existent object properties (e.g. ball.speedMultiplier without declaration)
+  - Functions called before being defined (outside hoisting)
+  - State machine inconsistencies (states referenced but not handled)
+  - Known broken patterns (e.g. canvas.width inside the RAF loop without caching)
 
 Cet agent retourne une liste d'issues CIBLÉES pour le pre_patcher.
 Il ne réécrit JAMAIS de code — il diagnostique seulement.

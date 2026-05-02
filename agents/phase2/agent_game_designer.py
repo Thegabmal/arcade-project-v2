@@ -1,7 +1,7 @@
 """
 Agent Game Designer — Phase 2
-Crée un Game Design Document complet, profond et interconnecté.
-Objectif : produire la conception d'un VRAI JEU, pas d'une démo.
+Creates a complete, deep, interconnected Game Design Document.
+Goal: design a REAL GAME with content, not a 2-minute demo.
 """
 
 import json

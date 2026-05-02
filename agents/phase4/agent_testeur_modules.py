@@ -1,8 +1,8 @@
 """
-Agent Testeur de Modules — Phase 4
-Valide chaque module JavaScript avant assemblage.
-Détecte les problèmes par analyse statique (+ Playwright si disponible).
-Retourne la liste des modules valides et des modules qui doivent être régénérés.
+Module Tester Agent — Phase 4
+Validates each JavaScript module before assembly.
+Detects issues via static analysis (+ Playwright if available).
+Returns the list of valid modules and modules that need to be regenerated.
 """
 
 import re

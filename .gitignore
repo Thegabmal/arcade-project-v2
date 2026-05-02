@@ -14,3 +14,15 @@ SESSION_REPORT.md
 *.egg-info/
 dist/
 build/
+# Claude Code internal files
+.claude/
+# Runtime state files
+.quota_rpd.json
+genre_scores.json
+learned_vars.json
+patch_bank.json
+stubs_injected_log.json
+auto_learnings.json
+session_log*.txt
+batch_fix_saved_games.py
+Untitled

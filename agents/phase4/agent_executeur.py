@@ -1,7 +1,7 @@
 """
-Agent Exécuteur — Phase 4
-Lance le jeu dans un navigateur headless (Playwright) et vérifie
-qu'il fonctionne réellement : canvas, game loop, inputs, absence d'erreurs JS.
+Executor Agent — Phase 4
+Launches the game in a headless browser (Playwright) and verifies
+it actually works: canvas, game loop, inputs, absence of JS errors.
 """
 
 import os

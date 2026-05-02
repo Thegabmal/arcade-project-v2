@@ -1,7 +1,7 @@
 """
-Agent Sauvegarde — Support
-Sauvegarde le jeu final et ses métadonnées.
-Extrait les patterns réussis pour améliorer les futures générations.
+Save Agent — Support
+Saves the final game and its metadata.
+Extracts successful patterns to improve future generations.
 """
 
 import os

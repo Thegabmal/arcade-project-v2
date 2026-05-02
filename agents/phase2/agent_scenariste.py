@@ -1,7 +1,7 @@
 """
-Agent Scénariste — Phase 2 (optionnelle, activée si is_narrative=True)
-Génère le contexte narratif complet : histoire en 3 actes, quêtes, personnages, dialogues.
-Ce contexte est injecté dans le prompt du créateur pour produire un jeu avec une vraie histoire.
+Agent Narrator — Phase 2 (optional, activated when is_narrative=True)
+Generates the complete narrative context: 3-act story, quests, characters, dialogues.
+This context is injected into the creator's prompt to produce a game with a real story.
 """
 
 import json

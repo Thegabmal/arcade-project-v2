@@ -1,9 +1,9 @@
 """
-Agent Créateur — Phase 3
-Génère le code HTML5 complet du jeu à partir de tout le contexte accumulé.
-Deux modes :
-- run() : génération monolithique classique (fallback)
-- run_modulaire() : génère chaque module indépendamment (recommandé)
+Creator Agent — Phase 3
+Generates the complete HTML5 game code from all accumulated context.
+Two modes:
+- run(): classic monolithic generation (fallback)
+- run_modulaire(): generates each module independently (recommended)
 """
 
 import json

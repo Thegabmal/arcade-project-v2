@@ -1,12 +1,12 @@
 """
-Agent Auto-Learner — Post-génération
-Analyse le HTML final + les logs pour identifier :
-- Les bugs résiduels non couverts par code_validator
-- Les nouvelles variables non déclarées (candidats COMMON_VARS)
-- Les patterns récurrents à traiter
+Auto-Learner Agent — Post-generation
+Analyzes the final HTML + logs to identify:
+- Residual bugs not covered by code_validator
+- New undeclared variables (COMMON_VARS candidates)
+- Recurring patterns to address
 
-Écrit dans auto_learnings.json sans jamais modifier code_validator.py directement.
-La prochaine session avec Claude incorporera les learnings manuellement.
+Writes to auto_learnings.json without ever modifying code_validator.py directly.
+The next session with Claude will incorporate the learnings manually.
 """
 
 import json

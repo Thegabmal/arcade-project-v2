@@ -1,7 +1,7 @@
 """
-Agent UX Designer -- Phase 2
-Definit les guidelines UI/UX, le game feel, les feedbacks visuels
-et l'experience globale du joueur, adaptes au genre.
+Agent UX Designer — Phase 2
+Defines UI/UX guidelines, game feel, visual feedback,
+and the overall player experience, adapted to the genre.
 """
 
 import json

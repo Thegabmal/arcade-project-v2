@@ -1,11 +1,11 @@
 """
-Auto-Learner : scanne les logs de jeux sauvegardés pour détecter les variables
-fréquemment non déclarées et les ajoute dans learned_vars.json.
-code_validator.py charge ce fichier au runtime pour enrichir COMMON_VARS dynamiquement.
+Auto-Learner: scans saved game logs to detect frequently undeclared variables
+and adds them to learned_vars.json.
+code_validator.py loads this file at runtime to dynamically enrich COMMON_VARS.
 
-Sources analysées :
-  - jeux_sauvegardes/*_log.txt       (output Playwright : "X is not defined")
-  - jeux_sauvegardes/*_log.txt       (code_validator : "utilisé sans déclaration")
+Sources analyzed:
+  - jeux_sauvegardes/*_log.txt       (Playwright output: "X is not defined")
+  - jeux_sauvegardes/*_log.txt       (code_validator: "used without declaration")
 
 Seuil minimal : MIN_OCCURRENCES fois dans au moins MIN_GAMES jeux différents.
 """

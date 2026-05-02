@@ -1,13 +1,13 @@
 """
-Génération Layered — 5 couches JS validées avec extraction de noms inter-couches.
+Layered Generation — 5 JS layers validated with cross-layer name extraction.
 
-Architecture fortifiée (6 axes) :
-  Axe 1 — Quality Guard        : _check_layer_quality
-  Axe 2 — Runtime Validation   : _validate_layer_runtime
-  Axe 3 — gameLoop Auto-Patch  : _patch_gameloop_calls
-  Axe 4 — Emergency Stubs      : _get_emergency_stub
-  Axe 5 — Enhanced Prompts     : intégré dans run_layered
-  Axe 6 — Monitoring           : _LAYER_STATS, _record_layer_event, get_layer_stats
+Hardened architecture (6 axes):
+  Axis 1 — Quality Guard        : _check_layer_quality
+  Axis 2 — Runtime Validation   : _validate_layer_runtime
+  Axis 3 — gameLoop Auto-Patch  : _patch_gameloop_calls
+  Axis 4 — Emergency Stubs      : _get_emergency_stub
+  Axis 5 — Enhanced Prompts     : integrated in run_layered
+  Axis 6 — Monitoring           : _LAYER_STATS, _record_layer_event, get_layer_stats
 """
 
 import re

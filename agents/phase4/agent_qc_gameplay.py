@@ -1,12 +1,12 @@
 """
-Agent QC Gameplay — Phase 4 (fusionné avec agent_anti_pattern)
-Évalue la qualité du gameplay ET détecte les anti-patterns en un seul appel.
+QC Gameplay Agent — Phase 4 (merged with agent_anti_pattern)
+Evaluates gameplay quality AND detects anti-patterns in a single call.
 
-Fusion justifiée : les deux agents analysent les mêmes mécaniques de jeu,
-juste avec un angle différent (positif vs négatif). Un seul appel produit
-une évaluation plus cohérente et économise un slot parallèle.
+Merge justified: both agents analyze the same game mechanics,
+just from different angles (positive vs negative). A single call produces
+a more coherent evaluation and saves a parallel slot.
 
-Retourne un dict {"gameplay": EvaluationResult, "anti_pattern": EvaluationResult}
+Returns a dict {"gameplay": EvaluationResult, "anti_pattern": EvaluationResult}
 """
 
 import json

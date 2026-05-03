@@ -185,12 +185,12 @@ def _get_model_snippet_for_missing(genre: str, sous_genre: str, missing_musts: l
                 if last_nl > 350:
                     snippet = snippet[:last_nl]
                 if snippet:
-                    blocks.append(f"-- Référence pour « {must} » (extrait {filename}) --\n{snippet}")
+                    blocks.append(f"-- Reference for '{must}' (from {filename}) --\n{snippet}")
                 break
 
     if not blocks:
         return ""
-    return "\nIMPLÉMENTATIONS DE RÉFÉRENCE — reproduis ces patterns dans le jeu :\n" + "\n\n".join(blocks) + "\n"
+    return "\n\nREFERENCE IMPLEMENTATIONS — mirror these patterns in the game:\n" + "\n\n".join(blocks) + "\n"
 
 
 def run(code: str, diagnostic: dict, genre_profile: GenreProfile, iteration: int) -> str:
@@ -247,7 +247,7 @@ def run(code: str, diagnostic: dict, genre_profile: GenreProfile, iteration: int
         format_sortie = "Ne mets AUCUN texte avant ou après le code."
         decls_context = ""
 
-    # Model game reference snippets for missing genre must-haves
+    # Inject model game snippets for any missing genre must-haves
     try:
         from agents.phase5.agent_diagnosticien import _detect_missing_genre_musts
         _missing = _detect_missing_genre_musts(
@@ -271,8 +271,8 @@ CORRECTIONS À APPORTER (par ordre de priorité) :
 {preserver_str}
 
 INSTRUCTIONS GÉNÉRALES :
-{instructions}{_reference_snippets}
-
+{instructions}
+{_reference_snippets}
 RÈGLES IMPORTANTES :
 1. Ne réécris PAS tout le jeu — fais des corrections ciblées
 2. Préserve TOUT ce qui est dans "à absolument préserver"

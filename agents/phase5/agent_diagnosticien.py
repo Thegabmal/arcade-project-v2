@@ -341,9 +341,9 @@ def run(code: str, genre_profile: GenreProfile, bundle: EvaluationBundle, iterat
     genre_musts_section = ""
     if _missing_musts and exec_score >= 4.5:  # only suggest depth additions if game runs
         genre_musts_section = (
-            "\n🎯 INCONTOURNABLES DU GENRE ABSENTS DU CODE :\n"
+            "\n🎯 MISSING GENRE MUST-HAVES (detected in code):\n"
             + "\n".join(f"  ✗ {m}" for m in _missing_musts)
-            + "\n→ Chaque critère absent coûte -1.5 pts gameplay. Ajouter en priorité si exec ≥ 6.\n"
+            + "\n→ Each absent criterion costs -1.5 gameplay pts. Add as priority if exec >= 6.\n"
         )
 
     # Bloc exec-first en tête si critique

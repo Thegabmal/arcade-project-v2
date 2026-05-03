@@ -73,6 +73,8 @@ _LAYER_SYSTEM = (
     "- INTERDIT ABSOLU : new Image(), img.src, Image(), fetch(), XMLHttpRequest, "
     "import(), require(), new Audio(), Audio() — tout doit etre dessine/joue en Canvas 2D pur "
     "sans ressources externes. Pour le son : utilise WebAudio API (AudioContext) uniquement.\n"
+    "- INTERDIT dans draw* : fillRect() comme SEUL rendu d'une entite (joueur/ennemi/projectile).\n"
+    "  Utilise arc(), bezierCurveTo(), gradient, ou formes composees — sprites rectangles = score visuel ≤ 6.\n"
 )
 
 _LAYER_SYSTEM_GRAPHIQUE = (
@@ -89,7 +91,9 @@ _LAYER_SYSTEM_GRAPHIQUE = (
     "- Animations basees sur une variable timer globale dediee avec +=dt (ex: _bgTimer+=dt) — JAMAIS Date.now() pour animer\n"
     "- Fond riche et anime : etoiles, grille, nebuleuse, parallaxe — jamais un fond uni\n"
     "- Boss visuellement exceptionnel : plus grand, aura, couleur unique par phase, barre HP stylisee\n"
-    "- Particules belles : taille et opacite qui diminuent avec life, couleurs variees\n\n"
+    "- Particules belles : taille et opacite qui diminuent avec life, couleurs variees\n"
+    "- INTERDIT ABSOLU : fillRect() comme SEUL visuel pour joueur, ennemi, ou projectile.\n"
+    "  Chaque entite DOIT utiliser arc(), bezierCurveTo(), ou composition de 3+ draw calls.\n\n"
     "REGLES ABSOLUES :\n"
     "- Output = JavaScript pur uniquement\n"
     "- Utilise UNIQUEMENT les proprietes du contrat de schema fourni\n"
@@ -2589,6 +2593,31 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     sous_genre = context.genre_profile.sous_genre or genre
     style_visuel = context.genre_profile.style_visuel or 'neon sur fond sombre'
     palette = context.genre_profile.palette_recommandee or ''
+
+    # Build UX visual contract from ux_specs
+    _ux_contract_str = ""
+    _ux = getattr(context, 'ux_specs', {}) or {}
+    if _ux:
+        _juice = (_ux.get('game_feel') or {}).get('elements_juice', [])
+        _particles = (_ux.get('effets_visuels') or {}).get('particles', [])
+        _shake = (_ux.get('effets_visuels') or {}).get('screen_shake', {}) or {}
+        _feedback = (_ux.get('feedback_visuel') or [])[:3]
+        _feel_parts = []
+        if _juice:
+            _feel_parts.append("Juice: " + ", ".join(str(j) for j in _juice[:4]))
+        if _particles:
+            _feel_parts.append("Particles: " + " | ".join(
+                f"{p.get('nom','?')}({p.get('count','?')} pts, {p.get('duree_ms','?')}ms, {p.get('couleurs',['#fff'])[:2]})"
+                for p in _particles[:3]
+            ))
+        if _shake.get('actif'):
+            _feel_parts.append(f"Screen shake: {_shake.get('amplitude_px','6')}px / {_shake.get('duree_ms','200')}ms on {_shake.get('declencheurs',['impact'])}")
+        if _feedback:
+            _feel_parts.append("Visual feedback: " + " | ".join(
+                f"{fb.get('action','?')} → {fb.get('feedback','?')}" for fb in _feedback
+            ))
+        if _feel_parts:
+            _ux_contract_str = "\nUX VISUAL CONTRACT (implement ALL of these):\n" + "\n".join(f"  {p}" for p in _feel_parts) + "\n"
     mecaniques = context.genre_profile.mecaniques_obligatoires or []
     mecaniques_str = ', '.join(mecaniques[:6]) if mecaniques else 'gameplay classique'
 
@@ -3360,7 +3389,8 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     layer6_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n'
         f'Style visuel : {style_visuel}\n'
-        f'Palette : {palette}\n\n'
+        f'Palette : {palette}\n'
+        f'{_ux_contract_str}\n'
         f'{layer_ctx}\n\n'
         'MISSION : Génère UNIQUEMENT les fonctions de rendu. '
         'Sois COMPLET et SOIGNÉ — chaque entité doit être lisible et visuellement cohérente.\n\n'
@@ -3393,6 +3423,15 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '  VRAI : ctx.fillStyle = \'rgba(\' + r + \',\' + g + \',\' + b + \',0.5)\';\n'
         '  VRAI : ctx.fillStyle = \'rgba(255, 0, 0, 0.5)\';   ← string directe\n'
         '  VRAI : ctx.fillStyle = PALETTE.enemy;   ← clé PALETTE\n\n'
+        'INTERDIT dans drawPlayer/drawEnemies/drawBoss/drawBullets :\n'
+        '- fillRect() comme SEUL appel de rendu pour une entité → score visuel QC ≤ 6/10\n'
+        '  Chaque entité DOIT utiliser AU MOINS : arc() OU bezierCurveTo() OU gradient OU shadowBlur ≥ 8\n\n'
+        'HELPER OBLIGATOIRE — inclure EXACTEMENT dans ta réponse :\n'
+        'function drawGlow(x, y, radius, color) {\n'
+        '  ctx.save(); ctx.shadowColor = color; ctx.shadowBlur = radius * 2;\n'
+        '  ctx.beginPath(); ctx.arc(x, y, radius * 0.5, 0, Math.PI * 2);\n'
+        '  ctx.fillStyle = color; ctx.globalAlpha = 0.25; ctx.fill(); ctx.restore();\n'
+        '}\n\n'
         'INTERDIT : gameLoop, logique de jeu, addEventListener, modification d\'état global\n'
         f'{_no_redecl_note}'
         f'{_contract_reminder(_global_contract, _incremental_manifest)}'
@@ -4008,7 +4047,8 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     layer9_prompt = (
         f'Jeu : "{titre}" — genre : {genre}\n'
         f'{_art_style_hint}\n'
-        f'Palette imposée : {palette}\n\n'
+        f'Palette imposée : {palette}\n'
+        f'{_ux_contract_str}\n'
         f'{layer1_schema}\n\n'
         f'{accumulated_signatures}\n\n'
         f'{game_events}\n\n'
@@ -4016,6 +4056,10 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         'MISSION ARTISTIQUE : Réécris les fonctions draw* pour les rendre visuellement exceptionnelles.\n'
         'En JavaScript, la DERNIÈRE définition d\'une fonction écrase la précédente.\n'
         'Tu peux redéfinir drawBackground, drawPlayer, drawEnemies, drawBoss, drawHUD, drawMenu, drawGameOver.\n\n'
+        '⚠️ RÈGLE ZÉRO — INTERDICTION ABSOLUE DES SPRITES RECTANGLES :\n'
+        'Tout joueur, ennemi, boss ou projectile dessiné avec fillRect() seul DOIT être remplacé.\n'
+        '✅ Utilise : arc() · bezierCurveTo() · createRadialGradient()+arc() · 3+ draw calls composés\n'
+        'fillRect() comme sprite unique = score visuel QC ≤ 6/10. NON NÉGOCIABLE.\n\n'
         '⚠️ RÈGLE N°1 — VARIABLES NOUVELLES :\n'
         'Toute variable que tu introduis DOIT être déclarée EN TÊTE du fragment avec le guard typeof :\n'
         '  var _bgTimer = (typeof _bgTimer !== "undefined") ? _bgTimer : 0;\n'
@@ -4052,6 +4096,11 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '   waveAnnounce si waveAnnounce>0.\n\n'
         '6. drawMenu() — titre avec glow, meilleur score, instruction clignotante.\n\n'
         '7. drawGameOver() — "GAME OVER" en rouge avec glow, score vs high score, instruction rejouer.\n\n'
+        '8. VÉRIFICATION FINALE — shadowBlur sur toutes les entités :\n'
+        '   drawPlayer() DOIT avoir ctx.shadowBlur ≥ 10 — si absent dans le code, l\'ajouter maintenant.\n'
+        '   drawEnemies() DOIT avoir ctx.shadowBlur pour chaque type d\'ennemi.\n'
+        '   drawBullets/drawProjectiles() : glow ou traînée alpha décroissante obligatoire.\n'
+        '   Si ces appels manquent dans les fonctions héritées de L6 → les ajouter dans ta réécriture.\n\n'
         f'PALETTE disponible — clés déclarées en L1 : {_palette_keys_hint}\n'
         '   IMPORTANT : utilise UNIQUEMENT les clés listées ci-dessus — ne jamais inventer PALETTE.neonXxx, PALETTE.glow, PALETTE.accent si absents de la liste.\n'
         '   Si une couleur n\'est pas dans PALETTE, utilise une string CSS directe (ex: \'#00ffcc\').\n\n'

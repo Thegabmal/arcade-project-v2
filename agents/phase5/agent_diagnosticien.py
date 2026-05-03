@@ -346,6 +346,25 @@ def run(code: str, genre_profile: GenreProfile, bundle: EvaluationBundle, iterat
             + "\n→ Each absent criterion costs -1.5 gameplay pts. Add as priority if exec >= 6.\n"
         )
 
+    # Static visual quality checks
+    _visual_issues = []
+    if 'shadowBlur' not in code:
+        _visual_issues.append("ZERO GLOW — no shadowBlur anywhere → visual score hard-capped at 6.5 — add ctx.shadowBlur on player/enemies")
+    _has_arc_diag = bool(_re.search(r'ctx\.arc\s*\(', code))
+    _has_bezier_diag = bool(_re.search(r'ctx\.bezier|ctx\.quadratic', code, _re.IGNORECASE))
+    if not _has_arc_diag and not _has_bezier_diag:
+        _visual_issues.append("RECTANGLE SPRITES — no arc/bezierCurveTo shapes → all entities are fillRect → visual score hard-capped at 6.5")
+    if not _re.search(r'parallax|bgStars|_bgTimer|scrollY\s*[+-]=|stars\s*=\s*\[|bgScroll', code, _re.IGNORECASE):
+        _visual_issues.append("STATIC BACKGROUND — no parallax/scrolling/stars detected → visual penalty -1.0")
+
+    visual_issues_str = ""
+    if _visual_issues and scores.get('visuel', 10) < 7.5:
+        visual_issues_str = (
+            "\n🎨 VISUAL ISSUES DETECTED IN CODE:\n"
+            + "\n".join(f"  ✗ {v}" for v in _visual_issues)
+            + "\n→ Fix these to raise visual score above 7.0. Use arc/bezier+shadowBlur on entities.\n"
+        )
+
     # Bloc exec-first en tête si critique
     exec_header = f"{exec_context}\n" if exec_critical else ""
 
@@ -378,7 +397,7 @@ def run(code: str, genre_profile: GenreProfile, bundle: EvaluationBundle, iterat
 SCORES (du plus bas au plus haut) :
 {json.dumps(scores_tries, ensure_ascii=False)}
 Axes prioritaires à corriger : {axes_prioritaires}
-{'' if exec_critical else exec_context}{raw_js_section}{runtime_hint_str}{genre_musts_section}{depth_hint_str}
+{'' if exec_critical else exec_context}{raw_js_section}{runtime_hint_str}{genre_musts_section}{visual_issues_str}{depth_hint_str}
 {_deja_tentees_str}PROBLÈMES DÉTECTÉS PAR AGENT :
 {_issues_contextualized}
 

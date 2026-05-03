@@ -252,6 +252,20 @@ def _apply_visual_code_checks(code: str, ev: EvaluationResult) -> EvaluationResu
     if draw_fn_count < 2:
         penalties.append((f"très peu de fonctions draw* ({draw_fn_count}) — rendu probablement minimal", 1.5))
 
+    # 6. Zero shadowBlur — no glow on any entity
+    _has_shadow_blur = 'shadowBlur' in code
+    if not _has_shadow_blur:
+        penalties.append(("aucun shadowBlur dans tout le code — zéro glow sur les entités", 2.0))
+
+    # 7. No arc/bezier shapes — all entities likely plain fillRect
+    _has_arc_shape = bool(re.search(r'ctx\.arc\s*\(', code))
+    _has_bezier_shape = bool(re.search(r'ctx\.bezierCurveTo|ctx\.quadraticCurveTo', code))
+    if not _has_arc_shape and not _has_bezier_shape:
+        penalties.append(("aucun arc/bezier détecté — entités probablement toutes des fillRect rectangles", 2.0))
+
+    # Track whether hard cap should apply (critical visual failures)
+    _hard_cap_visual = not _has_shadow_blur or (not _has_arc_shape and not _has_bezier_shape)
+
     # ── BONUS (effets de juice — valident que le LLM n'a pas surestimé) ────────
 
     # Screen shake
@@ -305,6 +319,16 @@ def _apply_visual_code_checks(code: str, ev: EvaluationResult) -> EvaluationResu
 
     if total_penalty > 0 or total_bonus > 0:
         phase4_log.score("QC Visuel (ajusté)", ev.score)
+
+    # Hard cap at 6.5 if critical visual systems absent (no glow OR only fillRect shapes)
+    if _hard_cap_visual and ev.score > 6.5:
+        ev.score = 6.5
+        ev.issues.append({
+            "severite": "critique",
+            "description": "[VISUEL-CAP] Score plafonné à 6.5 : shadowBlur absent ou entités en fillRect (pas d'arc/bezier)",
+            "suggestion": "Ajouter ctx.shadowBlur sur joueur et ennemis + utiliser arc()/bezierCurveTo() pour les formes"
+        })
+        phase4_log.warning("QC Visuel hard cap 6.5 : zero glow ou sprites rectangles")
 
     return ev
 

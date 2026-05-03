@@ -174,9 +174,10 @@ jeux_sauvegardes/<nom>.html + metadata.json
 
 **`coordinateur.py`**
 ```python
-MAX_ITERATIONS = 5
-SCORE_SEUIL_SAUVEGARDE = 7.0
+MAX_ITERATIONS = 4
+SCORE_SEUIL_SAUVEGARDE = 7.5
 SCORE_SORTIE_ANTICIPEE = 8.5
+SCORE_SEUIL_ITERATIONS_SUP = 7.5
 SCORE_STAGNATION_DELTA = 0.2
 ```
 
@@ -227,6 +228,6 @@ GENERATION_TIMEOUT = 900  # 15 minutes
 
 **Ce qui reste à améliorer :**
 - ChromaDB a besoin d'embeddings : si `sentence-transformers` non installé, fallback auto
-- Aucun jeu encore sauvegardé (threshold 7.0 — la pipeline doit tourner)
+- 7 jeux modèles restants à compléter (puzzle/runner/breakout/tower_defense/visual_novel/dungeon/roguelite)
 - `patterns_reussis.json` vide (se remplit après premier run ≥ 7.5)
 - Pas de concurrence limitée (plusieurs générations simultanées possibles)

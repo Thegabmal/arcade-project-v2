@@ -66,9 +66,9 @@ User Prompt
 └───────────────────────────────┬─────────────────────────────────────┘
                                 │  EvaluationBundle + global score
                                 │
-                   score ≥ 8.0 ─┴─► save & exit (early exit)
+                   score ≥ 8.5 ─┴─► save & exit (early exit)
                                 │
-                   score < 8.0  ▼  (up to 3 iterations)
+                   score < 8.5  ▼  (up to 4 iterations)
 ┌─────────────────────────────────────────────────────────────────────┐
 │  PHASE 5 — Iterative Patching                                       │
 │                                                                     │
@@ -306,10 +306,17 @@ arcade-project-v2/
 │   ├── phase5/             # Patching: AutoFixer, Diagnostician, Patcher
 │   └── support/            # Finalization: Verdict, Save, AutoLearner
 │
-├── jeux_modeles/           # Reference HTML5 games injected as LLM context
-│   ├── platformer.html     # 2D platformer with coyote time, enemies, power-ups
-│   ├── shoot_em_up.html    # Bullet-hell shmup with boss fights and weapon combos
-│   └── rpg_narratif.html   # Tile-based RPG with combat, inventory, dialogue
+├── jeux_modeles/           # Reference HTML5 games — 10-game library (3 complete)
+│   ├── platformer.html     # ✓ Platformer: coyote time, dash, 4 enemy types, 5 levels, boss
+│   ├── shoot_em_up.html    # ✓ Shoot em up: 3-phase boss, weapon system, homing missiles, combos
+│   ├── rpg_narratif.html   # ✓ RPG: tile movement, turn-based combat, NPCs, leveling, 2 floors
+│   ├── puzzle_match3.html  # ⏳ Match-3: cascade engine, special gems, level targets
+│   ├── endless_runner.html # ⏳ Runner: procedural obstacles, parallax, speed ramp
+│   ├── breakout.html       # ⏳ Breakout: brick types, multi-ball, 6 power-ups, 5 levels
+│   ├── tower_defense.html  # ⏳ Tower Defense: 4 tower types, synergies, wave economy
+│   ├── visual_novel.html   # ⏳ Visual Novel: branching dialogue, flags, 3 endings
+│   ├── dungeon_crawler.html# ⏳ Dungeon Crawler: BSP generation, 3 classes, loot rarities
+│   └── roguelite.html      # ⏳ Roguelite: run structure, meta-progression, passive synergies
 │
 ├── templates/              # Flask HTML templates (index, history, viewer)
 ├── static/                 # CSS + JS assets for the web interface
@@ -318,6 +325,27 @@ arcade-project-v2/
 ├── .env.example
 └── README.md
 ```
+
+---
+
+## Reference Game Library
+
+The `jeux_modeles/` directory contains a hand-crafted library of 10 standalone HTML5 games covering the most common genres. These are **not generated** — they are clean reference implementations written to demonstrate best practices in game architecture, and are injected into ChromaDB so the creator agent can retrieve real code patterns at generation time.
+
+| # | File | Genre | Key patterns demonstrated |
+|---|------|-------|--------------------------|
+| 1 | `shoot_em_up.html` | Shoot em up | ✓ Wave spawning, 3-phase boss, weapon system (single/triple/spread/homing/laser), stealth enemy, combo ×10, screen shake |
+| 2 | `platformer.html` | Platformer | ✓ Coyote time, jump buffer, double jump, dash, 4 enemy types, 5 themed levels, boss, 4 power-ups |
+| 3 | `rpg_narratif.html` | Narrative RPG | ✓ Smooth tile movement, turn-based combat, XP/leveling, NPC dialogue, chest items, enemy patrol+aggro, 2 floors |
+| 4 | `puzzle_match3.html` | Match-3 Puzzle | ⏳ 8×8 gem grid, cascade resolver, chain combos, special gems (bomb/row/col-clear), level targets |
+| 5 | `endless_runner.html` | Endless Runner | ⏳ Procedural obstacles, parallax (3 layers), speed ramp, jump+slide, hi-score |
+| 6 | `breakout.html` | Breakout | ⏳ Brick HP types, angle physics, multi-ball, 6 power-ups, 5 levels |
+| 7 | `tower_defense.html` | Tower Defense | ⏳ Grid placement, 4 tower types, tower synergies, wave economy (gold+interest), 10 waves |
+| 8 | `visual_novel.html` | Visual Novel | ⏳ Branching dialogue tree, flag tracking, 3 endings, typewriter effect, scene fades |
+| 9 | `dungeon_crawler.html` | Dungeon Crawler | ⏳ BSP room generation, 3 classes, 3 loot rarities, boss phases, minimap, inventory |
+| 10 | `roguelite.html` | Roguelite | ⏳ Run structure (3 biomes), meta-progression, passive synergies, permadeath, seed-based generation |
+
+Each game is a single self-contained HTML file (~400–900 lines) playable directly in any browser. The 7 remaining games will be added progressively.
 
 ---
 

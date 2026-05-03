@@ -375,4 +375,26 @@ A recurring challenge with LLM-generated code is that agents "invent" variable n
 
 ---
 
+## Visual Quality System
+
+The pipeline enforces visual quality at every layer — the LLM cannot produce a game that passes evaluation with colored rectangles as sprites.
+
+**Generation-time enforcement (Phase 3):**
+- `fillRect()` as the sole render for any entity is explicitly forbidden in the layer system prompt
+- Layer 6 (Render) must include a `drawGlow(x, y, radius, color)` helper and wire it to every entity
+- Layer 9 (Graphics) receives Rule Zero: replace any `fillRect`-only sprite with `arc()` / `bezierCurveTo()` / gradient
+- UX visual contract (particle counts, screen shake amplitude, juice effects) is extracted from the UX designer's output and injected into L6 and L9
+
+**Evaluation-time enforcement (Phase 4):**
+- Zero `shadowBlur` in the entire file → **-2.0 pts** visual score
+- Zero `arc()` / `bezierCurveTo()` shapes → **-2.0 pts** visual score
+- Either condition → **hard cap at 6.5/10** regardless of other criteria
+- Genre-specific visual must-haves: 5 mandatory visual criteria per genre (-1.5 pts each if absent)
+
+**Patching feedback (Phase 5):**
+- Diagnostician statically detects: zero glow, rectangle sprites, static background
+- Patcher receives visual issue flags + reference implementations from the matching model game
+
+---
+
 *Built with Gemini 2.5-Flash + Claude Sonnet 4.6 · Python 3.10+ · Flask · Playwright · ChromaDB*

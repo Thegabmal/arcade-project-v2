@@ -228,6 +228,7 @@ GENERATION_TIMEOUT = 900  # 15 minutes
 
 **Ce qui reste à améliorer :**
 - ChromaDB a besoin d'embeddings : si `sentence-transformers` non installé, fallback auto
-- 7 jeux modèles restants à compléter (puzzle/runner/breakout/tower_defense/visual_novel/dungeon/roguelite)
 - `patterns_reussis.json` vide (se remplit après premier run ≥ 7.5)
 - Pas de concurrence limitée (plusieurs générations simultanées possibles)
+- Test runs à faire pour valider le pipeline complet (graphics overhaul + gates + genre checklist)
+- French → English sweep sur tous les fichiers Python (strings de prompt encore en français)

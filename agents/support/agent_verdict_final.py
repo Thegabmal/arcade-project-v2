@@ -18,6 +18,7 @@ import json
 from config import call_gemini_json, with_fallback
 from genre_profile import GenreProfile, EvaluationResult, EvaluationBundle
 from logger import support_log
+import rag
 
 SYSTEM = """Tu es un évaluateur expert indépendant de jeux HTML5.
 Tu combines une comparaison aux standards du genre ET un verdict d'approbation final.
@@ -55,13 +56,25 @@ def run(genre_profile: GenreProfile, gdd: dict, bundle: EvaluationBundle) -> dic
         bundle.qc_visuel.points_forts[:2]
     )
 
+    # Fetch genre standards from mechanics_kb (grounded benchmark, not hallucinated)
+    mechanics_refs = rag.search_mechanics(
+        genre=genre_profile.genre_principal,
+        query=f"{genre_profile.sous_genre} {genre_profile.boucle_core}",
+        n=3,
+    )
+    mechanics_block = ""
+    if mechanics_refs:
+        mechanics_block = "\nSTANDARDS DU GENRE (jeux de référence — base de connaissance) :\n"
+        for ref in mechanics_refs:
+            mechanics_block += f"- {ref.get('game_name','?')} ({ref.get('genre','?')}) : {ref.get('document','')[:300]}\n"
+
     prompt = f"""Évalue ce jeu HTML5 : compare-le aux standards du genre ET donne un verdict d'approbation.
 
 JEU :
 - Titre : {gdd.get("titre", "?")}
 - Genre : {genre_profile.genre_principal} / {genre_profile.sous_genre}
 - Concept : {gdd.get("concept", "")[:200]}
-- Références du genre : {", ".join(genre_profile.jeux_reference[:5])}
+- Références du genre : {", ".join(genre_profile.jeux_reference[:5])}{mechanics_block}
 
 SCORES OBTENUS (sur 10 chacun) :
 {json.dumps(scores_detail, ensure_ascii=False)}

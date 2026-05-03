@@ -21,6 +21,81 @@ Tu analyses le gameplay d'un jeu sous deux angles complémentaires :
 Tu fournis une évaluation complète et honnête. Tu réponds UNIQUEMENT en JSON valide."""
 
 
+def _genre_checklist(genre: str, sous_genre: str) -> str:
+    """
+    Returns 5 hard must-haves for the given genre.
+    Each absent item deducts 1.5 pts from the gameplay score.
+    Returns '' if genre is unrecognised (no penalty applied).
+    """
+    g = (genre + " " + (sous_genre or "")).lower()
+
+    if any(k in g for k in ["shmup", "shoot", "vaisseau", "spatial", "space", "galaga", "bullet"]):
+        return (
+            "1. VARIÉTÉ ENNEMIS : ≥ 3 types distincts avec comportements DIFFÉRENTS (pas juste vitesse)\n"
+            "2. BOSS MULTI-PHASES : boss présent avec ≥ 2 phases déclenchées par seuil HP\n"
+            "3. POWER-UPS : ≥ 2 types collectables avec effets visuellement distincts\n"
+            "4. PATTERNS DE TIR : au moins 2 patterns ennemis différents (droit, visé, éventail…)\n"
+            "5. SYSTÈME DE VAGUES : vague N+1 plus difficile que vague N (plus d'ennemis OU plus rapides OU nouveaux types)"
+        )
+    if any(k in g for k in ["platformer", "plateforme", "jump", "mario", "metroidvania"]):
+        return (
+            "1. PHYSIQUE JUSTE : coyote time (≥0.08s) OU jump buffer — sauts ne doivent pas rater à la limite\n"
+            "2. VARIÉTÉ ENNEMIS : ≥ 2 types avec comportements distincts (patrouille, charge, projectile…)\n"
+            "3. NIVEAUX OU SCROLL : ≥ 2 niveaux distincts OU monde scrollant avec zone finale\n"
+            "4. COLLECTIBLES : pièces, étoiles ou power-ups qui changent le gameplay (pas juste déco)\n"
+            "5. BOSS OU DÉFI FINAL : boss room OU niveau climax avec obstacle/ennemi renforcé"
+        )
+    if any(k in g for k in ["rpg", "aventure", "zelda", "action-rpg", "action rpg", "dungeon", "roguelite", "rogue"]):
+        return (
+            "1. COMBAT BILATÉRAL : les ennemis attaquent vraiment le joueur (IA tour ennemi ou attaque auto)\n"
+            "2. PROGRESSION STATS : XP + level up OU loot qui augmente des stats visibles\n"
+            "3. VARIÉTÉ ENNEMIS : ≥ 2 types avec stats et comportements distincts\n"
+            "4. INTERACTION ENVIRONNEMENT : coffres, PNJ ou leviers déclenchables avec [E] ou clic\n"
+            "5. CONDITION DE VICTOIRE : objectif clair (quête, boss final, étage max) — pas juste survie infinie"
+        )
+    if any(k in g for k in ["tower defense", "tower_defense", "td", "defense"]):
+        return (
+            "1. TYPES DE TOURS : ≥ 2 tours avec rôles distincts (dégâts, ralentissement, zone)\n"
+            "2. ÉCONOMIE : gold gagné en tuant des ennemis, dépensé pour placer/améliorer des tours\n"
+            "3. ANNONCE VAGUE : compte à rebours visible avant chaque vague + composition annoncée\n"
+            "4. UPGRADE TOURS : au moins un palier d'amélioration de tour fonctionnel\n"
+            "5. SANTÉ BASE : barre HP visible pour la base — game over si elle tombe à 0"
+        )
+    if any(k in g for k in ["puzzle", "match3", "match-3", "match 3"]):
+        return (
+            "1. DÉTECTION MATCH : correspondances de ≥ 3 en ligne vérifiées horizontalement ET verticalement\n"
+            "2. CASCADE : après suppression, les tuiles tombent et génèrent de nouveaux matchs en chaîne\n"
+            "3. VARIÉTÉ TUILES : ≥ 4 types de tuiles visuellement distincts\n"
+            "4. SCORE COMBO : combinaisons successives multiplient les points\n"
+            "5. PROGRESSION : niveaux avec objectif (score cible, nombre de matchs) OU difficulté croissante"
+        )
+    if any(k in g for k in ["runner", "endless", "course infinie", "infinite runner"]):
+        return (
+            "1. OBSTACLES VARIÉS : ≥ 2 types avec mécaniques de dodge différentes (sauter, s'accroupir, dévier)\n"
+            "2. ACCÉLÉRATION : la vitesse augmente progressivement — début accessible, fin difficile\n"
+            "3. MÉCANIQUE BONUS : double saut OU slide OU couloirs multiples (pas juste avancer+sauter)\n"
+            "4. SCORE DISTANCE : score ou distance clairement visible et progressant\n"
+            "5. GÉNÉRATION PROCÉDURALE : obstacles générés différemment à chaque run (pas séquence fixe)"
+        )
+    if any(k in g for k in ["breakout", "casse-briques", "brique", "arcade", "arkanoid", "pong"]):
+        return (
+            "1. ANGLE DE BALLE : l'angle de rebond varie selon la position de l'impact sur la raquette\n"
+            "2. TYPES DE BRIQUES : ≥ 3 types (résistance différente, briques indestructibles, power-up drop)\n"
+            "3. POWER-UPS : ≥ 2 types tombant des briques (balle large, multi-balles, laser…)\n"
+            "4. VIES ET GAME OVER : système de vies (≥ 3) avec game over et écran de score\n"
+            "5. NIVEAUX : ≥ 2 dispositions de briques différentes avec difficulté croissante"
+        )
+    if any(k in g for k in ["visual novel", "visual_novel", "roman visuel", "vn", "kinetic"]):
+        return (
+            "1. ARBRES DE DIALOGUE : ≥ 1 choix multiple avec conséquences narratives différentes\n"
+            "2. PORTRAITS PERSONNAGES : illustrations ou dessins affichés pendant les dialogues\n"
+            "3. FLAGS NARRATIFS : variables d'état (flags/chapitres) qui conditionnent la suite\n"
+            "4. ≥ 3 SCÈNES/CHAPITRES : progression narrative en plusieurs actes distincts\n"
+            "5. FIN CONDITIONNELLE : au moins 2 fins différentes selon les choix du joueur"
+        )
+    return ""
+
+
 def run(code: str, genre_profile: GenreProfile, gdd: dict) -> dict:
     """
     Retourne {"gameplay": EvaluationResult, "anti_pattern": EvaluationResult}.
@@ -28,6 +103,19 @@ def run(code: str, genre_profile: GenreProfile, gdd: dict) -> dict:
     """
     est_3d = genre_profile.technologie_rendu == "threejs"
     est_narratif = getattr(genre_profile, "is_narrative", False)
+
+    _checklist_raw = _genre_checklist(genre_profile.genre_principal, genre_profile.sous_genre)
+    genre_checklist_section = ""
+    if _checklist_raw:
+        genre_checklist_section = (
+            "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "INCONTOURNABLES DU GENRE — 5 CRITÈRES BLOQUANTS\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Vérifie chacun EXPLICITEMENT dans le code. Chaque critère absent = -1.5 pts gameplay.\n"
+            "Un jeu ne peut PAS dépasser 7.0 s'il en manque ≥ 2.\n\n"
+            + _checklist_raw + "\n"
+        )
+
     phase4_log.agent_start(
         "QC Gameplay + Anti-Pattern",
         f"{genre_profile.genre_principal} ({'3D' if est_3d else '2D'}{', narratif' if est_narratif else ''})"
@@ -87,7 +175,7 @@ RUBRIQUE DE SCORE GAMEPLAY (calibrage précis — sois honnête et sévère) :
 - 8   : Très bon — boss avec phases, power-ups, combo OU XP, particules et feedback riche
 - 9   : Excellent — tous les systèmes du genre attendus, progression satisfaisante, très rejouable
 - 10  : Exceptionnel — réserve uniquement pour un jeu vraiment mémorable (rare)
-
+{genre_checklist_section}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PARTIE 1 — PROFONDEUR ET RICHESSE GAMEPLAY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -171,7 +259,7 @@ Bugs runtime cachés qui rendent le jeu injouable :
 - Fonctions update qui utilisent dt sans l'avoir en paramètre → mouvements cassés
 - loadGame() accède à data.x sans JSON.parse() → crash silencieux
 - `dist` utilisée sans être calculée dans la même portée → NaN et collisions manquées
-- eval() ou window.__devPatch en production → fuite mémoire
+- eval() dans la logique du jeu → fuite mémoire (window.__devPatch est toléré : outil dev injecté après évaluation)
 
 Anti-patterns spécifiques RPG :
 - Combat à sens unique (seul le joueur attaque, les ennemis ne font rien)

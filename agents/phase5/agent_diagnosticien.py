@@ -87,6 +87,112 @@ EXEMPLE DE RÉPONSE JSON CORRECTE :
 Tu réponds UNIQUEMENT en JSON valide."""
 
 
+# ── Genre must-have static detector ──────────────────────────────────────────
+# Each entry: (label, [regex_patterns_that_prove_it_IS_present])
+# If NONE of the patterns match → the criterion is considered absent.
+_GENRE_MUST_CHECKS: dict[str, list[tuple[str, list[str]]]] = {
+    "shmup": [
+        ("≥3 TYPES D'ENNEMIS distincts",   [r'ENEMY_DEFS\s*=', r"type\s*:\s*['\"](?:drone|fighter|tank|stealth|kamikaze|boss)", r'ENEMY_TYPES\s*=']),
+        ("BOSS avec ≥2 PHASES",            [r'bossPhase|boss\.phase|phase\s*[>=<]\s*[23]|boss_phase']),
+        ("POWER-UPS collectables",         [r'powerUp|powerups|PU_DEFS|POWERUP|power_up']),
+        ("PATTERNS DE TIR variés",         [r'spread|spiral|aimed|burst|triple|fanfire|firePattern|bullet_pattern']),
+        ("SYSTÈME DE VAGUES croissant",    [r'WAVE_DEFS|waveActive|updateWave|wave\s*\+\+|wave\s*\+=\s*1']),
+    ],
+    "platformer": [
+        ("COYOTE TIME ou JUMP BUFFER",     [r'coyoteTime|coyote_time|jumpBuffer|jump_buffer|COYOTE_TIME|JUMP_BUFFER']),
+        ("≥2 TYPES D'ENNEMIS",             [r'ENEMY_TYPES|enemy\.type|enemyType|type\s*:\s*["\'](?:patrol|charge|jump|flying|ground|walker)']),
+        ("≥2 NIVEAUX ou monde scrollant",  [r'LEVEL_DEFS|LEVELS\s*=\s*\[|currentLevel|levelIndex|nextLevel|cam\.x']),
+        ("COLLECTIBLES ou power-ups",      [r'collectible|coin|gem|star|powerUp|mushroom|pickup']),
+        ("BOSS ou défi final",             [r'boss|BOSS|bossActive|bossRoom']),
+    ],
+    "rpg": [
+        ("COMBAT BILATÉRAL (ennemis attaquent)", [r'enemy\.attack|enemyAtk|ennemi.*attaque|enemyDmg|enemy\.dmg|ennemis.*dégât']),
+        ("XP + LEVEL UP",                  [r'xp\s*[+]=|addXP|gainXP|levelUp|level_up|checkLevelUp']),
+        ("≥2 TYPES D'ENNEMIS",             [r'ENEMY_TYPES|enemy\.type|enemyType|slime|garde|archer|goblin|orc|troll']),
+        ("INTERACTION ENVIRONNEMENT",      [r'interactable|coffre|chest|levier|lever|showDialog|[Ee]\s+key']),
+        ("CONDITION DE VICTOIRE claire",   [r'quest.*done|quest.*complete|victory|victoire|boss.*mort|allQuestsDone']),
+    ],
+    "tower_defense": [
+        ("≥2 TYPES DE TOURS distincts",    [r'TOWER_TYPES|TOWER_DEFS|towerType|tower\.type']),
+        ("ÉCONOMIE gold",                  [r'gold\s*[+]=|addGold|gainGold|gold\s*-=|spendGold']),
+        ("ANNONCE DE VAGUE",               [r'waveCountdown|waveCooldown|waveTimer|nextWave|wave_start']),
+        ("UPGRADE DE TOUR",                [r'tower.*upgrade|upgradeTower|TOWER.*level|tower\.lvl|towerLevel']),
+        ("SANTÉ DE LA BASE",               [r'baseHP|base_hp|baseHealth|base\.hp|base\.health']),
+    ],
+    "puzzle": [
+        ("DÉTECTION MATCH horizontal+vertical", [r'checkMatch|findMatch|matchCheck|horizontal.*match|vertical.*match']),
+        ("CASCADE après suppression",      [r'cascade|applyGravity|dropTiles|fillBoard|refill']),
+        ("≥4 TYPES DE TUILES",             [r'TYPES\s*=\s*\[(?:[^]]{20,})\]|tileType|tile_type|gemType']),
+        ("SCORE COMBO",                    [r'combo|COMBO|comboMult|chain_bonus|matchScore.*combo']),
+        ("PROGRESSION niveaux",            [r'LEVELS\s*=\s*\[|currentLevel|levelIndex|nextLevel|levelTarget']),
+    ],
+    "runner": [
+        ("≥2 TYPES D'OBSTACLES",           [r'OBSTACLE_TYPES|obstacle\.type|obstType|obst.*type|slide.*jump|OBST_DEFS']),
+        ("ACCÉLÉRATION progressive",       [r'speed\s*[+]=|speed\s*\*=\s*1\.|gameSpeed.*\+|SPEED_RAMP|speedMultiplier']),
+        ("MÉCANIQUE BONUS",                [r'doubleJump|double_jump|slide|crouch|dash|lane|laneChange']),
+        ("SCORE ou DISTANCE visible",      [r'score\s*[+]=|distance\s*[+]=|dist\s*[+]=|scoreDisplay']),
+        ("GÉNÉRATION PROCÉDURALE",         [r'Math\.random|rnd\(|spawnObstacle|generateObstacle|randomObstacle']),
+    ],
+    "breakout": [
+        ("ANGLE DE BALLE variable",        [r'ball\.angle|ballAngle|impact.*angle|hitPoint|paddle.*hit|angle.*bounce']),
+        ("≥3 TYPES DE BRIQUES",            [r'BRICK_DEFS|brickType|brick\.type|brick\.hp\s*[>=<]\s*[23]|BRICK_TYPES']),
+        ("POWER-UPS depuis briques",       [r'powerUp|PU_DEFS|powerup.*drop|brick.*power|dropPowerup']),
+        ("VIES et GAME OVER",              [r'lives\s*[->]=|livesCount|nbVies|loseLife|gameOver']),
+        ("≥2 NIVEAUX avec layouts différents", [r'LEVELS\s*=\s*\[|LEVEL_DEFS|currentLevel|levelData|nextLevel']),
+    ],
+    "visual_novel": [
+        ("ARBRE DE DIALOGUE avec choix",   [r'showChoiceDialog|choice.*dialog|NODES.*choices|choices\s*:\s*\[']),
+        ("PORTRAITS de personnages",       [r'portrait|drawPortrait|CHARACTER.*img|character.*face|avatar']),
+        ("FLAGS NARRATIFS",                [r'flags\s*[\[.]|flags\s*=\s*\{|setFlag|gameFlags|storyFlags']),
+        ("≥3 SCÈNES ou CHAPITRES",         [r'chapter|scene.*[23456789]|NODES.*(?:\n.*){15,}|node.*id.*[3-9]']),
+        ("≥2 FINS possibles",              [r'ending|END_[A-Z]|gameOver.*\w+|finale.*[AB]|victory.*type']),
+    ],
+}
+
+# Alias for genres that share the same checks
+_GENRE_ALIASES = {
+    "dungeon": "rpg",  "dungeon_crawler": "rpg", "aventure": "rpg",
+    "roguelite": "rpg", "rogue": "rpg",
+    "shmup": "shmup", "shoot": "shmup", "vaisseau": "shmup", "spatial": "shmup",
+    "plateforme": "platformer", "jump": "platformer",
+    "tower defense": "tower_defense", "td": "tower_defense",
+    "match3": "puzzle", "match-3": "puzzle",
+    "endless": "runner", "runner": "runner",
+    "breakout": "breakout", "arcade": "breakout",
+    "visual novel": "visual_novel", "vn": "visual_novel",
+}
+
+
+def _detect_missing_genre_musts(code: str, genre: str, sous_genre: str) -> list[str]:
+    """
+    Statically checks the code for missing genre must-haves.
+    Returns a list of human-readable strings for each absent criterion.
+    """
+    import re as _re
+    g = (genre + " " + (sous_genre or "")).lower()
+
+    key = None
+    for alias, target in _GENRE_ALIASES.items():
+        if alias in g:
+            key = target
+            break
+    if not key:
+        for k in _GENRE_MUST_CHECKS:
+            if k in g:
+                key = k
+                break
+    if not key:
+        return []
+
+    checks = _GENRE_MUST_CHECKS[key]
+    missing = []
+    for label, patterns in checks:
+        present = any(_re.search(p, code, _re.IGNORECASE) for p in patterns)
+        if not present:
+            missing.append(label)
+    return missing
+
+
 def run(code: str, genre_profile: GenreProfile, bundle: EvaluationBundle, iteration: int,
         corrections_deja_tentees: list | None = None) -> dict:
     phase5_log.agent_start("Diagnosticien", f"Itération {iteration} — score global: {bundle.score_global():.1f}/10")
@@ -230,6 +336,16 @@ def run(code: str, genre_profile: GenreProfile, bundle: EvaluationBundle, iterat
             + "\n→ Si exec ≥ 6.0, proposer au moins 1-2 de ces systèmes en correction."
         )
 
+    # Genre must-haves static check
+    _missing_musts = _detect_missing_genre_musts(code, genre_profile.genre_principal, genre_profile.sous_genre or "")
+    genre_musts_section = ""
+    if _missing_musts and exec_score >= 4.5:  # only suggest depth additions if game runs
+        genre_musts_section = (
+            "\n🎯 INCONTOURNABLES DU GENRE ABSENTS DU CODE :\n"
+            + "\n".join(f"  ✗ {m}" for m in _missing_musts)
+            + "\n→ Chaque critère absent coûte -1.5 pts gameplay. Ajouter en priorité si exec ≥ 6.\n"
+        )
+
     # Bloc exec-first en tête si critique
     exec_header = f"{exec_context}\n" if exec_critical else ""
 
@@ -262,7 +378,7 @@ def run(code: str, genre_profile: GenreProfile, bundle: EvaluationBundle, iterat
 SCORES (du plus bas au plus haut) :
 {json.dumps(scores_tries, ensure_ascii=False)}
 Axes prioritaires à corriger : {axes_prioritaires}
-{'' if exec_critical else exec_context}{raw_js_section}{runtime_hint_str}{depth_hint_str}
+{'' if exec_critical else exec_context}{raw_js_section}{runtime_hint_str}{genre_musts_section}{depth_hint_str}
 {_deja_tentees_str}PROBLÈMES DÉTECTÉS PAR AGENT :
 {_issues_contextualized}
 

@@ -102,6 +102,97 @@ RÈGLES THREE.JS 3D :
 Tu produis UNIQUEMENT le code HTML corrigé complet, sans explication ni backticks."""
 
 
+def _get_model_snippet_for_missing(genre: str, sous_genre: str, missing_musts: list[str]) -> str:
+    """
+    For each missing genre must-have, extract a ~500-char reference snippet from
+    the matching model game file.  Returns a formatted block or '' if nothing found.
+    """
+    import re as _re, os as _os
+
+    g = (genre + " " + (sous_genre or "")).lower()
+
+    GENRE_FILE = [
+        (["shmup", "shoot", "vaisseau", "spatial", "space", "galaga"], "shoot_em_up.html"),
+        (["platformer", "plateforme", "jump", "mario"], "platformer.html"),
+        (["rpg", "aventure", "dungeon", "roguelite", "rogue"], "rpg_narratif.html"),
+        (["puzzle", "match3", "match-3"], "puzzle_match3.html"),
+        (["runner", "endless"], "endless_runner.html"),
+        (["arcade", "breakout", "brique"], "breakout.html"),
+        (["tower defense", "tower_defense", "defense"], "tower_defense.html"),
+        (["visual novel", "visual_novel", "vn"], "visual_novel.html"),
+        (["dungeon_crawler", "crawler"], "dungeon_crawler.html"),
+    ]
+
+    filename = None
+    for keywords, fname in GENRE_FILE:
+        if any(k in g for k in keywords):
+            filename = fname
+            break
+    if not filename:
+        return ""
+
+    _root = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    model_path = _os.path.join(_root, "jeux_modeles", filename)
+    try:
+        with open(model_path, "r", encoding="utf-8") as f:
+            html = f.read()
+    except (IOError, OSError):
+        return ""
+
+    m = _re.search(r'<script[^>]*>(.*?)</script>', html, _re.DOTALL | _re.IGNORECASE)
+    if not m:
+        return ""
+    js = m.group(1)
+
+    # Criterion keyword → anchor strings to search for in the model game
+    CRITERION_ANCHORS = [
+        ("PHASE",      ["bossPhase", "boss.phase", "phase === 2", "phase >= 2"]),
+        ("POWER",      ["PU_DEFS", "powerUp", "powerups", "spawnPowerup"]),
+        ("VAGUE",      ["WAVE_DEFS", "updateWave", "waveActive"]),
+        ("ENNEMI",     ["ENEMY_DEFS", "ENEMY_TYPES", "createEnemy"]),
+        ("COMBO",      ["combo", "comboTimer", "comboMult"]),
+        ("XP",         ["checkLevelUp", "addXP", "gainXP", "xp +="]),
+        ("LEVEL",      ["LEVEL_DEFS", "LEVELS =", "currentLevel"]),
+        ("UPGRADE",    ["upgradeTower", "tower.level", "TOWER_TYPES"]),
+        ("GOLD",       ["addGold", "gold +=", "gainGold"]),
+        ("CASCADE",    ["applyGravity", "cascade", "dropTiles"]),
+        ("MATCH",      ["checkMatch", "findMatch"]),
+        ("CHOICE",     ["showChoiceDialog", "choices :"]),
+        ("FLAG",       ["setFlag", "flags["]),
+        ("COYOTE",     ["coyoteTime", "COYOTE_TIME", "jumpBuffer"]),
+        ("OBSTACLE",   ["OBSTACLE_TYPES", "spawnObstacle"]),
+        ("SPEED",      ["SPEED_RAMP", "gameSpeed", "speed *="]),
+        ("BOSS",       ["spawnBoss", "bossActive", "drawBoss"]),
+    ]
+
+    blocks = []
+    for must in missing_musts[:3]:  # max 3 snippets to keep prompt size reasonable
+        must_upper = must.upper()
+        anchors = next(
+            (anch for kw, anch in CRITERION_ANCHORS if kw in must_upper),
+            None
+        )
+        if not anchors:
+            continue
+        for anchor in anchors:
+            idx = js.find(anchor)
+            if idx != -1:
+                # Find the start of the line
+                line_start = js.rfind('\n', 0, idx) + 1
+                # Extract ~500 chars from that line
+                snippet = js[line_start:line_start + 500].strip()
+                last_nl = snippet.rfind('\n')
+                if last_nl > 350:
+                    snippet = snippet[:last_nl]
+                if snippet:
+                    blocks.append(f"-- Référence pour « {must} » (extrait {filename}) --\n{snippet}")
+                break
+
+    if not blocks:
+        return ""
+    return "\nIMPLÉMENTATIONS DE RÉFÉRENCE — reproduis ces patterns dans le jeu :\n" + "\n\n".join(blocks) + "\n"
+
+
 def run(code: str, diagnostic: dict, genre_profile: GenreProfile, iteration: int) -> str:
     phase5_log.agent_start("Patcher", f"Application des corrections (itération {iteration})")
 
@@ -156,6 +247,18 @@ def run(code: str, diagnostic: dict, genre_profile: GenreProfile, iteration: int
         format_sortie = "Ne mets AUCUN texte avant ou après le code."
         decls_context = ""
 
+    # Model game reference snippets for missing genre must-haves
+    try:
+        from agents.phase5.agent_diagnosticien import _detect_missing_genre_musts
+        _missing = _detect_missing_genre_musts(
+            code_pour_patch, genre_profile.genre_principal, genre_profile.sous_genre or ""
+        )
+        _reference_snippets = _get_model_snippet_for_missing(
+            genre_profile.genre_principal, genre_profile.sous_genre or "", _missing
+        ) if _missing else ""
+    except Exception:
+        _reference_snippets = ""
+
     prompt = f"""Corrige ce code de jeu HTML5 ({genre_profile.genre_principal}).
 {decls_context}
 
@@ -168,7 +271,7 @@ CORRECTIONS À APPORTER (par ordre de priorité) :
 {preserver_str}
 
 INSTRUCTIONS GÉNÉRALES :
-{instructions}
+{instructions}{_reference_snippets}
 
 RÈGLES IMPORTANTES :
 1. Ne réécris PAS tout le jeu — fais des corrections ciblées

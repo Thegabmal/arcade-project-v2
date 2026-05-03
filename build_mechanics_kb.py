@@ -1019,6 +1019,343 @@ PIÈGES D'IMPLÉMENTATION :
 - Physique de balle très précise requise
 - Netcode crucial pour le multijoueur""",
     },
+
+    # ─── ROGUELITE ────────────────────────────────────────────────────────────
+    {
+        "genre": "roguelite",
+        "game_name": "Hades",
+        "publisher": "Supergiant Games",
+        "year": 2020,
+        "document": """HADES — Roguelite action avec narration integree
+CORE LOOP : Run -> Mourir -> Choisir boon -> Ameliorer meta -> Nouveau run plus fort
+MECANIQUES CORE :
+- Boons : pouvoirs offerts par un dieu apres chaque salle (choisir 1 parmi 3)
+- Synergies : combiner des boons de dieux differents = effets amplifies
+- Mirror of Night : meta-progression permanente (miroir des tenebres)
+- Dash infini : methode principale d'esquive, jamais penalisante
+GAME FEEL :
+- Mort = dialogue narratif, pas un ecran de game over
+- Chaque run raccourcit : plus d'experience = runs plus rapides
+- Feedback hit : ennemis se figent brievement sur les coups critiques
+PROGRESSION :
+- Pactes de chatiment : difficulte optionnelle augmentee pour rejouer
+FUN FACTOR : Variance de build elevee, narration omniprésente, mort non-punitive
+PIEGES D'IMPLEMENTATION :
+- Trop peu de variance = runs repetitifs
+- Salle trop longue sans recompense = perte d'elan""",
+    },
+    {
+        "genre": "roguelite",
+        "game_name": "Dead Cells",
+        "publisher": "Motion Twin",
+        "year": 2018,
+        "document": """DEAD CELLS — Roguelite Metroidvania avec combat precis
+CORE LOOP : Explorer biome -> Tuer ennemis -> Collecter cellules -> Boss -> Biome suivant -> Mourir -> Depenser cellules en meta
+MECANIQUES CORE :
+- Cellules : monnaie de run depensee en meta-upgrades (blueprints permanents)
+- Deux armes actives + deux items de support : build sur 4 slots
+- Parry : timing precis = stun ennemi + degats bonus
+- Roll d'esquive : i-frames pendant le roll
+- Mutations : passifs choisis en fin de biome
+GAME FEEL :
+- Attaques ont du poids : hitstop sur les coups connectes
+- Fluidite parkour : sauts, wall-jumps, grappin
+PROGRESSION :
+- Boss Cell : modificateurs de difficulte debloquables progressivement
+FUN FACTOR : Combat precis et satisfaisant, builds varies, mort courte
+PIEGES D'IMPLEMENTATION :
+- Ennemis trop telegraphes = trivial, trop rapide = injuste
+- Run trop long sans checkpoint = frustration""",
+    },
+    {
+        "genre": "roguelite",
+        "game_name": "The Binding of Isaac",
+        "publisher": "Nicalis",
+        "year": 2014,
+        "document": """THE BINDING OF ISAAC: REBIRTH — Roguelite twin-stick avec combinaisons d'items
+CORE LOOP : Explorer salle -> Tirer ennemis -> Collecter item -> Boss -> Etage suivant -> 7 etages -> Fin
+MECANIQUES CORE :
+- Items : +500 items, chacun modifiant les stats ou donnant des effets uniques
+- Synergies : certains items combines creent des effets non documentes
+- Larmes : projectiles du personnage, customises par les items
+- Bombes/cles/pieces : ressources limitees a gerer par etage
+GAME FEEL :
+- Variance extreme : un bon item des le depart = run trivial ou OP
+FUN FACTOR : Variance maximale, decouverte de synergies, humour noir
+PIEGES D'IMPLEMENTATION :
+- Trop d'items = illisibilite des effets
+- Generation doit garantir jouabilite""",
+    },
+    {
+        "genre": "roguelite",
+        "game_name": "Risk of Rain 2",
+        "publisher": "Hopoo Games",
+        "year": 2019,
+        "document": """RISK OF RAIN 2 — Roguelite 3D avec escalade de difficulte temporelle
+CORE LOOP : Arriver sur planete -> Tuer monstres (difficulte croit avec le temps) -> Teleporter -> Etage suivant -> Boss -> Repeter
+MECANIQUES CORE :
+- Minuterie de difficulte : rester longtemps = monstres plus forts
+- Items empilables : meme item plusieurs fois = effet amplifie (stacking)
+- Lunar items : tres puissants mais avec une malediction associee
+GAME FEEL :
+- Escalade visible : on commence faible, on finit quasi-imbattable avec les bons items
+PROGRESSION :
+- Artifacts : modificateurs globaux debloquables
+FUN FACTOR : Progression explosive, sessions rapides, builds inattendus
+PIEGES D'IMPLEMENTATION :
+- Timer de difficulte invisible = joueurs ne comprennent pas pourquoi ca empire""",
+    },
+
+    # ─── VISUAL NOVEL ─────────────────────────────────────────────────────────
+    {
+        "genre": "visual_novel",
+        "game_name": "Ace Attorney",
+        "publisher": "Capcom",
+        "year": 2001,
+        "document": """ACE ATTORNEY — Visual novel proces/enquete
+CORE LOOP : Enqueter scene de crime -> Interroger temoins -> Collecter preuves -> Proces -> Objecter -> Presenter preuve -> Demasquer mensonge
+MECANIQUES CORE :
+- OBJECTION! : interrompre un temoignage avec une preuve contradictoire
+- Pression psychologique : forcer un temoin -> contradiction -> revelation
+- Jauge de vie du tribunal : erreurs = pression sur le juge (5 vies)
+- Temoignages en boucle : repeter le temoignage pour identifier la faille
+GAME FEEL :
+- Musique dramatique qui monte lors des confrontations
+- Animations de personnages expressives (sprites 2D animes)
+FUN FACTOR : Satisfaction de la resolution logique, personnages memorables, twists
+PIEGES D'IMPLEMENTATION :
+- Solution trop evidente = pas de tension
+- Solution trop obscure = frustration (trial and error)""",
+    },
+    {
+        "genre": "visual_novel",
+        "game_name": "Doki Doki Literature Club",
+        "publisher": "Team Salvato",
+        "year": 2017,
+        "document": """DOKI DOKI LITERATURE CLUB — Visual novel psychologique/meta
+CORE LOOP : Lire dialogues -> Choisir poeme -> Evenements -> Fin de journee -> Repeter
+MECANIQUES CORE :
+- Choix de mots pour le poeme : systeme de points d'affinite par personnage
+- Four routes initiales -> corruption narrative progressive
+- Meta-gameplay : modification de fichiers sauvegarde narrative
+- Flags de fin : comportements deverrouilles selon les routes precedentes
+GAME FEEL :
+- Rupture progressive des conventions du genre (glitches intentionnels)
+- Musique qui degenere avec l'histoire
+FUN FACTOR : Surprise narrative, subversion des attentes, memorabilite extreme
+PIEGES D'IMPLEMENTATION :
+- Twist trop previsible = impact nul
+- Horreur trop explicite = perd l'ambiguite""",
+    },
+    {
+        "genre": "visual_novel",
+        "game_name": "Steins;Gate",
+        "publisher": "5pb./Nitroplus",
+        "year": 2009,
+        "document": """STEINS;GATE — Visual novel de science-fiction avec time travel
+CORE LOOP : Lire textes -> Repondre aux SMS (Phone Trigger) -> Changer le passe -> Observer les consequences -> Autre route
+MECANIQUES CORE :
+- Phone Trigger : repondre ou ignorer un SMS = bifurcation narrative
+- D-mails : envoyer SMS dans le passe = changer une variable de l'univers
+- Worldlines : chaque decision cree une ligne temporelle differente
+GAME FEEL :
+- Progression lente et dense -> recompense emotionnelle massive
+- Terminologie scientifique (vraie physique theorique)
+FUN FACTOR : Coherence interne remarquable, attachement aux personnages, revelations
+PIEGES D'IMPLEMENTATION :
+- Trop de texte sans choix = sensation de livre interactif
+- Choix sans consequence percue = desinvestissement""",
+    },
+
+    # ─── RUNNER ───────────────────────────────────────────────────────────────
+    {
+        "genre": "runner",
+        "game_name": "Canabalt",
+        "publisher": "Adam Atomic",
+        "year": 2009,
+        "document": """CANABALT — Endless runner minimaliste fondateur du genre
+CORE LOOP : Courir automatiquement -> Sauter au bon moment -> Atterrir sur le toit suivant -> Repeter jusqu'a la mort
+MECANIQUES CORE :
+- Un seul bouton : ESPACE = saut
+- Vitesse croissante automatiquement : plus on survit, plus on va vite
+- Obstacles varies : boites renversables (ralentissent), barres a sauter, gaps
+GAME FEEL :
+- Momentum : courir + sauter au bord = distance maximale
+- Caméra : zoom out progressif = sensation d'acceleration
+FUN FACTOR : One-more-run parfait, sessions courtes, simplicite absolue
+PIEGES D'IMPLEMENTATION :
+- Gaps trop larges en debut = mort injuste
+- Vitesse croissante trop lente = ennui, trop rapide = mort avant d'apprecier""",
+    },
+    {
+        "genre": "runner",
+        "game_name": "Geometry Dash",
+        "publisher": "RobTop Games",
+        "year": 2013,
+        "document": """GEOMETRY DASH — Runner de precision avec musique synchronisee
+CORE LOOP : Ecouter musique -> Cliquer au bon rythme -> Franchir obstacles -> Arriver a la fin du niveau
+MECANIQUES CORE :
+- Un bouton (clic/espace) : saut, selon le mode actif (cube/ship/ball/wave)
+- Modes multiples : cube (sauter), vaisseau (voler), bille (gravite inversee)
+- Rythme musical : obstacles synchronises avec la musique
+- Portails : changer de mode ou de taille (mini/normal)
+GAME FEEL :
+- Musique entrainante = immersion complete
+- Transitions de modes : gameplay radicalement different en milieu de run
+FUN FACTOR : Precision musicale, satisfaction de terminer un niveau long
+PIEGES D'IMPLEMENTATION :
+- Synchronisation musique/obstacles doit etre parfaite
+- Difficulte trop haute en debut = abandon immediat""",
+    },
+    {
+        "genre": "runner",
+        "game_name": "Jetpack Joyride",
+        "publisher": "Halfbrick",
+        "year": 2011,
+        "document": """JETPACK JOYRIDE — Endless runner avec gadgets et missions
+CORE LOOP : Voler avec jetpack -> Eviter obstacles (lasers, zappers, missiles) -> Collecter pieces -> Acheter gadgets -> Rejouer
+MECANIQUES CORE :
+- Jetpack : maintenir le bouton = monter, relacher = descendre
+- Vehicules speciaux : atterrir sur un vehicule = powers differents (dragon, moto)
+- Missions : 3 missions actives (ex : voler 500m, collecter 50 pieces) -> XP
+- S.A.M. (missiles) : survie de sequence de missiles teleguides = bonus
+GAME FEEL :
+- Son du jetpack : feedback immediat sur chaque action
+- Vehicules visuellement distinctifs et fun
+PROGRESSION :
+- Gadgets : equipements permanents ameliorant les runs (aimant, bouclier)
+FUN FACTOR : Accessibilite totale, missions courtes, gadgets strategiques
+PIEGES D'IMPLEMENTATION :
+- Obstacles trop bases = lecture difficile (hauteur vs avion)
+- Missions impossibles a voir = frustration""",
+    },
+
+    # ─── ARCADE / BREAKOUT ────────────────────────────────────────────────────
+    {
+        "genre": "arcade",
+        "game_name": "Arkanoid",
+        "publisher": "Taito",
+        "year": 1986,
+        "document": """ARKANOID — Breakout avec power-ups et boss
+CORE LOOP : Deplacer raquette -> Faire rebondir balle -> Casser briques -> Collecter capsules -> Niveau suivant -> Boss
+MECANIQUES CORE :
+- Raquette Vaus : deplacement horizontal uniquement
+- Angle de renvoi : frappe sur le bord de la raquette = angle aigu
+- Capsules (power-ups) : Slow (balle lente), Break (traverse briques), Laser, Extend (raquette large), Disrupt (3 balles)
+- Briques indestructibles (argent) : rebondissent toujours
+- Boss Doh : resiste a plusieurs impacts
+GAME FEEL :
+- Son distinct par type de brique cassee (tons musicaux)
+- Acceleration balle sur certains paliers
+FUN FACTOR : Satisfaction de combo, power-ups transformateurs, niveaux courts
+PIEGES D'IMPLEMENTATION :
+- Balle coincee dans un coin = session longue ennuyeuse
+- Raquette trop petite = frustration, trop grande = trivial""",
+    },
+    {
+        "genre": "arcade",
+        "game_name": "Peggle",
+        "publisher": "PopCap",
+        "year": 2007,
+        "document": """PEGGLE — Casse-briques casual avec trajectoires et magie
+CORE LOOP : Viser -> Tirer bille -> Rebondir sur pegs orange -> Compter pegs orange restants -> Vider tous les pegs orange
+MECANIQUES CORE :
+- Tir de haut : angle libre en haut, bille descend par gravite
+- Pegs orange (a eliminer) vs bleus (bonus) vs verts (pouvoir special)
+- Maitres magiques : 10 personnages donnant un power sur les pegs verts
+- Free ball : bille tombe dans le seau au bas -> bille gratuite
+- Score multiplicateur : combo de pegs = multiplicateur croissant
+GAME FEEL :
+- Ode to Joy + slow motion + confettis lors du dernier peg orange = catharsis
+- Trajectoire predite en amont (pointilles)
+FUN FACTOR : Accessibilite totale, satisfaction visuellement spectaculaire, one more shot
+PIEGES D'IMPLEMENTATION :
+- Trop de pegs = trajectoire imprévisible = RNG frustrant""",
+    },
+    {
+        "genre": "arcade",
+        "game_name": "Breakout",
+        "publisher": "Atari",
+        "year": 1976,
+        "document": """BREAKOUT — Arcade fondateur du casse-brique
+CORE LOOP : Deplacer raquette -> Balle rebondit -> Brique cassee -> Score -> Angle change -> Repeter
+MECANIQUES CORE :
+- Raquette : deplacement horizontal, controle l'angle de renvoi
+- Mur de briques : 8 rangees de couleurs differentes (valeur differente)
+- Balle s'accelere apres X briques cassees
+- Percer un trou dans le mur du haut : balle rebondit dans l'espace superieur = combo bonus
+GAME FEEL :
+- Son mecanique : boing sur chaque impact (feedback immediat)
+- Tension : balle s'accelere progressivement
+FUN FACTOR : Simplicite absolue, maitrise de l'angle, sensation de controle
+PIEGES D'IMPLEMENTATION :
+- Balle trop rapide des le depart = demoralisant
+- Hitbox raquette floue = sentiment d'injustice""",
+    },
+
+    # ─── DUNGEON CRAWLER ──────────────────────────────────────────────────────
+    {
+        "genre": "dungeon_crawler",
+        "game_name": "Diablo II",
+        "publisher": "Blizzard",
+        "year": 2000,
+        "document": """DIABLO II — ARPG fondateur du loot-driven dungeon crawler
+CORE LOOP : Explorer zone -> Tuer monstres -> Looter items -> Equiper meilleurs items -> Zone suivante plus difficile
+MECANIQUES CORE :
+- Loot : chaque monstre drop items avec rarete (normal/magic/rare/unique/set)
+- Builds : arbre de competences avec 30+ skills par classe
+- Acte -> Boss -> Prochain acte : structure lineaire avec 5 actes
+- Difficultes : Normal -> Cauchemar -> Enfer (memes zones, ennemis plus forts)
+GAME FEEL :
+- Son de piece qui tombe = dopamine
+- Town portal : retour ville instantane avec portail
+PROGRESSION :
+- 7 classes radicalement differentes en builds possibles
+FUN FACTOR : Loot addiction, builds infinis, rejouabilite par classe
+PIEGES D'IMPLEMENTATION :
+- Loot trop rare = frustration, trop frequent = dilution""",
+    },
+    {
+        "genre": "dungeon_crawler",
+        "game_name": "Hades (Dungeon)",
+        "publisher": "Supergiant Games",
+        "year": 2020,
+        "document": """HADES — Dungeon crawler action avec chambres de combat
+CORE LOOP : Entrer chambre -> Tuer tous les ennemis -> Choisir recompense -> Chambre suivante -> Boss -> Sortie ou mort
+MECANIQUES CORE :
+- Chambres forcees : les ennemis apparaissent et les portes se ferment
+- Recompenses variees : boon / obole / vie selon la symbolique de la porte
+- Boss a phases : Megaera (3 soeurs), Thesee+Asterion (duo), Hades (multi-phases)
+- Couleurs de portes : or (boon rare), argent (obole), rouge (vie)
+GAME FEEL :
+- Actions rapides : dash + attaque + special + lancer = 4 boutons actifs
+FUN FACTOR : Fluidite d'action, variete de builds, narration dans l'action
+PIEGES D'IMPLEMENTATION :
+- Recompenses trop similaires = choix peu engageant""",
+    },
+    {
+        "genre": "dungeon_crawler",
+        "game_name": "Nethack",
+        "publisher": "NetHack DevTeam",
+        "year": 1987,
+        "document": """NETHACK — Roguelike pur avec systeme de simulation profond
+CORE LOOP : Explorer etage -> Combattre -> Identifier items -> Descendre escalier -> Manger -> Plus profond -> Ou mort = tout recommencer
+MECANIQUES CORE :
+- Tour-par-tour : chaque action du joueur = un tour ennemi
+- Identification : tous les items sont non-identifies au debut (potions/parchemins/baguettes)
+- Alignement : Lawful/Neutral/Chaotic affecte les interactions
+- Divinite : prier pour obtenir aide ou etre puni si trop frequent
+- Simulation : presque tout interagit avec tout (lancer un couteau dans l'eau = no dommage)
+GAME FEEL :
+- Interface ASCII = imagination du joueur comble les visuels
+- Mort permanente = chaque run compte
+PROGRESSION :
+- Meta-knowledge du joueur (pas du personnage) = vraie progression
+FUN FACTOR : Profondeur infinie, surprises permanentes, mort instructive
+PIEGES D'IMPLEMENTATION :
+- RNG trop punitif en debut = runs impossibles
+- Trop de regles implicites = courbe apprentissage verticale""",
+    },
 ]
 
 
@@ -1127,6 +1464,41 @@ def search_mechanics(genre: str, query: str, n: int = 3) -> list:
         return []
 
 
+def _migrate_genre_keys() -> int:
+    """
+    One-time migration: rename stale genre keys with spaces to underscore form.
+    Example: 'tower defense' -> 'tower_defense'.
+    Deletes old entries and re-stores them with the corrected genre key.
+    Returns the number of entries migrated.
+    """
+    collection = _get_mechanics_collection()
+    if collection is None:
+        return 0
+
+    GENRE_RENAMES = {"tower defense": "tower_defense"}
+    migrated = 0
+
+    for old_genre, new_genre in GENRE_RENAMES.items():
+        try:
+            old_entries = collection.get(where={"genre": {"$eq": old_genre}})
+            if not old_entries["ids"]:
+                continue
+            # Re-store with corrected genre
+            for doc_id, doc, meta in zip(old_entries["ids"], old_entries["documents"], old_entries["metadatas"]):
+                new_meta = dict(meta)
+                new_meta["genre"] = new_genre
+                new_id = f"mech_{new_genre}_{meta.get('game_name','').replace(' ','_')[:40]}"
+                collection.upsert(ids=[new_id], documents=[doc], metadatas=[new_meta])
+            # Delete old entries
+            collection.delete(ids=old_entries["ids"])
+            migrated += len(old_entries["ids"])
+            print(f"  [MechanicsKB] Migrated {len(old_entries['ids'])} entries: '{old_genre}' -> '{new_genre}'")
+        except Exception as e:
+            print(f"  [MechanicsKB] Migration error for '{old_genre}': {e}")
+
+    return migrated
+
+
 def build(force: bool = False) -> int:
     """
     Peuple la collection mechanics_kb avec tous les jeux définis dans GAMES_KB.
@@ -1138,9 +1510,12 @@ def build(force: bool = False) -> int:
         print("  [MechanicsKB] ChromaDB non disponible — build annulé.")
         return 0
 
+    # Fix any stale genre keys before adding new entries
+    _migrate_genre_keys()
+
     existing_count = collection.count()
     if existing_count >= len(GAMES_KB) and not force:
-        print(f"  [MechanicsKB] Déjà peuplée ({existing_count} entrées). Utilisez force=True pour reconstruire.")
+        print(f"  [MechanicsKB] Deja peuplee ({existing_count} entrees). Utilisez force=True pour reconstruire.")
         return existing_count
 
     stored = 0
@@ -1160,9 +1535,9 @@ def build(force: bool = False) -> int:
         if ok:
             stored += 1
             genres_seen[genre] += 1
-            print(f"  ✓ {genre:15s} | {name}")
+            print(f"  OK {genre:15s} | {name}")
         else:
-            print(f"  ✗ ÉCHEC  {genre:15s} | {name}")
+            print(f"  FAIL {genre:15s} | {name}")
 
     print(f"\n  [MechanicsKB] {stored}/{len(GAMES_KB)} jeux indexés.")
     for genre, count in sorted(genres_seen.items()):

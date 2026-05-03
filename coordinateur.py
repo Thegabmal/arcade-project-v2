@@ -277,15 +277,15 @@ from agents.support import agent_verdict_final, agent_sauvegarde, agent_auto_lea
 # ─────────────────────────────────────────────
 # CONFIGURATION
 # ─────────────────────────────────────────────
-MAX_ITERATIONS = 3          # 3 iterations: generation + 2 patch/fix passes
-SCORE_SEUIL_SAUVEGARDE = 7.0   # Minimum score to mark as "approved"
-SCORE_SORTIE_ANTICIPEE = 8.0   # Score to exit early without iterating
+MAX_ITERATIONS = 4          # 4 iterations: generation + 3 patch/fix passes
+SCORE_SEUIL_SAUVEGARDE = 7.5   # Minimum score to mark as "approved"
+SCORE_SORTIE_ANTICIPEE = 8.5   # Score to exit early without iterating
 SCORE_STAGNATION_DELTA = 0.2   # If score improves by less than this → stagnation
 SCORE_MIN_VIABLE_SAVE  = 2.0   # Below this, no point saving (empty code)
 # Number of consecutive iterations without progress before stagnation is declared
 MAX_ITERATIONS_SANS_PROGRES = 2  # tolerate 1 "stuck" iteration — A2 fix can unblock
 # E4: threshold to allow passes 3 and 4 (quota savings)
-SCORE_SEUIL_ITERATIONS_SUP = 7.0  # Above this → 2 passes are enough
+SCORE_SEUIL_ITERATIONS_SUP = 7.5  # Above this → 2 passes are enough
 # C1: minimum scores per dimension (block save if not reached)
 SCORE_MIN_EXECUTION = 5.0   # C1: execution must be >= 5.0
 SCORE_MIN_TECHNIQUE = 5.5   # C1: technique must be >= 5.5
@@ -780,10 +780,21 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
                     )
                     stagnation_count = max(0, stagnation_count - 1)
 
-        # Early exit if score is excellent
+        # P4 — Playability gate: check if player is responsive (Playwright test)
+        _joueur_reactif_ok = not any(
+            c.get("nom") == "Joueur réactif" and c.get("score", 1) == 0
+            for c in (bundle.execution.criteres if bundle.execution else [])
+        )
+
+        # Early exit if score is excellent AND player is responsive
         if score >= SCORE_SORTIE_ANTICIPEE:
-            coordinateur_log.success(f"Score {score:.2f} >= {SCORE_SORTIE_ANTICIPEE} -> early exit")
-            break
+            if _joueur_reactif_ok:
+                coordinateur_log.success(f"Score {score:.2f} >= {SCORE_SORTIE_ANTICIPEE} -> early exit")
+                break
+            else:
+                coordinateur_log.warning(
+                    f"Score {score:.2f} >= {SCORE_SORTIE_ANTICIPEE} but 'Joueur réactif' failed — continuing"
+                )
 
         # Stagnation?
         delta = score - previous_score
@@ -798,8 +809,8 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
                 stagnation_count = 0
         previous_score = score
 
-        # E4: quota savings — passes 3+ only if score < 7.0 after 2 passes
-        if iteration >= 2 and score >= SCORE_SEUIL_ITERATIONS_SUP:
+        # E4: quota savings — passes 3+ only if score is high AND player is responsive
+        if iteration >= 2 and score >= SCORE_SEUIL_ITERATIONS_SUP and _joueur_reactif_ok:
             coordinateur_log.info(f"E4: score {score:.2f} >= {SCORE_SEUIL_ITERATIONS_SUP} after {iteration} passes — stopping")
             break
 
@@ -997,6 +1008,18 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
     if approved and any(kw in _vd_text for kw in _veto_kws):
         approved = False
         coordinateur_log.warning("C2 : veto agent neutre — jeu déclaré non jouable malgré score suffisant")
+
+    # C3 : Hard playability gate — execution < 5.0 AND player not responsive → block save
+    _final_joueur_reactif_failed = any(
+        c.get("nom") == "Joueur réactif" and c.get("score", 1) == 0
+        for c in (bundle.execution.criteres if bundle and bundle.execution else [])
+    )
+    if approved and final_exec_score < 5.0 and _final_joueur_reactif_failed:
+        approved = False
+        coordinateur_log.warning(
+            f"C3 : hard playability gate — execution={final_exec_score:.1f} < 5.0 AND "
+            f"'Joueur réactif' failed → game blocked regardless of score"
+        )
 
     coordinateur_log.info(f"Final score: {final_score:.2f} | Approved: {approved}")
 

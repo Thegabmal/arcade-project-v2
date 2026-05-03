@@ -457,6 +457,16 @@ def call_gemini(
     )
 
 
+def _strip_json_control_chars(raw: str) -> str:
+    """
+    Remove ASCII control characters (0x00-0x1F except tab/newline/CR) that the LLM
+    sometimes embeds literally inside JSON string values when quoting code snippets.
+    Only strips chars that are invalid per the JSON spec inside strings.
+    """
+    import re
+    return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', raw)
+
+
 def call_gemini_json(prompt: str, temperature: float = 0.2, system_instruction: str = None, max_tokens: int = 24000, disable_thinking: bool = True) -> dict:
     """
     Calls Gemini and returns auto-parsed JSON.
@@ -489,6 +499,13 @@ def call_gemini_json(prompt: str, temperature: float = 0.2, system_instruction: 
     try:
         return json.loads(raw)
     except json.JSONDecodeError as e:
+        # Retry: strip control chars the LLM embeds when quoting code snippets
+        clean = _strip_json_control_chars(raw)
+        if clean != raw:
+            try:
+                return json.loads(clean)
+            except json.JSONDecodeError:
+                pass
         print(f"  [JSON parse erreur] {e} — raw[:200]: {raw[:200]}", flush=True)
         raise
 
@@ -528,6 +545,12 @@ def call_gemini_paid_json(
     try:
         return json.loads(raw)
     except json.JSONDecodeError as e:
+        clean = _strip_json_control_chars(raw)
+        if clean != raw:
+            try:
+                return json.loads(clean)
+            except json.JSONDecodeError:
+                pass
         print(f"  [Paid JSON parse erreur] {e} — raw[:200]: {raw[:200]}", flush=True)
         raise
 

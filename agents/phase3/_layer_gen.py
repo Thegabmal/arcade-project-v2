@@ -2487,6 +2487,78 @@ def _inject_arcade_test_hooks(js: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# MODEL GAME REFERENCE EXTRACTOR (Axe 1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _get_model_game_reference(genre: str, sous_genre: str) -> str:
+    """
+    Extract the data-structure section (PALETTE, ENEMY_TYPES, WAVE_DEFS, etc.)
+    from the matching model game file.  Returns '' if no match or read failure.
+    Only the constants block is extracted (up to the first 'function' keyword)
+    so L1 can mirror the data patterns without picking up conflicting game-loop code.
+    """
+    import re as _re
+
+    genre_l = (genre + " " + (sous_genre or "")).lower()
+
+    GENRE_MAP = [
+        (["shmup", "shoot", "vaisseau", "spatial", "space", "bullet hell", "galaga"], "shoot_em_up.html"),
+        (["platformer", "plateforme", "jump", "mario"], "platformer.html"),
+        (["rpg", "aventure", "zelda", "action-rpg", "action rpg"], "rpg_narratif.html"),
+        (["puzzle", "match3", "match-3", "match 3", "correspondance"], "puzzle_match3.html"),
+        (["runner", "endless", "infini", "course infinie"], "endless_runner.html"),
+        (["arcade", "breakout", "casse-briques", "brique", "pong", "balle"], "breakout.html"),
+        (["tower defense", "tower_defense", "tour de défense", "defense"], "tower_defense.html"),
+        (["visual novel", "visual_novel", "roman visuel", "vn"], "visual_novel.html"),
+        (["dungeon", "crawler", "dungeon_crawler", "donjon"], "dungeon_crawler.html"),
+        (["roguelite", "rogue-lite", "rogue lite", "roguelike"], "roguelite.html"),
+    ]
+
+    filename = None
+    for keywords, fname in GENRE_MAP:
+        if any(kw in genre_l for kw in keywords):
+            filename = fname
+            break
+
+    if not filename:
+        return ""
+
+    _root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    model_path = os.path.join(_root, "jeux_modeles", filename)
+
+    try:
+        with open(model_path, "r", encoding="utf-8") as f:
+            html = f.read()
+    except (IOError, OSError):
+        return ""
+
+    m = _re.search(r'<script[^>]*>(.*?)</script>', html, _re.DOTALL | _re.IGNORECASE)
+    if not m:
+        return ""
+    js = m.group(1)
+
+    # Anchor: first ALLCAPS constant assigned to an object or array (data tables)
+    anchor_m = _re.search(r'(?:var|const)\s+[A-Z_][A-Z0-9_]{2,}\s*=\s*[{\[]', js)
+    if anchor_m:
+        start = anchor_m.start()
+    else:
+        # Fallback: first ALLCAPS scalar constant block
+        anchor_m2 = _re.search(r'(?:var|const)\s+[A-Z_][A-Z0-9_]{2,}\s*=', js)
+        if anchor_m2:
+            start = anchor_m2.start()
+        else:
+            return ""
+
+    # Fixed 2500-char window — includes data defs AND nearby helpers/functions for context
+    excerpt = js[start:start + 2500]
+    last_nl = excerpt.rfind('\n')
+    if last_nl > 1800:
+        excerpt = excerpt[:last_nl]
+
+    return excerpt.strip()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # FONCTION PRINCIPALE
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -2563,6 +2635,18 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
                 snippets_section += "--- %s (score %.1f) ---\n%s\n" % (
                     p.get('genre', '?'), p.get('score', 0), snippet[:600]
                 )
+
+    # ── Model game reference (Axe 1) ──
+    reference_section = ""
+    _ref_code = _get_model_game_reference(genre, sous_genre)
+    if _ref_code:
+        reference_section = (
+            "\nJEU DE RÉFÉRENCE VALIDÉ — ARCHITECTURE 8+/10 EN PRODUCTION\n"
+            "Ces structures de données sont ÉPROUVÉES pour ce genre — reproduis les mêmes patterns.\n"
+            "Adapte les valeurs (couleurs, vitesses, HP) au jeu demandé, mais conserve les structures :\n"
+            "```javascript\n" + _ref_code + "\n```\n"
+        )
+        phase3_log.info("[layered] Reference jeu modèle injectée : %d chars" % len(_ref_code))
 
     # ── Split game_logics ──
     def _split_game_logics_semantic(gl: str) -> tuple:
@@ -2647,7 +2731,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         f'Jeu : "{titre}" — genre : {genre} ({sous_genre})\n'
         f'Style visuel : {style_visuel}\n'
         f'{_mecaniques_block}'
-        f'{erreurs_str}{level_design_section}{snippets_section}\n\n'
+        f'{erreurs_str}{level_design_section}{snippets_section}{reference_section}\n\n'
         'Génère UNIQUEMENT les déclarations de données et état global.\n\n'
         'OBLIGATOIRE (sois PRÉCIS et RICHE — ces données définissent tout le gameplay) :\n'
         '1. var PALETTE = {bg:"#0a0a1a",player:"#00ffcc",enemy:"#ff4444",...} — 15+ couleurs, adapte au thème\n'

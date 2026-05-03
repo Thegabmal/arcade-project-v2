@@ -37,7 +37,7 @@ BLOCKING criteria — severe penalty if absent (non-functional game):
 - CONST REASSIGNMENT: `const score = 0` then `score += 10` → TypeError — mutable scalars = `let`
 - DT PASSING: functions that use `dt` MUST have it as a parameter (updateEnemies, updateBoss, etc.)
 - `dist` calculated BEFORE being used in if(dist < ...) — no variable appearing out of thin air
-- NO eval(), window.__devPatch, new Function() in production
+- NO eval() or new Function() in game logic (window.__devPatch from dev console is allowed)
 - Key functions NON-STUB: updatePlayer(), updateEnemies(), checkCollisions() with real body (not just comments)
 - Startable menu: SPACE or Enter → gameState = 'playing'
 - Initialization at start: initGame() calls spawnEnemies()/generateLevel() — no empty arrays
@@ -131,14 +131,13 @@ def _detect_orphan_functions(code: str) -> list[str]:
     candidates = defined - ignore
     orphans = []
     for fn in candidates:
-        # M3: Search for fn( in ALL code (not just gameLoop)
-        # — covers forEach, map, for-loops, callbacks, nested calls
-        call_pattern = re.compile(r'\b' + re.escape(fn) + r'\s*\(')
+        # Count any reference to the name (call, assignment, array, callback, object property)
+        ref_pattern = re.compile(r'\b' + re.escape(fn) + r'\b')
         def_pattern = re.compile(r'function\s+' + re.escape(fn) + r'\s*\(')
-        all_occurrences = len(call_pattern.findall(code))
+        all_refs = len(ref_pattern.findall(code))
         definitions = len(def_pattern.findall(code))
-        calls = all_occurrences - definitions
-        if calls == 0:
+        # Referenced anywhere outside its own definition → not orphan
+        if all_refs - definitions == 0:
             orphans.append(fn)
     return orphans
 

@@ -73,8 +73,8 @@ _LAYER_SYSTEM = (
     "- INTERDIT ABSOLU : new Image(), img.src, Image(), fetch(), XMLHttpRequest, "
     "import(), require(), new Audio(), Audio() — tout doit etre dessine/joue en Canvas 2D pur "
     "sans ressources externes. Pour le son : utilise WebAudio API (AudioContext) uniquement.\n"
-    "- INTERDIT dans draw* : fillRect() comme SEUL rendu d'une entite (joueur/ennemi/projectile).\n"
-    "  Utilise arc(), bezierCurveTo(), gradient, ou formes composees — sprites rectangles = score visuel ≤ 6.\n"
+    "- FORBIDDEN in draw* functions: fillRect() as the ONLY render for any entity (player/enemy/projectile).\n"
+    "  Use arc(), bezierCurveTo(), gradient, or compound shapes — rectangle sprites = visual score <= 6.\n"
 )
 
 _LAYER_SYSTEM_GRAPHIQUE = (
@@ -92,8 +92,8 @@ _LAYER_SYSTEM_GRAPHIQUE = (
     "- Fond riche et anime : etoiles, grille, nebuleuse, parallaxe — jamais un fond uni\n"
     "- Boss visuellement exceptionnel : plus grand, aura, couleur unique par phase, barre HP stylisee\n"
     "- Particules belles : taille et opacite qui diminuent avec life, couleurs variees\n"
-    "- INTERDIT ABSOLU : fillRect() comme SEUL visuel pour joueur, ennemi, ou projectile.\n"
-    "  Chaque entite DOIT utiliser arc(), bezierCurveTo(), ou composition de 3+ draw calls.\n\n"
+    "- ABSOLUTE FORBIDDEN: fillRect() as the ONLY visual for player, enemy, or projectile.\n"
+    "  Every entity MUST use arc(), bezierCurveTo(), or a composition of 3+ draw calls.\n\n"
     "REGLES ABSOLUES :\n"
     "- Output = JavaScript pur uniquement\n"
     "- Utilise UNIQUEMENT les proprietes du contrat de schema fourni\n"
@@ -3423,10 +3423,10 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '  VRAI : ctx.fillStyle = \'rgba(\' + r + \',\' + g + \',\' + b + \',0.5)\';\n'
         '  VRAI : ctx.fillStyle = \'rgba(255, 0, 0, 0.5)\';   ← string directe\n'
         '  VRAI : ctx.fillStyle = PALETTE.enemy;   ← clé PALETTE\n\n'
-        'INTERDIT dans drawPlayer/drawEnemies/drawBoss/drawBullets :\n'
-        '- fillRect() comme SEUL appel de rendu pour une entité → score visuel QC ≤ 6/10\n'
-        '  Chaque entité DOIT utiliser AU MOINS : arc() OU bezierCurveTo() OU gradient OU shadowBlur ≥ 8\n\n'
-        'HELPER OBLIGATOIRE — inclure EXACTEMENT dans ta réponse :\n'
+        'FORBIDDEN in drawPlayer/drawEnemies/drawBoss/drawBullets:\n'
+        '- fillRect() as the ONLY render call for any entity -> visual QC score <= 6/10\n'
+        '  Every entity MUST use AT LEAST ONE of: arc() OR bezierCurveTo() OR gradient OR shadowBlur >= 8\n\n'
+        'MANDATORY HELPER — include EXACTLY this function in your response:\n'
         'function drawGlow(x, y, radius, color) {\n'
         '  ctx.save(); ctx.shadowColor = color; ctx.shadowBlur = radius * 2;\n'
         '  ctx.beginPath(); ctx.arc(x, y, radius * 0.5, 0, Math.PI * 2);\n'
@@ -4056,10 +4056,10 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         'MISSION ARTISTIQUE : Réécris les fonctions draw* pour les rendre visuellement exceptionnelles.\n'
         'En JavaScript, la DERNIÈRE définition d\'une fonction écrase la précédente.\n'
         'Tu peux redéfinir drawBackground, drawPlayer, drawEnemies, drawBoss, drawHUD, drawMenu, drawGameOver.\n\n'
-        '⚠️ RÈGLE ZÉRO — INTERDICTION ABSOLUE DES SPRITES RECTANGLES :\n'
-        'Tout joueur, ennemi, boss ou projectile dessiné avec fillRect() seul DOIT être remplacé.\n'
-        '✅ Utilise : arc() · bezierCurveTo() · createRadialGradient()+arc() · 3+ draw calls composés\n'
-        'fillRect() comme sprite unique = score visuel QC ≤ 6/10. NON NÉGOCIABLE.\n\n'
+        '⚠️ RULE ZERO — ABSOLUTE BAN ON RECTANGLE SPRITES:\n'
+        'Any player, enemy, boss or projectile drawn with fillRect() alone MUST be replaced.\n'
+        '✅ Use: arc() · bezierCurveTo() · createRadialGradient()+arc() · 3+ composed draw calls\n'
+        'fillRect() as the only sprite = visual QC score <= 6/10. NON-NEGOTIABLE.\n\n'
         '⚠️ RÈGLE N°1 — VARIABLES NOUVELLES :\n'
         'Toute variable que tu introduis DOIT être déclarée EN TÊTE du fragment avec le guard typeof :\n'
         '  var _bgTimer = (typeof _bgTimer !== "undefined") ? _bgTimer : 0;\n'
@@ -4096,11 +4096,11 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '   waveAnnounce si waveAnnounce>0.\n\n'
         '6. drawMenu() — titre avec glow, meilleur score, instruction clignotante.\n\n'
         '7. drawGameOver() — "GAME OVER" en rouge avec glow, score vs high score, instruction rejouer.\n\n'
-        '8. VÉRIFICATION FINALE — shadowBlur sur toutes les entités :\n'
-        '   drawPlayer() DOIT avoir ctx.shadowBlur ≥ 10 — si absent dans le code, l\'ajouter maintenant.\n'
-        '   drawEnemies() DOIT avoir ctx.shadowBlur pour chaque type d\'ennemi.\n'
-        '   drawBullets/drawProjectiles() : glow ou traînée alpha décroissante obligatoire.\n'
-        '   Si ces appels manquent dans les fonctions héritées de L6 → les ajouter dans ta réécriture.\n\n'
+        '8. FINAL CHECK — shadowBlur on all entities:\n'
+        '   drawPlayer() MUST have ctx.shadowBlur >= 10 — if missing in the code, add it now.\n'
+        '   drawEnemies() MUST have ctx.shadowBlur for each enemy type.\n'
+        '   drawBullets/drawProjectiles(): glow or decreasing-alpha trail is mandatory.\n'
+        '   If these calls are missing in functions inherited from L6 -> add them in your rewrite.\n\n'
         f'PALETTE disponible — clés déclarées en L1 : {_palette_keys_hint}\n'
         '   IMPORTANT : utilise UNIQUEMENT les clés listées ci-dessus — ne jamais inventer PALETTE.neonXxx, PALETTE.glow, PALETTE.accent si absents de la liste.\n'
         '   Si une couleur n\'est pas dans PALETTE, utilise une string CSS directe (ex: \'#00ffcc\').\n\n'

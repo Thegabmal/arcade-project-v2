@@ -255,13 +255,13 @@ def _apply_visual_code_checks(code: str, ev: EvaluationResult) -> EvaluationResu
     # 6. Zero shadowBlur — no glow on any entity
     _has_shadow_blur = 'shadowBlur' in code
     if not _has_shadow_blur:
-        penalties.append(("aucun shadowBlur dans tout le code — zéro glow sur les entités", 2.0))
+        penalties.append(("no shadowBlur anywhere in the code — zero glow on any entity", 2.0))
 
     # 7. No arc/bezier shapes — all entities likely plain fillRect
     _has_arc_shape = bool(re.search(r'ctx\.arc\s*\(', code))
     _has_bezier_shape = bool(re.search(r'ctx\.bezierCurveTo|ctx\.quadraticCurveTo', code))
     if not _has_arc_shape and not _has_bezier_shape:
-        penalties.append(("aucun arc/bezier détecté — entités probablement toutes des fillRect rectangles", 2.0))
+        penalties.append(("no arc/bezier shapes detected — all entities are likely plain fillRect rectangles", 2.0))
 
     # Track whether hard cap should apply (critical visual failures)
     _hard_cap_visual = not _has_shadow_blur or (not _has_arc_shape and not _has_bezier_shape)
@@ -325,10 +325,10 @@ def _apply_visual_code_checks(code: str, ev: EvaluationResult) -> EvaluationResu
         ev.score = 6.5
         ev.issues.append({
             "severite": "critique",
-            "description": "[VISUEL-CAP] Score plafonné à 6.5 : shadowBlur absent ou entités en fillRect (pas d'arc/bezier)",
-            "suggestion": "Ajouter ctx.shadowBlur sur joueur et ennemis + utiliser arc()/bezierCurveTo() pour les formes"
+            "description": "[VISUAL-CAP] Score capped at 6.5: shadowBlur absent or entities using fillRect only (no arc/bezier)",
+            "suggestion": "Add ctx.shadowBlur on player and enemies + use arc()/bezierCurveTo() for entity shapes"
         })
-        phase4_log.warning("QC Visuel hard cap 6.5 : zero glow ou sprites rectangles")
+        phase4_log.warning("QC Visual hard cap 6.5: zero glow or rectangle sprites")
 
     return ev
 

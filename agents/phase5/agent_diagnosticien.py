@@ -11,80 +11,80 @@ from config import call_gemini_paid_json, with_fallback
 from genre_profile import GenreProfile, EvaluationBundle
 from logger import phase5_log
 
-SYSTEM = """Tu es un expert en débogage de jeux HTML5 Canvas 2D/Three.js.
-Tu identifies les problèmes au niveau du CODE (nom de fonction, variable, pattern exact).
-RÈGLES STRICTES pour tes corrections :
-- Cite le NOM EXACT de la fonction à modifier (ex: "dans updatePlayer()")
-- Donne le PATTERN EXACT à chercher (ex: "cherche 'keys.moveLeft' et remplace par 'keys.left'")
-- Donne la VALEUR CIBLE (ex: "change gravite de 0.1 à 0.4")
-- PRIORITÉ aux bugs qui causent écran noir, boucle de jeu absente, crash au clic, ou contrôles inactifs
-- Ne propose JAMAIS une réécriture complète sauf si le code fait < 1000 chars
+SYSTEM = """You are an expert in debugging HTML5 Canvas 2D/Three.js games.
+You identify problems at the CODE level (function name, variable, exact pattern).
+STRICT RULES for your corrections:
+- State the EXACT NAME of the function to modify (e.g. "in updatePlayer()")
+- Give the EXACT PATTERN to find (e.g. "find 'keys.moveLeft' and replace with 'keys.left'")
+- Give the TARGET VALUE (e.g. "change gravity from 0.1 to 0.4")
+- PRIORITY to bugs causing black screen, missing game loop, click crash, or inactive controls
+- NEVER propose a full rewrite unless the code is < 1000 chars
 
-PATTERNS DE CORRECTION CANVAS 2D :
-- "Canvas absent" → vérifier que <canvas id="X"> existe dans le HTML body
-- "Aucun canvas détecté" (Playwright) → même correction + vérifier getElementById('X') correspond à l'ID HTML
-- "Écran noir/blanc/uni" → dans draw() : ctx.fillRect() DOIT être la 1ère opération, avant ctx.save()/translate()
-- "Contrôles inactifs" → keys object : déclaration = handlers = update() doivent utiliser les MÊMES noms
+CANVAS 2D FIX PATTERNS:
+- "No canvas" → verify <canvas id="X"> exists in the HTML body
+- "No canvas detected" (Playwright) → same fix + verify getElementById('X') matches the HTML id
+- "Black/white/solid screen" → in draw(): ctx.fillRect() MUST be the 1st operation, before ctx.save()/translate()
+- "Inactive controls" → keys object: declaration = handlers = update() must use the SAME names
 
-PATTERNS DE CORRECTION THREE.JS :
-- "Tout noir" → AmbientLight et DirectionalLight manquants — les ajouter à la scène
-- "Canvas blanc" → scene.background non défini — ajouter scene.background = new THREE.Color(0x1a1a2e)
-- "Entités non supprimées" → scene.remove(entity.mesh) avant splice()
-- "Restart crash" → vérifier que restart réinitialise les arrays ET remove() tous les meshes de la scène
-- "Canvas 3D non visible" → document.body.appendChild(renderer.domElement) manquant
+THREE.JS FIX PATTERNS:
+- "All black" → AmbientLight and DirectionalLight missing — add them to the scene
+- "White canvas" → scene.background not defined — add scene.background = new THREE.Color(0x1a1a2e)
+- "Entities not removed" → scene.remove(entity.mesh) before splice()
+- "Restart crash" → verify restart resets arrays AND remove() all meshes from the scene
+- "3D canvas not visible" → document.body.appendChild(renderer.domElement) missing
 
-BUGS RUNTIME FRÉQUENTS (PRIORITÉ CRITIQUE — causent crash silencieux ou jeu injouable) :
-1. LOOP VAR INIT — for (let i=0; i<arr.length; i++) sans const p = arr[i] en première ligne → ReferenceError
+FREQUENT RUNTIME BUGS (CRITICAL PRIORITY — cause silent crash or unplayable game):
+1. LOOP VAR INIT — for (let i=0; i<arr.length; i++) without const p = arr[i] on first line → ReferenceError
    ❌ for (let i=0; i<enemies.length; i++) { enemy.x += enemy.vx * dt; }
    ✅ for (let i=enemies.length-1; i>=0; i--) { const enemy = enemies[i]; enemy.x += enemy.vx * dt; }
-2. DT NON PASSÉ — function updateBullets() utilise dt sans l'avoir en paramètre → NaN partout
+2. DT NOT PASSED — function updateBullets() uses dt without having it as parameter → NaN everywhere
    ❌ function updateBullets() { b.x += b.vx * dt; }   update(dt) { updateBullets(); }
    ✅ function updateBullets(dt) { b.x += b.vx * dt; }  update(dt) { updateBullets(dt); }
-3. JSON.PARSE MANQUANT — const data = localStorage.getItem(K); data.score → TypeError
+3. MISSING JSON.PARSE — const data = localStorage.getItem(K); data.score → TypeError
    ✅ const raw = localStorage.getItem(K); const data = JSON.parse(raw || 'null'); if (!data) return;
-4. VARIABLE NON DÉCLARÉE — if (closest) attack() sans let closest = null avant la boucle → ReferenceError
+4. UNDECLARED VARIABLE — if (closest) attack() without let closest = null before the loop → ReferenceError
    ✅ let closest = null; for (const en of enemies) { ... if (...) closest = en; } if (closest) attack(closest);
-5. EVENT LISTENER HORS DOM — canvas.addEventListener avant DOMContentLoaded → canvas=null → crash
-   ✅ Tous les canvas.addEventListener DANS le callback DOMContentLoaded
-6. CONST REASSIGNMENT — `const score = 0` puis `score += 10` → TypeError: Assignment to constant variable
-   ❌ const score = 0; ... score += 10;   // TypeError crash silencieux
-   ✅ let score = 0;   ... score += 10;   // utiliser let pour toute variable de game state mutable
-7. FOR-OF SPLICE — `for (const e of enemies)` avec `enemies.splice(i,1)` dedans → éléments sautés
+5. EVENT LISTENER OUTSIDE DOM — canvas.addEventListener before DOMContentLoaded → canvas=null → crash
+   ✅ All canvas.addEventListener INSIDE the DOMContentLoaded callback
+6. CONST REASSIGNMENT — `const score = 0` then `score += 10` → TypeError: Assignment to constant variable
+   ❌ const score = 0; ... score += 10;   // silent TypeError crash
+   ✅ let score = 0;   ... score += 10;   // use let for any mutable game state variable
+7. FOR-OF SPLICE — `for (const e of enemies)` with `enemies.splice(i,1)` inside → skipped elements
    ❌ for (const enemy of enemies) { if (enemy.hp<=0) enemies.splice(enemies.indexOf(enemy),1); }
    ✅ for (let i=enemies.length-1; i>=0; i--) { const enemy=enemies[i]; if (enemy.hp<=0) enemies.splice(i,1); }
-8. location.reload() POUR RESTART → rechargement de page → flash + perte d'état
+8. location.reload() FOR RESTART → page reload → flash + state loss
    ❌ if (gameOver && keys.r) location.reload();
-   ✅ if (gameOver && keys.r) resetGame();   // fonction qui réinitialise les variables
+   ✅ if (gameOver && keys.r) resetGame();   // function that resets variables
 
-EXEMPLE DE RÉPONSE JSON CORRECTE :
+CORRECT JSON RESPONSE EXAMPLE:
 {
-  "probleme_principal": "updateEnemies() crash : boucle for-index sans init locale const en = enemies[i]",
+  "probleme_principal": "updateEnemies() crash: for-index loop without local init const en = enemies[i]",
   "corrections_prioritaires": [
     {
       "priorite": 1, "domaine": "technique",
-      "probleme": "Boucle for dans updateEnemies() accède à 'en' non déclaré",
-      "correction": "Ajouter 'const en = enemies[i];' comme première ligne du corps du for-loop dans updateEnemies(), et inverser la boucle en 'i = enemies.length-1; i >= 0; i--' pour que splice() soit sûr",
-      "impact_attendu": "score technique +2 points, plus de ReferenceError",
+      "probleme": "for loop in updateEnemies() accesses undeclared 'en'",
+      "correction": "Add 'const en = enemies[i];' as first line of the for-loop body in updateEnemies(), and reverse the loop to 'i = enemies.length-1; i >= 0; i--' so splice() is safe",
+      "impact_attendu": "technical score +2 points, no more ReferenceError",
       "code_a_modifier": "updateEnemies",
       "module_concerne": "enemies"
     },
     {
       "priorite": 2, "domaine": "technique",
-      "probleme": "updateProjectiles() utilise dt sans l'avoir en paramètre",
-      "correction": "Changer 'function updateProjectiles()' en 'function updateProjectiles(dt)' et l'appeler 'updateProjectiles(dt)' dans update()",
-      "impact_attendu": "score technique +1 point, projectiles se déplacent correctement",
+      "probleme": "updateProjectiles() uses dt without having it as a parameter",
+      "correction": "Change 'function updateProjectiles()' to 'function updateProjectiles(dt)' and call it as 'updateProjectiles(dt)' in update()",
+      "impact_attendu": "technical score +1 point, projectiles move correctly",
       "code_a_modifier": "updateProjectiles",
       "module_concerne": "core"
     }
   ],
-  "a_absolument_preserver": ["système de vagues WAVE_DEFS", "PALETTE de couleurs", "sfx stub"],
+  "a_absolument_preserver": ["wave system WAVE_DEFS", "color PALETTE", "sfx stub"],
   "score_minimum_vise": 7.5,
-  "instructions_patcher": "Corriger d'abord la boucle ennemis (risque de crash), puis dt des projectiles. Ne pas toucher au système de score ni à la physique joueur.",
+  "instructions_patcher": "Fix the enemy loop first (crash risk), then dt for projectiles. Do not touch the score system or player physics.",
   "module_principal_a_corriger": "enemies",
   "blocage_critique": false,
   "raison_blocage": ""
 }
-Tu réponds UNIQUEMENT en JSON valide."""
+You respond ONLY in valid JSON."""
 
 
 # ── Genre must-have static detector ──────────────────────────────────────────

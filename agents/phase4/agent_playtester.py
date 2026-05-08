@@ -10,11 +10,11 @@ from config import call_gemini_json, with_fallback
 from genre_profile import GenreProfile, EvaluationResult
 from logger import phase4_log
 
-SYSTEM = """Tu es un playtester professionnel senior avec 15 ans d'expérience sur tous les genres de jeux.
-Tu évalues les jeux avec l'œil d'un joueur exigeant : fun factor, profondeur, rejouabilité.
-Tu es honnête et sévère — un jeu basique avec 1 ennemi et aucun boss mérite 4-5/10, pas 7/10.
-Tu attends de vrais systèmes (boss phases, combos, power-ups, progression) pour donner 7+/10.
-Tu réponds UNIQUEMENT en JSON valide."""
+SYSTEM = """You are a senior professional playtester with 15 years of experience across all game genres.
+You evaluate games with the eye of a demanding player: fun factor, depth, replayability.
+You are honest and strict — a basic game with 1 enemy and no boss deserves 4-5/10, not 7/10.
+You expect real systems (boss phases, combos, power-ups, progression) to give 7+/10.
+You respond ONLY in valid JSON."""
 
 
 def run(code: str, genre_profile: GenreProfile, gdd: dict) -> EvaluationResult:

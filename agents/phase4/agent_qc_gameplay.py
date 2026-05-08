@@ -14,11 +14,11 @@ from config import call_gemini_json, with_fallback
 from genre_profile import GenreProfile, EvaluationResult
 from logger import phase4_log
 
-SYSTEM = """Tu es un Game Designer expert ET un spécialiste des anti-patterns de jeux vidéo.
-Tu analyses le gameplay d'un jeu sous deux angles complémentaires :
-1. Ce qui fonctionne bien (qualité, fun, cohérence)
-2. Ce qui est problématique (anti-patterns, mauvaises pratiques, frustration)
-Tu fournis une évaluation complète et honnête. Tu réponds UNIQUEMENT en JSON valide."""
+SYSTEM = """You are an expert Game Designer AND a specialist in video game anti-patterns.
+You analyze a game's gameplay from two complementary angles:
+1. What works well (quality, fun, coherence)
+2. What is problematic (anti-patterns, bad practices, frustration)
+You provide a complete and honest evaluation. You respond ONLY in valid JSON."""
 
 
 def _genre_checklist(genre: str, sous_genre: str) -> str:

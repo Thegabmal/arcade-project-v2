@@ -9,13 +9,13 @@ from config import call_gemini_json, with_fallback
 from genre_profile import GenreProfile, EvaluationResult
 from logger import phase4_log
 
-SYSTEM_2D = """Tu es un artiste et directeur artistique spécialisé dans les jeux HTML5 Canvas 2D.
-Tu évalues la qualité visuelle d'un jeu en analysant son code de rendu Canvas.
-Tu réponds UNIQUEMENT en JSON valide."""
+SYSTEM_2D = """You are an artist and art director specialized in HTML5 Canvas 2D games.
+You evaluate the visual quality of a game by analyzing its Canvas rendering code.
+You respond ONLY in valid JSON."""
 
-SYSTEM_3D = """Tu es un artiste et directeur artistique spécialisé dans les jeux 3D web avec Three.js.
-Tu évalues la qualité visuelle d'un jeu Three.js en analysant son code : géométries, matériaux,
-éclairage, caméra, effets, HUD HTML overlay. Tu réponds UNIQUEMENT en JSON valide."""
+SYSTEM_3D = """You are an artist and art director specialized in web 3D games with Three.js.
+You evaluate the visual quality of a Three.js game by analyzing its code: geometries, materials,
+lighting, camera, effects, HTML HUD overlay. You respond ONLY in valid JSON."""
 
 CRITERES_VISUELS_2D = """RUBRIQUE DE SCORE VISUEL :
 - 0-3 : Écran noir ou quasi-vide, aucun effort visuel

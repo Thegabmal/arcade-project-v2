@@ -298,9 +298,13 @@ def _check_layer_quality(js: str, layer_name: str) -> tuple[bool, str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _extract_js_from_html(html: str) -> str:
-    """Extrait le contenu JS de la balise <script> principale."""
-    m = re.search(r'<script[^>]*>(.*?)</script>', html, re.DOTALL | re.IGNORECASE)
-    return m.group(1) if m else html
+    """Extract the main game JS block — uses longest-match to skip CDN script tags."""
+    matches = re.findall(r'<script[^>]*>(.*?)</script>', html, re.DOTALL | re.IGNORECASE)
+    if matches:
+        longest = max(matches, key=len)
+        if len(longest) > 100:
+            return longest
+    return html
 
 
 def _validate_layer_runtime(html: str) -> list[str]:

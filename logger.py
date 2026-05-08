@@ -141,17 +141,17 @@ def _write_log(level: str, phase: str, message: str):
         buf.append(line)
 
 
-def get_session_log() -> str:
-    """Return the log accumulated for the current session."""
+def get_session_log() -> list:
+    """Return the log lines accumulated for the current session."""
     buf = getattr(_thread_local, "log_buffer", None)
     if buf is not None:
-        return "".join(buf)
+        return buf[:]
     # Fallback: read the file
     try:
         with open(LOG_FILE, "r", encoding="utf-8") as f:
-            return f.read()
+            return f.readlines()
     except Exception:
-        return ""
+        return []
 
 
 class Logger:

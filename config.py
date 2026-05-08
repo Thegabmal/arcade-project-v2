@@ -19,7 +19,7 @@ MAX_RETRIES = 2  # RPD=20/clé — 5 retries × 9 clés = 45 appels brûlés pou
 # Paid key has unlimited RPD — no daily quota tracking.
 _PAID_KEY_RAW = os.getenv("GEMINI_PAID_KEY") or os.getenv("GEMINI_API_KEY")
 if not _PAID_KEY_RAW:
-    raise RuntimeError("Aucune clé payante trouvée (GEMINI_PAID_KEY ou GEMINI_API_KEY requis dans .env)")
+    raise RuntimeError("No paid key found (GEMINI_PAID_KEY or GEMINI_API_KEY required in .env)")
 
 import httpx as _httpx
 _http_timeout = _httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=30.0)
@@ -176,7 +176,7 @@ def _get_available_client() -> tuple[int, object]:
     global _current_key_idx, _key_timestamps
     n = len(_api_keys)
     if n == 0:
-        raise _AllFreeKeysExhausted("Aucune clé gratuite configurée")
+        raise _AllFreeKeysExhausted("No free key configured")
 
     with _key_lock:
         _reset_daily_counts_if_needed()
@@ -205,8 +205,8 @@ def _get_available_client() -> tuple[int, object]:
         if all_rpd_exhausted:
             used = sum(_key_daily_counts.get(i, 0) for i in range(n))
             raise _AllFreeKeysExhausted(
-                f"Quota journalier épuisé sur toutes les clés gratuites "
-                f"({used}/{n * MAX_CALLS_PER_DAY} appels) — fallback clé payante"
+                f"Daily quota exhausted on all free keys "
+                f"({used}/{n * MAX_CALLS_PER_DAY} calls) — falling back to paid key"
             )
 
         # Toutes les clés gratuites en RPD sont saturées en RPM — attendre
@@ -593,19 +593,18 @@ def call_claude(prompt: str, system: str = "", max_tokens: int = 4000, temperatu
         try:
             response = client_a.messages.create(**kwargs)
             if not response.content:
-                raise ValueError("Claude: réponse vide (contenu bloqué ou absent)")
+                raise ValueError("Claude: empty response (blocked or missing content)")
             return response.content[0].text or ""
         except Exception as e:
             error_str = str(e).lower()
             is_rate_limit = "429" in error_str or "rate" in error_str or "overloaded" in error_str
             if attempt == MAX_RETRIES - 1 or not is_rate_limit:
-                # Dernière tentative ou erreur non-récupérable → fallback Gemini
-                print(f"  [Claude API] Erreur : {e} — fallback Gemini")
+                print(f"  [Claude API] Error: {e} — falling back to Gemini")
                 break
             wait = (2 ** attempt) * 5
-            print(f"  [Claude API] Retry {attempt+1}/{MAX_RETRIES} dans {wait}s", flush=True)
+            print(f"  [Claude API] Retry {attempt+1}/{MAX_RETRIES} in {wait}s", flush=True)
             time.sleep(wait)
-        return call_gemini(prompt, temperature=temperature, system_instruction=system or None, max_tokens=max_tokens)
+    return call_gemini(prompt, temperature=temperature, system_instruction=system or None, max_tokens=max_tokens)
 
 
 def with_fallback(default_value):

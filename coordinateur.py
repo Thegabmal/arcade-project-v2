@@ -169,7 +169,7 @@ function draw() {{
         ctx.fillText('{titre_safe}', W/2, H/2-40);
         ctx.fillStyle = '#888'; ctx.font = '18px Courier New';
         ctx.fillText('Genre: {genre_safe}', W/2, H/2);
-        ctx.fillStyle = '#FFF'; ctx.fillText('Clic pour jouer | WASD = mouvement | ESPACE = tir', W/2, H/2+40);
+        ctx.fillStyle = '#FFF'; ctx.fillText('Click to play | WASD = move | SPACE = shoot', W/2, H/2+40);
         ctx.textAlign = 'left'; return;
     }}
     if (gameState === 'gameover') {{
@@ -177,7 +177,7 @@ function draw() {{
         ctx.fillText('GAME OVER', W/2, H/2-20);
         ctx.fillStyle = '#FFF'; ctx.font = '20px Courier New';
         ctx.fillText('Score: ' + score, W/2, H/2+20);
-        ctx.fillText('Clic pour recommencer', W/2, H/2+55);
+        ctx.fillText('Click to restart', W/2, H/2+55);
         ctx.textAlign = 'left'; return;
     }}
     // Draw enemies
@@ -192,7 +192,7 @@ function draw() {{
     ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(player.x,player.y,player.r*0.4,0,Math.PI*2); ctx.fill();
     // HUD
     ctx.fillStyle = '#FFF'; ctx.font = '16px Courier New';
-    ctx.fillText('Score: ' + score + '   Vies: ' + lives, 16, 30);
+    ctx.fillText('Score: ' + score + '   Lives: ' + lives, 16, 30);
 }}
 
 function gameLoop(ts) {{
@@ -307,12 +307,12 @@ def _js_check_quick(html: str) -> tuple:
 
 
 STYLE_GRAPHIQUE_MAP = {
-    "pixel_art_gameboy":   "pixel art Game Boy 4 couleurs (style Pokémon Rouge/Bleu, résolution 160×144, palette : #0f380f #306230 #8bac0f #9bbc0f)",
-    "pixel_art_nes_mario": "pixel art NES style Mario Bros (résolution 256×240, palette vive NES : rouges #D82800, bleus #0058F8, jaunes #F8B800, verts #00A800, blancs #FCFCFC, noirs #000000 — jusqu'à 16 couleurs simultanées)",
-    "pixel_art_nes_zelda": "pixel art NES style Zelda (résolution 256×240, palette NES colorée et variée : herbe #70C848, eau #3CBCFC, doré #F8B800, rouge #D82800, violet #A800A8, gris #BCBCBC, skin #FCBCB0 — sprites 16×16, tuiles 8×8, fond sombre avec accents vifs)",
-    "pixel_art_16bit":     "pixel art 16-bit SNES (résolution 320×240, palette très riche jusqu'à 256 couleurs, sprites détaillés 32×32, dégradés subtils, ombres portées pixel art)",
-    "cartoon_2d":          "cartoon 2D coloré et expressif",
-    "minimaliste":         "minimaliste géométrique épuré",
+    "pixel_art_gameboy":   "pixel art Game Boy 4 colors (Pokémon Red/Blue style, resolution 160×144, palette: #0f380f #306230 #8bac0f #9bbc0f)",
+    "pixel_art_nes_mario": "pixel art NES Mario Bros style (resolution 256×240, vivid NES palette: reds #D82800, blues #0058F8, yellows #F8B800, greens #00A800, whites #FCFCFC, blacks #000000 — up to 16 simultaneous colors)",
+    "pixel_art_nes_zelda": "pixel art NES Zelda style (resolution 256×240, colorful NES palette: grass #70C848, water #3CBCFC, gold #F8B800, red #D82800, purple #A800A8, gray #BCBCBC, skin #FCBCB0 — 16×16 sprites, 8×8 tiles, dark background with vivid accents)",
+    "pixel_art_16bit":     "pixel art 16-bit SNES (resolution 320×240, rich palette up to 256 colors, detailed 32×32 sprites, subtle gradients, pixel art drop shadows)",
+    "cartoon_2d":          "colorful expressive cartoon 2D",
+    "minimaliste":         "clean geometric minimalist",
     "3d_lowpoly":          "3D low-poly",
 }
 
@@ -402,7 +402,7 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
         if est_3d:
             style_visuel = "3D low-poly"
         elif est_pixel:
-            style_visuel = "pixel art rétro"
+            style_visuel = "retro pixel art"
         else:
             style_visuel = "cartoon 2D"
     classification = Classification(
@@ -867,12 +867,9 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
             _js_before_rules = _b5_extract(code) if '<script' in code else code
             _js_after_rules, _rules_applied = _auto_rules(_js_before_rules)
             if _rules_applied:
-                import re as _re_b5
-                code = _re_b5.sub(
-                    r'(<script[^>]*>)(.*?)(</script>)',
-                    lambda m: m.group(1) + _js_after_rules + m.group(3),
-                    code, flags=_re_b5.DOTALL
-                )
+                # Replace only the main game script block (longest match), not CDN tags
+                if _js_before_rules and _js_before_rules in code:
+                    code = code.replace(_js_before_rules, _js_after_rules, 1)
                 coordinateur_log.info(f"B5 pre-LLM auto-fix: {len(_rules_applied)} rule(s) — {', '.join(_rules_applied[:3])}")
         except Exception as _e_b5:
             coordinateur_log.warning(f"B5 auto-fix non-critical: {_e_b5}")
@@ -953,7 +950,7 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
             # Build enriched past_errors with [RECURRING] / [FIXED] prefixes
             _enriched = []
             for _info in list(_erreurs_tracker.values())[-15:]:
-                _prefix = "[CORRIGÉ] " if _info['fixed'] else (f"[RÉCURRENT x{_info['count']}] " if _info['count'] > 1 else "")
+                _prefix = "[FIXED] " if _info['fixed'] else (f"[RECURRING x{_info['count']}] " if _info['count'] > 1 else "")
                 _enriched.append(_prefix + _info['msg'])
             past_errors = _enriched
             # I7: limit past_errors to 20 max to avoid prompt pollution
@@ -964,7 +961,7 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
                 if has_logic_errors and not has_render_errors:
                     # Logic errors → targeted L2 hint in the errors
                     coordinateur_log.warning("Patch insufficient — targeted regeneration (L2 logic errors)")
-                    past_errors.append("[L2-CIBLE] Regenère la logique avec ces corrections : " + "; ".join(issue_descs[:3]))
+                    past_errors.append("[L2-TARGET] Regenerate logic with these fixes: " + "; ".join(issue_descs[:3]))
                     import memory as _mem
                     _mem.save_layer_errors(game_genre, 2, issue_descs[:3])
                 else:
@@ -1089,18 +1086,14 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
         coordinateur_log.warning(f"Score {final_score:.2f} < {SCORE_MIN_VIABLE_SAVE} — game not saved")
         html_basename = ""
 
-    # Auto-learner (async)
-    try:
-        agent_auto_learner.run(
-            html=code,
-            score=final_score,
-            approuve=approved,
-            genre=game_genre,
-            titre=game_title,
-            logs=log_content,
-        )
-    except Exception as e:
-        coordinateur_log.warning(f"Auto-learner non-critical: {e}")
+    # Auto-learner — fire-and-forget in a daemon thread (non-blocking)
+    import threading as _threading
+    _threading.Thread(
+        target=agent_auto_learner.run,
+        kwargs=dict(html=code, score=final_score, approuve=approved,
+                    genre=game_genre, titre=game_title, logs=log_content),
+        daemon=True,
+    ).start()
 
     push_event("complete", {
         "score": round(final_score, 2),

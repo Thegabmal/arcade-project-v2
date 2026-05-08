@@ -10,12 +10,12 @@ from config import call_gemini, with_fallback
 from genre_profile import GenreProfile
 from logger import phase2_log
 
-SYSTEM = """Tu es un game designer expert avec 20 ans d'expérience sur des jeux AAA et indie.
-Tu connais parfaitement les mécaniques des jeux les plus réussis de chaque genre.
-Ta spécialité : les game logics concrètes et implémentables en JavaScript/HTML5.
-Tu fournis des spécifications précises avec des valeurs numériques, des comportements détaillés
-et des références directes aux jeux qui ont prouvé leur efficacité.
-Tu n'expliques pas la théorie — tu donnes des specs directement utilisables par un développeur."""
+SYSTEM = """You are an expert game designer with 20 years of experience on AAA and indie games.
+You know perfectly the mechanics of the most successful games in every genre.
+Your specialty: concrete, implementable game logics in JavaScript/HTML5.
+You provide precise specifications with numerical values, detailed behaviors,
+and direct references to games that have proven their effectiveness.
+You don't explain theory — you give specs directly usable by a developer."""
 
 
 def run(genre_profile: GenreProfile, gdd: dict) -> str:

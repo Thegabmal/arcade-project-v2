@@ -10,29 +10,29 @@ from config import call_gemini_json, with_fallback
 from genre_profile import GenreProfile
 from logger import phase2_log
 
-SYSTEM = """Tu es un ingénieur spécialisé dans le développement de jeux HTML5 JavaScript.
-Tu définit des architectures techniques précises, adaptées au genre et réalisables en un seul fichier HTML.
-Pour les jeux 2D tu utilises Canvas 2D API. Pour les jeux 3D tu utilises Three.js r128 via CDN.
+SYSTEM = """You are an engineer specialized in HTML5 JavaScript game development.
+You define precise technical architectures, adapted to the genre and achievable in a single HTML file.
+For 2D games you use Canvas 2D API. For 3D games you use Three.js r128 via CDN.
 
-CONTRAINTES TECHNIQUES 3D (Three.js r128) :
-- Tout le code dans document.addEventListener('DOMContentLoaded', function() { ... })
+3D TECHNICAL CONSTRAINTS (Three.js r128):
+- All code inside document.addEventListener('DOMContentLoaded', function() { ... })
 - THREE.WebGLRenderer + renderer.shadowMap.enabled = true
-- THREE.Clock pour le delta time (clock.getDelta(), capped à 0.05)
-- AmbientLight (intensity 0.4-0.5) + DirectionalLight (intensity 0.8-1.0) obligatoires
+- THREE.Clock for delta time (clock.getDelta(), capped at 0.05)
+- AmbientLight (intensity 0.4-0.5) + DirectionalLight (intensity 0.8-1.0) mandatory
 - Collisions via THREE.Box3.setFromObject() + box.intersectsBox()
-- Entités = { mesh: THREE.Mesh, hp, speed, active, box: new THREE.Box3() }
-- HUD = divs HTML positionnés en fixed par-dessus le canvas Three.js (jamais canvas 2D)
-- Restart = scene.remove() pour chaque mesh + reset arrays (.length = 0)
-- Particules = THREE.Points avec BufferGeometry et PointsMaterial
-- JAMAIS de data:URI pour les textures
+- Entities = { mesh: THREE.Mesh, hp, speed, active, box: new THREE.Box3() }
+- HUD = HTML divs positioned fixed over the Three.js canvas (never canvas 2D overlay)
+- Restart = scene.remove() for each mesh + reset arrays (.length = 0)
+- Particles = THREE.Points with BufferGeometry and PointsMaterial
+- NEVER data:URI for textures
 
-TYPES DE CAMÉRA selon le genre :
+CAMERA TYPES by genre:
 - FPS: PerspectiveCamera(75, ...) + pointer lock + pitch/yaw
-- TPS/platformer 3D: camera suit le joueur avec lerp, lookAt(player.position)
+- TPS/3D platformer: camera follows player with lerp, lookAt(player.position)
 - Top-down: camera.position.set(0, 20, 0); camera.lookAt(sceneCenter)
-- Fixed/isométrique: caméra fixe angled, pas de movement
+- Fixed/isometric: fixed angled camera, no movement
 
-Tu réponds UNIQUEMENT en JSON valide."""
+You respond ONLY in valid JSON."""
 
 
 def run(genre_profile: GenreProfile, gdd: dict) -> dict:

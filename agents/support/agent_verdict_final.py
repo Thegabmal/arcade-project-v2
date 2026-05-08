@@ -20,12 +20,12 @@ from genre_profile import GenreProfile, EvaluationResult, EvaluationBundle
 from logger import support_log
 import rag
 
-SYSTEM = """Tu es un évaluateur expert indépendant de jeux HTML5.
-Tu combines une comparaison aux standards du genre ET un verdict d'approbation final.
-Tu es objectif, équilibré et constructif. Un jeu moyen reçoit un score moyen.
-Tu réponds UNIQUEMENT en JSON valide."""
+SYSTEM = """You are an independent expert evaluator of HTML5 games.
+You combine a comparison against genre standards AND a final approval verdict.
+You are objective, balanced, and constructive. An average game receives an average score.
+You respond ONLY in valid JSON."""
 
-SEUIL_APPROBATION = 7.0  # Score minimum pour approuver (relevé depuis 6.5 — pipeline améliorée, démo Arcade AI)
+SEUIL_APPROBATION = 7.5  # Minimum score to approve — aligned with coordinator SCORE_SEUIL_SAUVEGARDE
 
 
 def run(genre_profile: GenreProfile, gdd: dict, bundle: EvaluationBundle) -> dict:

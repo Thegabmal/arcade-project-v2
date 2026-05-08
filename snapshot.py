@@ -12,9 +12,13 @@ import sys
 import re
 
 
+import os as _os
+_PROJECT_ROOT = _os.path.dirname(_os.path.abspath(__file__))
+
+
 def _run(cmd: list, check=True) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, check=check,
-                          cwd="C:/Users/gabin/Desktop/arcade-project-v2")
+                          cwd=_PROJECT_ROOT)
 
 
 def _next_tag() -> str:

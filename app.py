@@ -179,9 +179,9 @@ def debug_game(filename):
         "gameplay": ("QC Gameplay", 25),
         "visuel": ("QC Visuel", 15),
         "execution": ("Exécuteur", 20),
-        "playtester": ("Playtester", 10),
-        "anti_pattern": ("Anti-Pattern", 5),
-        "benchmark": ("Benchmark", 5),
+        "playtester": ("Playtester", 15),
+        "anti_pattern": ("Anti-Pattern", 3),
+        "benchmark": ("Benchmark", 2),
     }
     scores = meta.get("scores", {})
     score_details = []
@@ -513,7 +513,7 @@ def api_reevaluate():
             meta["scores"] = new_scores
             meta["date"] = datetime.datetime.now().isoformat()
             meta["verdict"] = verdict_result.get("verdict", meta.get("verdict", {}))
-            meta["approuve"] = score_global >= 6.5
+            meta["approuve"] = score_global >= 7.5
 
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(meta, f, ensure_ascii=False, indent=2)

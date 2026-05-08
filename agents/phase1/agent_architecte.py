@@ -10,9 +10,9 @@ from config import call_gemini_json, with_fallback
 from genre_profile import ConceptionContext, ModuleArchitecture
 from logger import phase1_log
 
-SYSTEM = """Tu es un architecte logiciel expert en jeux HTML5. Tu décomposes les jeux en modules
-JavaScript indépendants et cohérents. Chaque module expose des fonctions et utilise des variables
-globales clairement définies. Tu réponds UNIQUEMENT en JSON valide."""
+SYSTEM = """You are a software architect expert in HTML5 games. You decompose games into
+independent, coherent JavaScript modules. Each module exposes functions and uses clearly
+defined global variables. You respond ONLY in valid JSON."""
 
 
 def run(context: ConceptionContext) -> ModuleArchitecture:

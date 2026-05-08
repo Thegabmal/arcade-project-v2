@@ -12,10 +12,10 @@ from config import call_gemini_json, with_fallback
 from genre_profile import Classification, Research, GenreProfile
 from logger import phase1_log
 
-SYSTEM = """Tu es un expert en game design, capable de transformer une demande simple
-en une vision créative et technique complète. Tu produis des prompts ultra-détaillés
-qui donnent toute la matière nécessaire pour créer un jeu excellent.
-Tu réponds UNIQUEMENT en JSON valide."""
+SYSTEM = """You are a game design expert capable of transforming a simple request
+into a complete creative and technical vision. You produce ultra-detailed prompts
+that provide all the material needed to create an excellent game.
+You respond ONLY in valid JSON."""
 
 
 def run(prompt_original: str, classification: Classification, research: Research) -> GenreProfile:

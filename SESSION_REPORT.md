@@ -5,6 +5,54 @@
 
 ---
 
+## Last session: 2026-05-16 (session 2) — Model game bugfixes + B2 dedup fix
+
+### What to do FIRST next session
+1. Start Flask: `python app.py`
+2. Trigger autonomous run sequence (all genres): platformer, puzzle match-3, endless runner, dungeon crawler, RPG narratif, roguelite, breakout, 3D game
+3. All model game bugs below are fixed — RAG re-seeded with corrected versions
+
+### All fixes applied this session (committed b3148cd)
+
+#### Dead enemy pool bug (roguelite, shoot-em-up, tower defense, dungeon crawler)
+| File | Bug | Fix |
+|------|-----|-----|
+| `roguelite.html`, `roguelite_2.html` | `enemyPool.update` callback returned `true` unconditionally — dead enemies stayed active, kept shooting; room-clear `active.length===0` fired too early | Added `if(!e.alive)return false;` at start of callback; changed to `.filter(x=>x.alive).length===0` |
+| `shoot_em_up.html`, `shoot_em_up_2.html` | `return e.y<H+90` didn't check `e.alive` — dead enemies visible and shooting; wave advance used `active.length===0` | `return e.alive && e.y<H+90`; wave advance uses `.filter(x=>x.alive)` |
+| `tower_defense.html`, `tower_defense_2.html` | Same alive check + wave-clear issue | Same fixes |
+| `dungeon_crawler.html`, `dungeon_crawler_2.html` | Room-clear `active.length===0` fires before dead enemy removed from pool | Changed to `.filter(x=>x.alive).length===0` |
+
+#### Difficulty scaling
+| File | Fix |
+|------|-----|
+| `rpg_narratif.html` | Malachar atk 26→18; hero potions 2→3 (fight 3 was impossible) |
+| `rpg_narratif_2.html` | NEXUS atk 25→18, hp 230→190; Aegis hp 145→110, atk 19→15; Drone atk 15→12; hero potions 2→3 |
+| `tower_defense.html` | Archer cost 80→60 (wave 1 now winnable with 150 start gold — can buy 2 archers) |
+
+#### Visual novel content (was too short)
+- `visual_novel.html`: Added 5 new scenes to all 3 paths
+  - Common path: `pattern_depth` (extra observation between anomaly and choice)
+  - Good ending: `signal_reveals` + `mira_accepts` (2 scenes before ending_good)
+  - Neutral ending: `containment` (containment team scene before ending_neutral)
+  - Bad ending: `regret_morning` + `signal_gone` (leave_early path was 2 scenes → 5)
+
+#### 3D games — START button fix
+- All 10 3D model games: added `onclick="startGame()"` HTML attribute on `btn-play`
+- Root cause: `document.getElementById('btn-play').onclick=startGame` was set at END of script; if any JS error before that line, onclick was never set
+
+#### B2 dedup cycle — js_syntax_checker.py
+- `fix_identifier_already_declared`: now removes LLM's FIRST declaration of template globals (before ENGINE line), not ENGINE's authoritative declaration
+- Added `TILE_SIZE` to `_TEMPLATE_GLOBALS` frozenset
+- This fixes the platformer run cycle: `[SKIPPED] 2 redéclaration(s) — rollback` on every iteration
+
+### State after this session
+- All 25 model games are bug-free and balanced
+- RAG re-seeded with corrected model games (`python seed_rag_models.py`)
+- B2 dedup cycle fixed — template global redeclarations now correctly resolved
+- Ready to run full autonomous genre sequence
+
+---
+
 ## Last session: 2026-05-16 — All pipeline bugs fixed, ready to run
 
 ### What to do FIRST next session

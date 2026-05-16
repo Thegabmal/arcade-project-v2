@@ -174,7 +174,7 @@ window.addEventListener('resize',()=>{
 });
 
 // ─── LIGHTING ─────────────────────────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0x110815,1.2));
+scene.add(new THREE.AmbientLight(0x9988cc,0.9));
 const heroLight=new THREE.PointLight(0xff8833,2,12);
 scene.add(heroLight);
 
@@ -451,7 +451,7 @@ function update(dt){
       if(e.dead) return;
       const toE=new THREE.Vector3().subVectors(e.grp.position,camera.position);
       if(toE.length()<2.5 && toE.dot(fwd2)>0){
-        const dmg=Math.max(1,hero.atk+hero.bonusAtk-e.type==='boss'?2:0);
+        const dmg=Math.max(1, hero.atk+hero.bonusAtk - (e.type==='boss'?2:0));
         e.hp-=dmg; hero.score+=5;
         if(e.hp<=0){
           e.dead=true; scene.remove(e.grp);
@@ -475,7 +475,8 @@ function update(dt){
     if(o.life<=0){ scene.remove(o.mesh); magicOrbs.splice(i,1); continue; }
     let hit=false;
     enemies.forEach(e=>{ if(e.dead||hit) return;
-      if(o.mesh.position.distanceTo(e.grp.position)<1.2){
+      const dx=o.mesh.position.x-e.grp.position.x,dz=o.mesh.position.z-e.grp.position.z;
+      if(Math.sqrt(dx*dx+dz*dz)<1.5){
         e.hp-=o.dmg; hit=true;
         if(e.hp<=0){ e.dead=true; scene.remove(e.grp); hero.score+=e.reward; gainXP(e.xp); meta.coins+=Math.floor(e.reward/5); saveMeta(); }
       }

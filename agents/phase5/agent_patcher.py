@@ -16,6 +16,10 @@ ENGINE CONTRACT — READ THIS FIRST:
 The game has an ENGINE section (marked '// ENGINE — DO NOT MODIFY') that declares:
   canvas  → HTMLCanvasElement  (getElementById — NEVER null)
   ctx     → CanvasRenderingContext2D  (getContext — NEVER null)
+CRITICAL: NEVER add `var canvas`, `const canvas`, `let canvas`, `var ctx`, `const ctx`, `let ctx`,
+  `var gameState`, `let gameState`, `const gameState`, `var lastTime`, or `var W`/`var H` anywhere
+  in your patch. These are already declared by ENGINE. Adding a second declaration WILL cause
+  SyntaxError: "Identifier 'X' has already been declared" and break the entire game.
   W, H    → logical dimensions — read the game's own GAME_W / GAME_H constants, do NOT assume 480×640
   Keys, Touch, Mouse → unified input objects  (Mouse has .x and .y for shop click detection)
   gameState → 'menu' | 'playing' | 'gameover' | 'shop'

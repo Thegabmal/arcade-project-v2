@@ -25,6 +25,11 @@ from logger import phase3_log
 # Variables pré-déclarées dans le template HTML (jamais à redéclarer)
 _HTML_TEMPLATE_GLOBALS = [
     'canvas', 'ctx', 'W', 'H', 'dt', 'lastTime', 'gameState',
+    'Keys', 'Touch', 'Mouse', 'Shake', 'Particles', 'Popups', 'sfx',
+    'FIXED_DT', 'MAX_DT', 'accumulator', 'GAME_W', 'GAME_H', 'DPR',
+    'TILE_SIZE', 'GAME_SCORE', 'cam', 'coinPool', 'tileMap', 'platforms',
+    'mapCols', 'mapRows', 'createPool', 'lerp', 'clamp', 'aabb',
+    'randInt', 'randFloat', 'randChoice',
 ]
 
 _HTML_TEMPLATE = """\
@@ -1555,6 +1560,38 @@ def _call_layer(system: str, prompt: str, max_tokens: int = 6000,
     return raw.strip()
 
 
+def _call_template_adapt(system: str, prompt: str, max_tokens: int = 65536,
+                         temperature: float = 0.7) -> str:
+    """Calls Gemini for template adaptation. Strips markdown fences only — preserves full HTML.
+
+    Unlike _call_layer, does NOT strip <!DOCTYPE>, <script>, or </body> tags.
+    The LLM is asked to return a complete HTML file; stripping the HTML structure
+    would cause ENGINE variables (canvas, ctx, gameState) to be double-declared when
+    the result gets wrapped in _HTML_TEMPLATE.
+    """
+    _last_err = None
+    for _attempt in range(2):
+        try:
+            raw = call_gemini_paid(prompt, temperature=temperature, system_instruction=system,
+                                   max_tokens=max_tokens, disable_thinking=True)
+            break
+        except RuntimeError as e:
+            _last_err = e
+            if _attempt == 0 and ('503' in str(e).lower() or 'unavailable' in str(e).lower()):
+                phase3_log.warning("[template] 503 exhausted — waiting 3 min then retrying")
+                time.sleep(180)
+            else:
+                raise
+    else:
+        raise _last_err
+    if not raw:
+        return ""
+    # Strip only markdown code fences — keep full HTML structure intact
+    raw = re.sub(r'^```[\w]*\n?', '', raw.strip(), flags=re.MULTILINE)
+    raw = re.sub(r'\n?```$', '', raw.strip(), flags=re.MULTILINE)
+    return raw.strip()
+
+
 _JS_BUILTINS = frozenset([
     'if', 'for', 'while', 'switch', 'catch', 'function', 'return', 'typeof', 'instanceof',
     'new', 'delete', 'void', 'throw', 'case', 'class', 'super', 'import', 'export',
@@ -2647,13 +2684,14 @@ _TEMPLATE_ADAPT_SYSTEM = (
     "That guide defines exactly what you can and cannot do. Here is a summary of the critical rules:\n\n"
     "SACRED CONTRACT — NEVER redeclare these ENGINE-owned identifiers in [FILL] sections:\n"
     "  VARIABLES: canvas, ctx, W, H, DPR, gameState, Keys, Touch, Shake, Particles, Popups,\n"
-    "             sfx, lastTime, FIXED_DT, MAX_DT, accumulator, TILE, GAME_W, GAME_H,\n"
-    "             PALETTE, GAME_TITLE, cam, player\n"
+    "             sfx, lastTime, FIXED_DT, MAX_DT, accumulator, TILE_SIZE, GAME_W, GAME_H,\n"
+    "             GAME_SCORE, GAME_TITLE, cam, coinPool, tileMap, platforms, mapCols, mapRows\n"
     "  FUNCTIONS: loop(), update(), renderFrame(), flushInput(), resizeCanvas(),\n"
     "             triggerShake(), spawnParticles(), spawnPopup(), updateParticles(),\n"
     "             drawParticles(), updatePopups(), drawPopups(), updateShake(),\n"
-    "             randInt(), randChoice(), lerp(), clamp(), aabb(),\n"
-    "             keyDown(), keyPressed(), anyAction(), createPool()\n"
+    "             randInt(), randFloat(), randChoice(), lerp(), clamp(), aabb(),\n"
+    "             keyDown(), keyPressed(), anyAction(), createPool(), saveHiScore(),\n"
+    "             drawText(), drawBar()\n"
     "  Writing `var canvas = null` or redeclaring any of the above WILL crash the game.\n\n"
     "ABSOLUTE RULES:\n"
     "1. Output = complete HTML file starting with <!DOCTYPE html>, no markdown fences\n"
@@ -3014,7 +3052,10 @@ def run_from_template(
     )
 
     # Templates are now ~23KB (console extracted); give LLM enough budget to complete them
-    raw = _call_layer(_TEMPLATE_ADAPT_SYSTEM, prompt, max_tokens=65536, temperature=0.7)
+    # Use _call_template_adapt (not _call_layer) — we need full HTML, not bare JS.
+    # _call_layer strips <!DOCTYPE>/<script>/</body> which causes ENGINE variables
+    # (canvas, ctx, gameState) to be double-declared when wrapped in _HTML_TEMPLATE.
+    raw = _call_template_adapt(_TEMPLATE_ADAPT_SYSTEM, prompt, max_tokens=65536, temperature=0.7)
 
     if not raw or len(raw) < 5000:
         phase3_log.warning(

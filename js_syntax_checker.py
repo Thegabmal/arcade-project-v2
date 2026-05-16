@@ -394,6 +394,20 @@ def fix_identifier_already_declared(html: str) -> tuple[str, bool, list[str]]:
                             fixes.append(f'[AUTO-FIX] Suppression redéclaration variable template : {ident} ligne {_j + 1}')
                             _removed = True
                             break
+                    if not _removed:
+                        # Also check BEFORE ENGINE — handles _HTML_TEMPLATE preamble conflicts
+                        # (e.g. _HTML_TEMPLATE declares `var canvas` before ENGINE which has `const canvas`)
+                        for _j in range(_eng_start):
+                            if _decl_pat.search(lines[_j]):
+                                _new = _remove_single_var_from_line(lines[_j], ident)
+                                if not _new.strip():
+                                    lines.pop(_j)
+                                else:
+                                    lines[_j] = _new
+                                js = '\n'.join(lines)
+                                fixes.append(f'[AUTO-FIX] Suppression redéclaration variable template (pre-ENGINE) : {ident} ligne {_j + 1}')
+                                _removed = True
+                                break
                 else:
                     # Reported line is outside ENGINE → remove ident from reported line directly
                     _new = _remove_single_var_from_line(lines[line_num], ident)

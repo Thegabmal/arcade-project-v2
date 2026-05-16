@@ -155,6 +155,12 @@ def serve_game_file(filename):
     return send_from_directory(os.path.abspath(SAVE_DIR), filename)
 
 
+@app.route("/model/<path:filename>")
+def serve_model_game(filename):
+    """Serve model game files from jeux_modeles/ for testing."""
+    return send_from_directory(os.path.abspath("jeux_modeles"), filename)
+
+
 @app.route("/debug/<path:filename>")
 def debug_game(filename):
     """Debug page — detailed scores, per-agent issues, game analysis."""

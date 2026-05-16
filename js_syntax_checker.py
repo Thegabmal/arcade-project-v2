@@ -165,6 +165,175 @@ def _parse_node_error(stderr: str, js: str) -> list[str]:
     return issues
 
 
+def _count_brace_depth(js: str) -> int:
+    """Count net unclosed { braces in JS, ignoring strings and comments."""
+    depth = 0
+    i, n = 0, len(js)
+    in_line = in_block = in_str = False
+    str_ch = ''
+    while i < n:
+        c = js[i]
+        if in_line:
+            if c == '\n': in_line = False
+            i += 1; continue
+        if in_block:
+            if c == '*' and i + 1 < n and js[i+1] == '/': in_block = False; i += 2
+            else: i += 1
+            continue
+        if in_str:
+            if c == '\\': i += 2; continue
+            if c == str_ch: in_str = False
+            i += 1; continue
+        if c == '/' and i + 1 < n:
+            if js[i+1] == '/': in_line = True; i += 2; continue
+            if js[i+1] == '*': in_block = True; i += 2; continue
+        if c in ('"', "'"):
+            in_str = True; str_ch = c; i += 1; continue
+        if c == '`':
+            i += 1
+            while i < n:
+                if js[i] == '\\': i += 2; continue
+                if js[i] == '`': i += 1; break
+                i += 1
+            continue
+        if c == '{': depth += 1
+        elif c == '}': depth -= 1
+        i += 1
+    return depth
+
+
+def _find_game_script_block(html: str):
+    """Find the main (non-CDN) script block. Returns re.Match or None."""
+    for sm in re.finditer(r'(<script(?:\s[^>]*)?>)(.+?)(</script>)',
+                          html, re.DOTALL | re.IGNORECASE):
+        if 'src=' not in sm.group(1).lower():
+            return sm
+    return None
+
+
+def fix_exact_syntax_error(html: str) -> tuple[str, bool, list[str]]:
+    """
+    Surgical syntax fixer: reads the exact node --check error (line + message)
+    and applies the MINIMAL targeted fix without touching anything else.
+
+    Handles:
+    - 'Unexpected end of input' → append missing } (counted from brace depth)
+    - "Unexpected token '}'" at line N → remove orphan } on that line
+    - 'Unexpected token' / 'Missing ;' at line N → add ; at end of that line
+    - Brace imbalance (depth < 0) → remove trailing orphan }
+
+    Falls back silently if the fix doesn't resolve the error.
+    """
+    js = extract_js_from_html(html)
+    if not js or len(js) < 200:
+        return html, False, []
+
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.js', encoding='utf-8', delete=False
+        ) as f:
+            f.write(js)
+            tmp = f.name
+
+        result = subprocess.run(
+            ['node', '--check', tmp],
+            capture_output=True, text=True, timeout=15
+        )
+        if result.returncode == 0:
+            return html, False, []
+
+        stderr = result.stderr or result.stdout
+        sm = _find_game_script_block(html)
+        if not sm:
+            return html, False, []
+
+        # ── Parse the error from node stderr ─────────────────────────────────
+        line_match = re.search(r'\.js:(\d+)', stderr)
+        line_num = int(line_match.group(1)) - 1 if line_match else None  # 0-indexed
+        err_msg = ''
+        em = re.search(r'SyntaxError[^\n]+', stderr)
+        if em:
+            err_msg = em.group(0)
+
+        js_lines = js.split('\n')
+        new_js = None
+        fix_desc = None
+
+        # ── Case 1: Unexpected end of input → add missing closing braces ─────
+        if 'Unexpected end' in err_msg or 'end of input' in stderr.lower():
+            depth = _count_brace_depth(js)
+            if depth > 0:
+                new_js = js.rstrip() + '\n' + '\n'.join(['}'] * depth)
+                fix_desc = f'Added {depth} missing closing brace(s) (Unexpected end of input)'
+
+        # ── Case 2: Extra } at known line → remove it ────────────────────────
+        elif ("Unexpected token '}'" in err_msg or "Unexpected token }" in err_msg) \
+                and line_num is not None and line_num < len(js_lines):
+            target = js_lines[line_num]
+            # Remove the } only if the line is essentially just a closing brace
+            stripped = target.strip()
+            if stripped in ('}', '};', '},'):
+                js_lines.pop(line_num)
+                new_js = '\n'.join(js_lines)
+                fix_desc = f'Removed orphan }} at line {line_num + 1}'
+            else:
+                # Try removing one } from that line (might be extra })
+                new_line = target.replace('}', '', 1)
+                js_lines[line_num] = new_line
+                new_js = '\n'.join(js_lines)
+                fix_desc = f'Removed extra }} from line {line_num + 1}'
+
+        # ── Case 3: Missing semicolon / unexpected identifier → add ; ─────────
+        elif ('Missing' in err_msg or 'missing' in err_msg or
+              ('Unexpected' in err_msg and 'identifier' in err_msg.lower())) \
+                and line_num is not None and line_num > 0:
+            # Add ; to end of PREVIOUS line (node reports line AFTER the problem)
+            target_line_idx = max(0, line_num - 1)
+            prev_line = js_lines[target_line_idx]
+            if prev_line.rstrip() and not prev_line.rstrip().endswith((';', '{', '}', ',')):
+                js_lines[target_line_idx] = prev_line.rstrip() + ';'
+                new_js = '\n'.join(js_lines)
+                fix_desc = f'Added ; at end of line {target_line_idx + 1}'
+
+        # ── Case 4: Brace imbalance (depth < 0) → trim trailing orphan } ─────
+        if new_js is None:
+            depth = _count_brace_depth(js)
+            if depth < 0:
+                to_remove = abs(depth)
+                removed = 0
+                lines_copy = js_lines[:]
+                for i in range(len(lines_copy) - 1, -1, -1):
+                    if removed >= to_remove:
+                        break
+                    if lines_copy[i].strip() in ('}', '};', '},'):
+                        lines_copy.pop(i)
+                        removed += 1
+                if removed > 0:
+                    new_js = '\n'.join(lines_copy)
+                    fix_desc = f'Removed {removed} trailing orphan closing brace(s)'
+
+        if new_js is None or new_js == js:
+            return html, False, []
+
+        # Apply fix to HTML
+        new_html = html[:sm.start(2)] + new_js + html[sm.end(2):]
+
+        # Verify: the fix must actually resolve the syntax error
+        if not check_syntax(new_html):
+            coordinateur_log.info(f'[AUTO-FIX] {fix_desc}')
+            return new_html, True, [f'[AUTO-FIX] {fix_desc}']
+
+        return html, False, []
+
+    except Exception as e:
+        coordinateur_log.warning(f'fix_exact_syntax_error failed: {e}')
+        return html, False, []
+    finally:
+        if tmp and os.path.exists(tmp):
+            os.unlink(tmp)
+
+
 def fix_const_syntax_errors(html: str) -> tuple[str, bool, list[str]]:
     """
     Correction ciblée de 'SyntaxError: Unexpected token const/let'.
@@ -1465,6 +1634,7 @@ def fix_all_auto(html: str) -> tuple[str, bool, list[str]]:
     1. fix_missing_comma_before_brace (virgule manquante entre éléments tableau)
     2. fix_const_syntax_errors (const/let en switch/for) — boucle jusqu'à 10×
     2b. fix_unexpected_identifier (missing semicolon between statements)
+    2c. fix_exact_syntax_error (surgical: missing/extra brace or ; from exact node error) — boucle jusqu'à 5×
     3. fix_identifier_already_declared (redéclarations) — boucle jusqu'à 5×
     4. fix_palette_missing_keys (clés PALETTE manquantes)
     5. check_undefined_vars_eslint + fix_undefined_runtime_vars
@@ -1556,6 +1726,14 @@ def fix_all_auto(html: str) -> tuple[str, bool, list[str]]:
             break
         any_fixed = True
         all_fixes.extend(descs_ui)
+
+    # Surgical catch-all: read exact node --check error and apply minimal fix (missing/extra brace, ;)
+    for _ in range(5):
+        html, fixed_syn, descs_syn = fix_exact_syntax_error(html)
+        if not fixed_syn:
+            break
+        any_fixed = True
+        all_fixes.extend(descs_syn)
 
     html, fixed2, descs2 = fix_identifier_already_declared(html)
     if fixed2:

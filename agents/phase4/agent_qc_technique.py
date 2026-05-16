@@ -127,6 +127,16 @@ def _detect_orphan_functions(code: str) -> list[str]:
         # Common structural functions (may be called indirectly)
         'update', 'draw', 'start', 'stop', 'pause', 'resume', 'reset', 'restart',
         'setup', 'preload', 'create', 'destroy',
+        # ENGINE utility functions — provided for LLM to use optionally, never orphans
+        'lerp', 'clamp', 'aabb', 'randInt', 'randFloat', 'randChoice',
+        'createPool', 'spawnParticles', 'triggerShake', 'spawnPopup',
+        'updateParticles', 'drawParticles', 'updatePopups', 'drawPopups', 'updateShake',
+        'keyDown', 'keyPressed', 'anyAction', 'flushInput', 'resizeCanvas',
+        'saveHiScore', 'drawText', 'drawBar',
+        # State machine callbacks — called by ENGINE switch, not directly
+        'updateMenu', 'renderMenu', 'updatePlaying', 'renderPlaying',
+        'updateGameover', 'renderGameoverOverlay', 'renderPauseOverlay',
+        'updateShop', 'renderShop', 'startGame', 'initGame',
     }
     candidates = defined - ignore
     orphans = []

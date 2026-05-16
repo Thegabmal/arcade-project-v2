@@ -427,7 +427,7 @@ function updatePlaying(dt){
         e.fireTimer=def.fireRate*(e.phase===2?0.55:1.0);sfx.play(180,0.06,'sawtooth',0.06);
       }
     }
-    return e.y<H+90;
+    return e.alive && e.y<H+90;
   });
 
   // Power-ups
@@ -485,7 +485,7 @@ function updatePlaying(dt){
   }
 
   // Wave manager
-  if(waveManager.enemiesLeft<=0&&enemyPool.active.length===0){
+  if(waveManager.enemiesLeft<=0&&enemyPool.active.filter(x=>x.alive).length===0){
     waveManager.waveTimer+=dt;
     if(waveManager.waveTimer>=waveManager.betweenDelay){waveManager.waveTimer=0;waveManager.wave++;spawnWave(waveManager.wave);}
   }
@@ -606,7 +606,7 @@ function renderPlaying(){
     ctx.fillStyle=player.powerup==='spread'?'#ffff44':'#44aaff';ctx.font='bold 11px system-ui,sans-serif';
     ctx.fillText(`${player.powerup==='spread'?'🔫 SPREAD':'🛡 SHIELD'} ${Math.ceil(player.powerupTimer)}s`,10,H-32);
   }
-  if(waveManager.enemiesLeft<=0&&enemyPool.active.length===0&&waveManager.wave>0){
+  if(waveManager.enemiesLeft<=0&&enemyPool.active.filter(x=>x.alive).length===0&&waveManager.wave>0){
     const cd=Math.ceil(waveManager.betweenDelay-waveManager.waveTimer);
     drawText(`WAVE ${waveManager.wave+1} IN ${cd}s`,W/2,H*0.88,'#ffee44',15,'center');
   }

@@ -431,7 +431,7 @@ function updatePlaying(dt){
         if(Math.random()<0.30)_lootPool.get(l=>{l.x=e.x;l.y=e.y;l.type='gold';l.value=randInt(5,18);l.bobTimer=0;});
         spawnParticles(e.x+e.w/2,e.y+e.h/2,14,{color:e.color,speed:90,life:0.45,gravity:40});
         sfx.play(220,0.08,'sawtooth',0.10);e.alive=false;
-        if(enemyPool.active.length===0&&!currentRoom.cleared){currentRoom.cleared=true;sfx.play(660,0.15,'sine',0.10);spawnPopup(ROOM_W/2,ROOM_H/2-40,'SLAUGHTER COMPLETE!','#ff44cc',16);}
+        if(enemyPool.active.filter(x=>x.alive).length===0&&!currentRoom.cleared){currentRoom.cleared=true;sfx.play(660,0.15,'sine',0.10);spawnPopup(ROOM_W/2,ROOM_H/2-40,'SLAUGHTER COMPLETE!','#ff44cc',16);}
       }
       if(!b.pierce)destroyed=true;
     });
@@ -456,6 +456,7 @@ function updatePlaying(dt){
 
   // ── Enemy AI ─────────────────────────────────────────────────
   enemyPool.update(e=>{
+    if(!e.alive)return false;
     e.flashTimer=Math.max(0,e.flashTimer-dt);e.iframes=Math.max(0,e.iframes-dt);e.animTimer+=dt;
     if(e.knockTimer>0){e.knockTimer-=dt;e.vx*=0.8;e.vy*=0.8;resolveWalls(e,currentRoom.walls,dt);return true;}
     const dx2=player.x+player.w/2-(e.x+e.w/2),dy2=player.y+player.h/2-(e.y+e.h/2),d=Math.sqrt(dx2*dx2+dy2*dy2);
@@ -540,7 +541,7 @@ function updatePlaying(dt){
   if(player.xp>=60*player.level){player.xp-=60*player.level;player.level++;offerUpgrades();}
 
   // ── Boss killed → floor complete ──────────────────────────────
-  if(!currentRoom.cleared&&currentRoom.type==='boss'&&enemyPool.active.length===0){
+  if(!currentRoom.cleared&&currentRoom.type==='boss'&&enemyPool.active.filter(x=>x.alive).length===0){
     currentRoom.cleared=true;sfx.play(660,0.15,'sine',0.10);
     spawnPopup(ROOM_W/2,ROOM_H/2-40,'BOSS SLAIN!','#ff44cc',18);
     floorNum++;roomNum=0;

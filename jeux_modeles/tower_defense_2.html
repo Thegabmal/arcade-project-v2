@@ -344,7 +344,7 @@ function updatePlaying(dt){
       if(spawner.spawnCount<group.count){spawnEnemy(group.type);spawner.spawnCount++;spawner.spawnTimer=group.interval;}
       else{spawner.groupIdx++;spawner.spawnCount=0;spawner.spawnTimer=0.4;}
     }
-    if(spawner.groupIdx>=spawner.groups.length&&enemyPool.active.length===0){
+    if(spawner.groupIdx>=spawner.groups.length&&enemyPool.active.filter(x=>x.alive).length===0){
       spawner.active=false;
       const bonus=40+waveIndex*8;credits+=bonus;
       spawnPopup(W/2,H/2-40,`WAVE CLEAR! +${bonus}⚡`,PALETTE.accent,16);
@@ -368,7 +368,7 @@ function updatePlaying(dt){
     const dx=wp.x-e.x,dy=wp.y-e.y,d=Math.hypot(dx,dy);
     if(d<spd*dt+2){e.x=wp.x;e.y=wp.y;e.pathIdx++;e.pathProgress=e.pathIdx;}
     else{const step=spd*dt/d;e.x+=dx*step;e.y+=dy*step;e.pathProgress=e.pathIdx+(1-d/TILE);e.angle=Math.atan2(dy,dx);}
-    return e.y<H+80;
+    return e.alive && e.y<H+80;
   });
 
   projPool.update(p=>{

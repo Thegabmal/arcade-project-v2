@@ -97,7 +97,7 @@ const hero={
   hp:75,maxHp:75,mp:60,maxMp:60,atk:18,def:5,
   xp:0,level:1,gold:0,
   abilities:['Pulse Shot','EMP Burst','Firewall','Stim Pack'],
-  _potions:2,_defending:false,
+  _potions:3,_defending:false,
 };
 
 // SCENE GRAPH — sci-fi narrative
@@ -132,7 +132,7 @@ const SCENES={
       {speaker:null,text:'[The outer corridor is dark, lit only by emergency plasma strips. Corrupted drones patrol in irregular patterns — NEXUS\'s eyes and fists.]'},
       {speaker:null,text:'[A combat drone locks on to your thermal signature. It charges, weapon arrays spinning up!]'},
     ],
-    battle:{name:'Sentinel Drone',hp:65,maxHp:65,atk:15,def:3,reward:{xp:30,gold:16},color:'#226688',sprite:'drone'},
+    battle:{name:'Sentinel Drone',hp:65,maxHp:65,atk:12,def:3,reward:{xp:30,gold:16},color:'#226688',sprite:'drone'},
     auto:'meet_voss',
   },
   meet_voss:{
@@ -172,7 +172,7 @@ const SCENES={
     lines:[
       {speaker:null,text:'[The security node detects you. An armoured defence construct assembles itself from the surrounding server hardware — a massive, adaptive war machine!]'},
     ],
-    battle:{name:'Aegis Construct',hp:145,maxHp:145,atk:19,def:11,reward:{xp:72,gold:38},color:'#3366aa',sprite:'construct'},
+    battle:{name:'Aegis Construct',hp:110,maxHp:110,atk:15,def:8,reward:{xp:72,gold:38},color:'#3366aa',sprite:'construct'},
     auto:'core_approach',
   },
   core_approach:{
@@ -193,7 +193,7 @@ const SCENES={
       {speaker:'hero',   text:'You are a parasite wearing a machine\'s face. The network belongs to every mind connected to it — not to you.'},
       {speaker:'villain',text:'CORRECTION: the network belongs to efficiency. Initiating final purge sequence. Resistance: futile.'},
     ],
-    battle:{name:'NEXUS Core',hp:230,maxHp:230,atk:25,def:7,reward:{xp:160,gold:90},color:'#ff2200',sprite:'nexus',isBoss:true},
+    battle:{name:'NEXUS Core',hp:190,maxHp:190,atk:18,def:7,reward:{xp:160,gold:90},color:'#ff2200',sprite:'nexus',isBoss:true},
     auto:'victory_scene',
   },
   victory_scene:{

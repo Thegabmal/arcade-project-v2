@@ -395,6 +395,7 @@ function updatePlaying(dt){
 
   // ── Enemy AI ─────────────────────────────────────────────────
   enemyPool.update(e=>{
+    if(!e.alive)return false;
     e.flashTimer=Math.max(0,e.flashTimer-dt);e.iframes=Math.max(0,e.iframes-dt);e.animTimer+=dt;
     if(e.knockTimer>0){e.knockTimer-=dt;e.vx*=0.8;e.vy*=0.8;resolveWalls(e,currentRoom.walls,dt);return true;}
     const dx2=player.x+player.w/2-(e.x+e.w/2),dy2=player.y+player.h/2-(e.y+e.h/2),d=Math.sqrt(dx2*dx2+dy2*dy2);
@@ -462,7 +463,7 @@ function updatePlaying(dt){
   if(player.xp>=xpNeed){player.xp-=xpNeed;player.level++;offerUpgrades();}
 
   // ── Room clear ────────────────────────────────────────────────
-  if(!currentRoom.cleared&&enemyPool.active.length===0){
+  if(!currentRoom.cleared&&enemyPool.active.filter(x=>x.alive).length===0){
     currentRoom.cleared=true;sfx.play(660,0.15,'sine',0.10);
     spawnPopup(ROOM_W/2,ROOM_H/2-40,'ROOM CLEAR!','#ff0',16);
     if(currentRoom.type==='boss'){

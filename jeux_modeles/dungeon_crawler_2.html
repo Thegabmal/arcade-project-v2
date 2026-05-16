@@ -458,7 +458,7 @@ function updatePlaying(dt){
           if(Math.random()<0.35)lootPool.get(l=>{l.x=e.x;l.y=e.y;l.type='credits';l.value=randInt(8,25);l.bobTimer=0;});
           if(Math.random()<0.10)lootPool.get(l=>{l.x=e.x;l.y=e.y;l.type='medkit';l.value=25;l.bobTimer=0;});
           e.alive=false;sfx.play(440,0.10,'square',0.10);
-          if(enemyPool.active.length===0&&!room.cleared){
+          if(enemyPool.active.filter(x=>x.alive).length===0&&!room.cleared){
             room.cleared=true;sfx.play(660,0.15,'sine',0.10);
             spawnPopup(player.x+player.w/2,player.y-30,'SECTOR CLEAR!','#0cf',15);
           }

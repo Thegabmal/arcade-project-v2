@@ -36,6 +36,11 @@ _BROWSER_AND_TEMPLATE_GLOBALS = frozenset({
     'alert', 'confirm', 'prompt',
     # HTML template globals
     'canvas', 'ctx', 'W', 'H', 'dt', 'lastTime', 'gameState', '_AC', '_dpr',
+    # 2D template ENGINE objects — never inject wrong defaults for these
+    'Keys', 'Touch', 'Mouse', 'Shake', 'Particles', 'Popups', 'sfx',
+    'FIXED_DT', 'MAX_DT', 'accumulator', 'GAME_W', 'GAME_H', 'DPR',
+    'TILE_SIZE', 'GAME_SCORE', 'GAME_TITLE',
+    'cam', 'coinPool', 'tileMap', 'platforms', 'mapCols', 'mapRows',
 })
 
 
@@ -362,16 +367,37 @@ def fix_identifier_already_declared(html: str) -> tuple[str, bool, list[str]]:
                 # Dimensions
                 'DPR', 'GAME_W', 'GAME_H',
                 # Constantes template
-                'TILE', 'GAME_TITLE',
+                'TILE', 'TILE_SIZE', 'GAME_TITLE',
             })
             if ident in _TEMPLATE_GLOBALS:
-                new_line = _remove_single_var_from_line(lines[line_num], ident)
-                if not new_line.strip():
-                    lines.pop(line_num)
-                else:
-                    lines[line_num] = new_line
-                js = '\n'.join(lines)
-                fixes.append(f'[AUTO-FIX] Suppression redéclaration variable template : {ident} ligne {line_num + 1}')
+                # Node.js reports the SECOND (ENGINE) occurrence at line_num.
+                # Find and remove the LLM's FIRST duplicate declaration instead,
+                # leaving the ENGINE line intact (avoids _ensure_engine_intact cycle).
+                _decl_pat = re.compile(r'\b(?:const|let|var)\s+' + re.escape(ident) + r'\b')
+                _removed = False
+                for _j in range(0, line_num):
+                    if _decl_pat.search(lines[_j]):
+                        _new = _remove_single_var_from_line(lines[_j], ident)
+                        if not _new.strip():
+                            lines.pop(_j)
+                        else:
+                            lines[_j] = _new
+                        js = '\n'.join(lines)
+                        fixes.append(f'[AUTO-FIX] Suppression redéclaration variable template : {ident} ligne {_j + 1}')
+                        _removed = True
+                        break
+                if not _removed:
+                    # ENGINE line is first; remove duplicate from lines AFTER it
+                    for _j in range(line_num + 1, len(lines)):
+                        if _decl_pat.search(lines[_j]):
+                            _new = _remove_single_var_from_line(lines[_j], ident)
+                            if not _new.strip():
+                                lines.pop(_j)
+                            else:
+                                lines[_j] = _new
+                            js = '\n'.join(lines)
+                            fixes.append(f'[AUTO-FIX] Suppression redéclaration variable template : {ident} ligne {_j + 1}')
+                            break
                 continue
 
             # Convertir const X = ... ou let X = ... en var X = ... sur cette ligne
@@ -861,6 +887,8 @@ def _guess_var_default(name: str) -> str:
         return '32'
     if any(n.endswith(s) for s in ('speed', 'rate', 'scale', 'factor', 'mult')):
         return '1'
+    if n.endswith('pool'):
+        return '{get:function(){return{};},release:function(){},items:[]}'
     return '0'
 
 

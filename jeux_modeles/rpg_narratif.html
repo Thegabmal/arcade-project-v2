@@ -191,7 +191,7 @@ const SCENES={
       {speaker:'hero',   text:'Return the shards, Malachar. This can end without further bloodshed.'},
       {speaker:'villain',text:"Bloodshed? I intend far worse. Face the full weight of eternal darkness!"},
     ],
-    battle:{name:'Malachar',hp:220,maxHp:220,atk:26,def:8,reward:{xp:150,gold:80},color:'#8800cc',sprite:'boss',isBoss:true},
+    battle:{name:'Malachar',hp:220,maxHp:220,atk:18,def:8,reward:{xp:150,gold:80},color:'#8800cc',sprite:'boss',isBoss:true},
     auto:'victory_scene',
   },
   victory_scene:{
@@ -614,7 +614,7 @@ function renderShop(){ctx.fillStyle=PALETTE.shopBg;ctx.fillRect(0,0,W,H);ctx.tex
 loadMeta();
 function restartGame(){
   loadMeta();_runCoins=0;_gameoverTimer=1.5;
-  Object.assign(hero,{hp:80,maxHp:80,mp:50,maxMp:50,atk:20,def:6,xp:0,level:1,gold:0,_potions:2,_defending:false});
+  Object.assign(hero,{hp:80,maxHp:80,mp:50,maxMp:50,atk:20,def:6,xp:0,level:1,gold:0,_potions:3,_defending:false});
   applyUpgrades();storyFlags={};currentBg='village';bgTransition={from:'village',to:'village',t:1};
   setState('title');
 }

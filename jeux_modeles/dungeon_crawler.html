@@ -430,7 +430,7 @@ function updatePlaying(dt){
           if(Math.random()<0.10)lootPool.get(l=>{l.x=e.x;l.y=e.y;l.type='potion';l.value=30;l.bobTimer=0;});
           e.alive=false;
           sfx.play(440,0.10,'square',0.10);
-          if(enemyPool.active.length===0&&!room.cleared){
+          if(enemyPool.active.filter(x=>x.alive).length===0&&!room.cleared){
             room.cleared=true;sfx.play(660,0.20,'sine',0.12);
             spawnPopup(player.x+player.w/2,player.y-35,'ROOM CLEAR!','#ff0',15);
           }

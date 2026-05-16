@@ -274,7 +274,7 @@ function updatePlaying(dt){
         sfx.play(180,0.06,'sawtooth',0.05);
       }
     }
-    return e.y<H+100&&e.x>-150&&e.x<W+150;
+    return e.alive && e.y<H+100&&e.x>-150&&e.x<W+150;
   });
 
   // Power-ups
@@ -341,7 +341,7 @@ function updatePlaying(dt){
   }
 
   // Wave advance
-  if(waveManager.enemiesLeft<=0&&enemyPool.active.length===0){
+  if(waveManager.enemiesLeft<=0&&enemyPool.active.filter(x=>x.alive).length===0){
     waveManager.waveTimer+=dt;
     if(waveManager.waveTimer>=waveManager.betweenDelay){waveManager.waveTimer=0;waveManager.wave++;spawnWave(waveManager.wave);}
   }

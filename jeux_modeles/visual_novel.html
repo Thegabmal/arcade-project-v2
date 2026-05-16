@@ -111,7 +111,11 @@ const SCRIPT=[
 
   {id:'anomaly',bg:'observatory',
    chars:[{id:'mira',pos:'left',expression:'surprised'}],
-   speaker:'mira',text:"This pattern... it's non-random. The interval structure — it's prime numbers. Fibonacci sequences woven into carrier waves. This is not noise.",next:'choice1'},
+   speaker:'mira',text:"This pattern... it's non-random. The interval structure — it's prime numbers. Fibonacci sequences woven into carrier waves. This is not noise.",next:'pattern_depth'},
+
+  {id:'pattern_depth',bg:'observatory',
+   chars:[{id:'mira',pos:'left',expression:'surprised'}],
+   speaker:'mira',text:"Wait — there's more. The signal isn't repeating. Each cycle adds a new layer. As if it's responding to our old broadcasts. The ones from fifty years ago. The ones we sent without expecting an answer.",next:'choice1'},
 
   {id:'choice1',bg:'observatory',
    chars:[{id:'mira',pos:'left',expression:'neutral'}],
@@ -176,7 +180,15 @@ const SCRIPT=[
 
   {id:'contact_achieved',bg:'deep_space',setFlag:{full_contact:true},
    chars:[{id:'mira',pos:'left',expression:'happy'},{id:'signal',pos:'right',expression:'happy'}],
-   speaker:'signal',text:'... GOOD. THAT IS THE CORRECT ANSWER. NOT BRAVE — CORRECT. THE ONES WHO COME TO THE EDGE WITHOUT FEAR ARE THE ONES WORTH MEETING.',next:'ending_good'},
+   speaker:'signal',text:'... GOOD. THAT IS THE CORRECT ANSWER. NOT BRAVE — CORRECT. THE ONES WHO COME TO THE EDGE WITHOUT FEAR ARE THE ONES WORTH MEETING.',next:'signal_reveals'},
+
+  {id:'signal_reveals',bg:'deep_space',
+   chars:[{id:'mira',pos:'left',expression:'surprised'},{id:'signal',pos:'right',expression:'happy'}],
+   speaker:'signal',text:'... WE WILL SHARE ONE THING. A COORDINATE. A WHEN. YOU ARE YOUNG. WHEN YOU ARRIVE THERE, WE WILL KNOW YOU ARE READY. THIS IS NOT A MEETING. IT IS A PROMISE.',next:'mira_accepts'},
+
+  {id:'mira_accepts',bg:'dawn',
+   chars:[{id:'mira',pos:'left',expression:'happy'}],
+   speaker:'mira',text:'"I talked to them for four hours. And in the end, they gave me a number. A date — 847 years from now. Someone else will make that journey. But it starts here. Tonight."',next:'ending_good'},
 
   {id:'ending_good',bg:'dawn',
    chars:[{id:'mira',pos:'left',expression:'happy'}],
@@ -189,7 +201,11 @@ const SCRIPT=[
 
   {id:'mira_doubt',bg:'observatory',
    chars:[{id:'mira',pos:'left',expression:'sad'}],
-   speaker:'mira',text:"The right thing. The signal went quiet the moment we filed the report. As if it understood what we'd done.",next:'ending_neutral'},
+   speaker:'mira',text:"The right thing. The signal went quiet the moment we filed the report. As if it understood what we'd done.",next:'containment'},
+
+  {id:'containment',bg:'observatory',
+   chars:[{id:'mira',pos:'left',expression:'sad'}],
+   speaker:'narrator',text:'Six hours later, men in grey uniforms disconnected every antenna array in the building. They catalogued the drives, loaded them into unmarked cases, and left before sunrise. Nobody asked Mira to sign anything.',next:'ending_neutral'},
 
   {id:'ending_neutral',bg:'deep_space',
    chars:[{id:'mira',pos:'left',expression:'sad'}],
@@ -198,7 +214,15 @@ const SCRIPT=[
 
   {id:'leave_early',bg:'observatory',
    chars:[{id:'mira',pos:'left',expression:'neutral'}],
-   speaker:'mira',text:"Exhaustion wins. You mark the anomaly as calibration drift and close the terminal. It was probably nothing. It's always probably nothing.",next:'ending_bad'},
+   speaker:'mira',text:"Exhaustion wins. You mark the anomaly as calibration drift and close the terminal. It was probably nothing. It's always probably nothing.",next:'regret_morning'},
+
+  {id:'regret_morning',bg:'observatory',
+   chars:[{id:'mira',pos:'left',expression:'sad'}],
+   speaker:'mira',text:"You dream of sequences. Numbers that sing in prime intervals. You wake at 7 AM and open the terminal immediately — checking, even before coffee. The frequency is empty. Static.",next:'signal_gone'},
+
+  {id:'signal_gone',bg:'deep_space',
+   chars:[{id:'mira',pos:'left',expression:'sad'}],
+   speaker:'narrator',text:"She would spend the next seven years reviewing that night's logs. The pattern was there. She had seen it. She had chosen sleep instead.",next:'ending_bad'},
 
   {id:'ending_bad',bg:'deep_space',
    chars:[],

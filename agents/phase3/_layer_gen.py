@@ -3139,7 +3139,7 @@ _TEMPLATE_ADAPT_SYSTEM_3D = (
     "1. Output = complete HTML file starting with <!DOCTYPE html>, no markdown fences\n"
     "2. ENGINE section (// ═══ ENGINE — DO NOT MODIFY ═══ ... // ═══ END ENGINE ═══): copy EVERY character EXACTLY as-is\n"
     "3. Replace EVERY [FILL:...] placeholder — any remaining [FILL] = broken game\n"
-    "4. Three.js CDN must remain: https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js\n"
+    "4. Three.js CDN must remain: https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js\n"
     "5. FORBIDDEN in [FILL] sections: redeclaring scene/camera/renderer/clock/meta/gameState/keys\n"
     "6. Meta-progression: META_KEY must be a unique string literal (e.g. 'meta_my_game_title')\n"
     "7. UPGRADE_DEFS: exactly 4 upgrades with id, name, desc, cost, maxLv\n"

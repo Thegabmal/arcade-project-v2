@@ -22,8 +22,8 @@ _GENRE_INIT_DELAY = {
     "rpg": 4.0, "dungeon": 4.0, "dungeon crawler": 4.0, "tower defense": 3.5,
     "strategy": 3.5, "simulation": 3.5, "metroidvania": 3.5, "roguelite": 4.0, "roguelike": 4.0,
     "survival": 3.5,
-    # 3D : Three.js prend du temps à init WebGL
-    "fps": 5.0, "3d": 5.0,
+    # 3D : Three.js + WebGL renderer + shader compilation needs extra time
+    "fps": 7.0, "3d": 7.0,
 }
 
 def _init_delay_for_genre(genre: str) -> float:
@@ -36,7 +36,7 @@ def _init_delay_for_genre(genre: str) -> float:
 
 # Cache local pour Three.js (évite de re-télécharger à chaque test)
 _THREEJS_CACHE_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "rag_database", "three.min.js")
-_THREEJS_CDN = "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"
+_THREEJS_CDN = "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"
 
 
 def _get_threejs_local() -> str | None:
@@ -638,7 +638,7 @@ def _run_playwright(code: str, genre_profile: GenreProfile) -> EvaluationResult:
                         except Exception:
                             route.continue_()
                     page.route("**/*three*", handle_threejs_route)
-                    page.route("**/*cdnjs.cloudflare.com*three*", handle_threejs_route)
+                    page.route("**/*jsdelivr.net*three*", handle_threejs_route)
 
             # Charger le jeu
             page.goto(f"file://{tmp_path}")

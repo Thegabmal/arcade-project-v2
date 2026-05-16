@@ -245,7 +245,11 @@ function spawnChest(){
   if(chestSpawned) return; chestSpawned=true;
   const cMat=new THREE.MeshLambertMaterial({color:0xcc8800,emissive:0x553300});
   chestMesh=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.6,0.6),cMat);
-  chestMesh.position.set(0,0.3,0); scene.add(chestMesh);
+  // Spawn away from hero origin to avoid instant auto-loot on same tick
+  const angle=Math.random()*Math.PI*2;
+  const dist=3+Math.random()*3;
+  chestMesh.position.set(Math.cos(angle)*dist,0.3,Math.sin(angle)*dist);
+  scene.add(chestMesh);
   const glow=new THREE.PointLight(0xffcc44,2.5,4);
   glow.position.set(0,1,0); chestMesh.add(glow);
 }

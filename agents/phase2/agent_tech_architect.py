@@ -52,7 +52,7 @@ def run(genre_profile: GenreProfile, gdd: dict) -> dict:
         or "first-person" in _sg
     )
     techno_hint = (
-        "three.js via CDN (https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js)"
+        "three.js via CDN (https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js)"
         if est_3d else "HTML5 Canvas 2D API, JavaScript vanilla"
     )
 

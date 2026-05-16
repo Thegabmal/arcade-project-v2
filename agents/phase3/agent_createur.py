@@ -1991,7 +1991,7 @@ body { background:#000; overflow:hidden; }
   <p>Meilleur : <span id="best-score-display">0</span></p>
   <button class="btn" id="btn-restart">REJOUER</button>
 </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -3700,7 +3700,7 @@ def _build_3d_requirements(tech_specs: dict = None) -> str:
     )
     return f"""STRUCTURE :
 1. Un seul fichier HTML complet et autonome (tout inline)
-2. Charger Three.js r160 via CDN : <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+2. Charger Three.js r160 via CDN : <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 3. TOUT le code Three.js dans document.addEventListener('DOMContentLoaded', function() {{ ... }})
 4. WebGLRenderer plein écran responsive — document.body.appendChild(renderer.domElement)
 5. window.addEventListener('resize', ...) pour adapter camera.aspect et renderer.setSize

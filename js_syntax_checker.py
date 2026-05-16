@@ -41,6 +41,8 @@ _BROWSER_AND_TEMPLATE_GLOBALS = frozenset({
     'FIXED_DT', 'MAX_DT', 'accumulator', 'GAME_W', 'GAME_H', 'DPR',
     'TILE_SIZE', 'GAME_SCORE', 'GAME_TITLE',
     'cam', 'coinPool', 'tileMap', 'platforms', 'mapCols', 'mapRows',
+    # Three.js global namespace — never inject var THREE = 0
+    'THREE',
 })
 
 
@@ -1043,8 +1045,9 @@ def fix_undefined_runtime_vars(html: str, var_names: set) -> tuple[str, bool, li
     if not to_declare:
         return html, False, []
 
-    # Canvas context method patterns — if a var is called with these it's a ctx alias
-    _CTX_METHODS = r'\.(beginPath|fillRect|strokeRect|clearRect|fill|stroke|save|restore|clip|arc|moveTo|lineTo|bezierCurveTo|fillText|strokeText|drawImage|createLinearGradient|createRadialGradient|setTransform|transform|scale|rotate|translate)\s*\('
+    # Canvas-exclusive method patterns — only these prove v is a ctx alias (not physics coords)
+    # Excludes transform/scale/rotate/translate which appear in Three.js and physics libs
+    _CTX_METHODS = r'\.(beginPath|fillRect|strokeRect|clearRect|fill|stroke|save|restore|clip|arc|moveTo|lineTo|bezierCurveTo|fillText|strokeText|drawImage|createLinearGradient|createRadialGradient)\s*\('
 
     inject_lines = []
     descs = []
@@ -1052,8 +1055,9 @@ def fix_undefined_runtime_vars(html: str, var_names: set) -> tuple[str, bool, li
         is_fn_call = bool(js and re.search(r'\b' + re.escape(v) + r'\s*\(', js))
         is_ctx_alias = bool(js and re.search(r'\b' + re.escape(v) + _CTX_METHODS, js))
         if is_ctx_alias:
+            # Guard ctx reference with typeof to avoid TDZ crash when const ctx is declared later
             inject_lines.append(
-                f'var {v}=(typeof {v}!=="undefined")?{v}:ctx;'
+                f'var {v}=(typeof {v}!=="undefined")?{v}:(typeof ctx!=="undefined"?ctx:null);'
             )
             descs.append(f'[AUTO-FIX] var {v} = ctx (canvas context alias détecté)')
         elif is_fn_call:

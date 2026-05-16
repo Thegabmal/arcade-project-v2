@@ -239,7 +239,7 @@ def _build_3d_html(
     <p>Appuie sur DÉMARRER pour jouer</p>
     <button onclick="startGame()">DÉMARRER</button>
   </div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 {_THREEJS_POLYFILL_HTML}
   <script>
     // ═══ NOTE: pas de "use strict" — les modules partagent des globaux cross-script ═══

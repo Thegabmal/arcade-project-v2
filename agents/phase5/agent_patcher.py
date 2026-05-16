@@ -272,13 +272,14 @@ def run(code: str, diagnostic: dict, genre_profile: GenreProfile, iteration: int
     if est_script_only:
         format_instructions = "Génère UNIQUEMENT le contenu JavaScript corrigé (sans balises <script>). Commence directement par le code JS."
         format_sortie = "Retourne uniquement le JavaScript corrigé, sans balises HTML."
-        # Inclure la liste des déclarations pour éviter que le LLM en perde
-        decls = _extract_declarations(script_content)
-        decls_context = f"\nDÉCLARATIONS EXISTANTES (à ABSOLUMENT conserver dans l'output) :\n{', '.join(decls)}\n" if decls else ""
     else:
         format_instructions = "Génère le code HTML corrigé complet. Commence par <!DOCTYPE html> et termine par </html>."
         format_sortie = "Ne mets AUCUN texte avant ou après le code."
-        decls_context = ""
+
+    # Always include existing declarations so the LLM never drops or redeclares them
+    _code_for_decls = script_content if (script_content and len(script_content) > 500) else code
+    decls = _extract_declarations(_code_for_decls)
+    decls_context = f"\nEXISTING DECLARATIONS (MUST be preserved in output — never redeclare) :\n{', '.join(decls)}\n" if decls else ""
 
     # Inject model game snippets for any missing genre must-haves
     try:
@@ -598,18 +599,19 @@ Retourne uniquement le JavaScript corrigé (les {snippet_lines} lignes complète
     fixed_snippet = _clean_html(fixed_snippet)
     fixed_lines = fixed_snippet.count('\n') + 1
 
-    # Brace-balance delta check: the fixed snippet must not shift global {} balance
-    orig_balance = snippet.count('{') - snippet.count('}')
-    new_balance = fixed_snippet.count('{') - fixed_snippet.count('}')
-    if orig_balance != new_balance:
-        phase5_log.info(f"    → snippet brace delta {orig_balance}→{new_balance} ({new_balance - orig_balance:+d}) — ignoré")
-        return code
-
     # Cas 1 : snippet complet retourné (≥ 50% des lignes originales) → injection directe
     # Cas 2 : correction chirurgicale (LLM n'a retourné que les lignes changées) →
     #          chercher dans le snippet original où ce bloc s'insère et patcher uniquement cette zone
     lines = script.split("\n")
     if fixed_lines >= snippet_lines * 0.5:
+        # Brace-balance delta check only for Cas 1 (full window replacement).
+        # Cas 2 patches balanced functions into an inherently-unbalanced window — checking
+        # the window balance would reject valid surgical fixes.
+        orig_balance = snippet.count('{') - snippet.count('}')
+        new_balance = fixed_snippet.count('{') - fixed_snippet.count('}')
+        if orig_balance != new_balance:
+            phase5_log.info(f"    → snippet brace delta {orig_balance}→{new_balance} ({new_balance - orig_balance:+d}) — ignoré")
+            return code
         # Injection normale : remplace la fenêtre start_line..end_line
         new_script = "\n".join(lines[:start_line]) + "\n" + fixed_snippet + "\n" + "\n".join(lines[end_line:])
     else:

@@ -22,9 +22,15 @@ from logger import phase3_log
 # CONSTANTES
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Variables pré-déclarées dans le template HTML (jamais à redéclarer)
-_HTML_TEMPLATE_GLOBALS = [
-    'canvas', 'ctx', 'W', 'H', 'dt', 'lastTime', 'gameState',
+# Variables actually declared in _HTML_TEMPLATE (layer-gen wrapper) — do NOT include
+# template-adapt ENGINE extras (Keys, sfx, createPool, etc.) which don't exist in _HTML_TEMPLATE.
+# Used in LLM prompts and orphan-call detection for the layer-gen path.
+_LAYER_GEN_GLOBALS = [
+    'canvas', 'ctx', '_dpr', 'W', 'H', 'dt', 'lastTime', 'gameState',
+]
+
+# Full list for template-adapt path (ENGINE sections declare all of these)
+_HTML_TEMPLATE_GLOBALS = _LAYER_GEN_GLOBALS + [
     'Keys', 'Touch', 'Mouse', 'Shake', 'Particles', 'Popups', 'sfx',
     'FIXED_DT', 'MAX_DT', 'accumulator', 'GAME_W', 'GAME_H', 'DPR',
     'TILE_SIZE', 'GAME_SCORE', 'cam', 'coinPool', 'tileMap', 'platforms',
@@ -1199,7 +1205,7 @@ def _layer_declared_str(accumulated_js: str) -> str:
     Ex: 'enemies (Array), score (Number)' — évite enemies.x au lieu de enemies[i].x.
     """
     decls = _extract_js_declarations(accumulated_js)
-    all_names = _HTML_TEMPLATE_GLOBALS + decls['all']
+    all_names = _LAYER_GEN_GLOBALS + decls['all']
     if not all_names:
         return ""
 
@@ -1621,7 +1627,7 @@ def _check_gameloop_calls(accumulated_js: str) -> list[str]:
     # Inclure decls['vars'] : les variables (joueur, ennemis, boss...) ne sont PAS
     # des fonctions manquantes — injecter un stub function dessus causerait un conflit
     # var vs function au runtime (TypeError: joueur is not a function).
-    all_known = set(decls['funcs']) | set(decls['vars']) | set(_HTML_TEMPLATE_GLOBALS) | _JS_BUILTINS
+    all_known = set(decls['funcs']) | set(decls['vars']) | set(_LAYER_GEN_GLOBALS) | _JS_BUILTINS
     orphans: list[str] = []
     for m in re.finditer(r'\b([a-zA-Z_$][\w$]*)\s*\(', accumulated_js):
         name = m.group(1)
@@ -2788,7 +2794,7 @@ def _validate_template_integrity(html: str, template_html: str) -> tuple:
         'game_loop':         'requestAnimationFrame' in html,
         'state_machine':     'gameState' in html,
         'pool_system':       'createPool' in html,
-        'fills_replaced':    html.count('[FILL:') == 0,
+        'fills_replaced':    len(re.findall(r'\[FILL[:\]]?', html)) == 0,
         'size_reasonable':   len(html) > max(len(template_html) * 0.55, 5000),
         'no_null_overrides': 'var canvas = null' not in html and 'var ctx = null' not in html,
     }
@@ -3163,11 +3169,11 @@ def _validate_template_integrity_3d(html: str, template_html: str) -> tuple:
     checks = {
         'engine_start':      '// ═══ ENGINE — DO NOT MODIFY ═══' in html,
         'engine_end':        '// ═══ END ENGINE ═══' in html,
-        'three_cdn':         'three.min.js' in html,
+        'three_cdn':         'cdn.jsdelivr.net/npm/three@0.160.0' in html,
         'three_usage':       'THREE.' in html,
         'webgl_renderer':    'WebGLRenderer' in html,
         'request_anim':      'requestAnimationFrame' in html,
-        'fills_replaced':    html.count('[FILL:') == 0,
+        'fills_replaced':    len(re.findall(r'\[FILL[:\]]?', html)) == 0,
         'has_scene':         'scene.add(' in html or 'new THREE.Scene' in html,
         'size_reasonable':   len(html) > max(len(template_html) * 0.60, 20000),
         'no_engine_clobber': 'var scene' not in html and 'const scene' not in html and 'let scene' not in html,

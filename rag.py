@@ -151,6 +151,10 @@ def store_pattern(
     notes: str = "",
 ) -> bool:
     """Stocke un pattern réussi dans ChromaDB. Retourne True si succès."""
+    if score < 7.5:
+        print(f"  [RAG] Pattern rejeté — score {score:.2f} < 7.5 (seuil qualité)")
+        return False
+
     collection = _get_collection()
     if collection is None:
         return False

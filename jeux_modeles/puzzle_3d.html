@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CHROMATIC — 3D Puzzle</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+  #c { display: block; width: 100vw; height: 100vh; cursor: grab; }
+  #c:active { cursor: grabbing; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; font-family: system-ui, sans-serif; }
+  #score-disp {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    font-size: 24px; font-weight: 700; color: #fff; letter-spacing: 2px; text-shadow: 0 0 12px #ffffff55;
+  }
+  #level-disp {
+    position: absolute; top: 54px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; color: #888; letter-spacing: 4px; text-transform: uppercase;
+  }
+  #moves-disp { position: absolute; top: 20px; left: 24px; font-size: 15px; color: #aaa; }
+  #coins-disp { position: absolute; top: 20px; right: 24px; font-size: 15px; color: #ffd700; }
+  #timer-disp {
+    position: absolute; top: 54px; left: 24px; font-size: 13px; color: #666; letter-spacing: 2px;
+  }
+  #hint-disp {
+    position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; color: #666; letter-spacing: 2px; text-align: center;
+  }
+  #progress-bar {
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: #111;
+  }
+  #progress-fill {
+    height: 100%; background: linear-gradient(90deg,#8844ff,#ff44aa,#44aaff);
+    transition: width 0.4s;
+  }
+  #solve-flash {
+    position: absolute; inset: 0;
+    background: rgba(255,255,255,0); pointer-events: none;
+    transition: background 0.15s;
+  }
+  #solve-banner {
+    position: absolute; top: 38%; left: 50%; transform: translateX(-50%);
+    font-size: 38px; font-weight: 900; color: #fff;
+    opacity: 0; transition: opacity 0.4s; letter-spacing: 6px;
+    text-shadow: 0 0 30px #fff; pointer-events: none;
+  }
+  #par-disp {
+    position: absolute; top: 72px; left: 24px; font-size: 12px; color: #555; letter-spacing: 2px;
+  }
+
+  #overlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.9); color: #fff;
+  }
+  #overlay h1 {
+    font-size: 56px; font-weight: 900; letter-spacing: 10px;
+    background: linear-gradient(135deg,#8844ff,#ff44aa,#44aaff);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    font-family: 'Impact', system-ui; margin-bottom: 6px;
+  }
+  #overlay .sub { font-size: 13px; color: #555; letter-spacing: 4px; margin-bottom: 40px; }
+  .menu-btn {
+    padding: 13px 40px; margin: 5px;
+    font-size: 14px; font-weight: 700; letter-spacing: 2px;
+    border: 2px solid #8844ff; background: transparent; color: #8844ff;
+    cursor: pointer; text-transform: uppercase; transition: all 0.15s; font-family: system-ui;
+  }
+  .menu-btn:hover { background: #8844ff; color: #fff; }
+  #level-complete-score { font-size: 28px; color: #ffd700; margin: 16px 0; }
+  #level-complete-info { font-size: 13px; color: #666; margin-bottom: 24px; }
+
+  #shop-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.93);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; font-family: system-ui;
+  }
+  #shop-overlay h2 { font-size: 30px; color: #8844ff; letter-spacing: 4px; margin-bottom: 6px; }
+  #shop-coins-disp { font-size: 15px; color: #ffd700; margin-bottom: 24px; }
+  #shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 540px; width: 100%; }
+  .shop-card { border: 2px solid #333; padding: 16px; cursor: pointer; transition: all 0.15s; background: #080610; }
+  .shop-card:hover { border-color: #8844ff; background: #0e0a18; }
+  .shop-card h3 { font-size: 13px; color: #8844ff; margin-bottom: 6px; }
+  .shop-card p  { font-size: 11px; color: #666; margin-bottom: 10px; line-height: 1.4; }
+  .shop-card .cost { font-size: 12px; color: #ffd700; font-weight: 700; }
+  .shop-card .lvl  { font-size: 11px; color: #444; float: right; }
+  #shop-skip { margin-top: 18px; font-size: 13px; color: #444; cursor: pointer; letter-spacing: 2px; }
+  #shop-skip:hover { color: #aaa; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" style="display:none;">
+  <div id="progress-bar"><div id="progress-fill" style="width:0%"></div></div>
+  <div id="solve-flash"></div>
+  <div id="solve-banner">SOLVED!</div>
+  <div id="score-disp">0</div>
+  <div id="level-disp">LEVEL 1</div>
+  <div id="moves-disp">MOVES: 0</div>
+  <div id="coins-disp">🪙 0</div>
+  <div id="timer-disp">0:00</div>
+  <div id="par-disp">PAR: —</div>
+  <div id="hint-disp">DRAG TO ROTATE • CLICK A PIECE TO SELECT • CLICK TARGET TO PLACE</div>
+</div>
+
+<div id="overlay">
+  <h1>CHROMATIC</h1>
+  <div class="sub">3D SPATIAL PUZZLE</div>
+  <button class="menu-btn" id="btn-play">START PUZZLE</button>
+  <div style="font-size:11px;color:#444;margin-top:14px;">DRAG — ORBIT CAMERA &nbsp;|&nbsp; SCROLL — ZOOM &nbsp;|&nbsp; CLICK — SELECT / PLACE</div>
+</div>
+
+<div id="shop-overlay">
+  <h2>PUZZLE SHOP</h2>
+  <div id="shop-coins-disp">🪙 0</div>
+  <div id="shop-grid"></div>
+  <div id="shop-skip">[ SKIP → ]</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js"></script>
+<script>
+// ─── META ─────────────────────────────────────────────────────────────────────
+const META_KEY='meta_chromatic_puzzle';
+const UPGRADES=[
+  {id:'hint_unlock', name:'Hint System',   desc:'Unlocks visual hints (H key)',     cost:25, maxLv:1, effect:'hint'},
+  {id:'score_bonus', name:'Scholar',       desc:'+20% score bonus per level',       cost:30, maxLv:3, effect:'score'},
+  {id:'undo',        name:'Undo Master',   desc:'+3 undos per puzzle per level',    cost:35, maxLv:3, effect:'undo'},
+  {id:'time_bonus',  name:'Speed Reader',  desc:'+10s time bonus per level',        cost:30, maxLv:3, effect:'time'},
+];
+let meta={coins:0,upgrades:{}};
+function loadMeta(){try{const s=localStorage.getItem(META_KEY);if(s)meta=JSON.parse(s);}catch(e){}
+  UPGRADES.forEach(u=>{if(!meta.upgrades[u.id])meta.upgrades[u.id]=0;});}
+function saveMeta(){try{localStorage.setItem(META_KEY,JSON.stringify(meta));}catch(e){}}
+function buyUpgrade(id){
+  const u=UPGRADES.find(u=>u.id===id);if(!u)return;
+  const lv=meta.upgrades[id];if(lv>=u.maxLv)return;
+  const cost=u.cost*(lv+1);if(meta.coins<cost)return;
+  meta.coins-=cost;meta.upgrades[id]++;saveMeta();
+}
+function applyUpgrades(){
+  const lv=id=>meta.upgrades[id]||0;
+  puz.hasHint=lv('hint_unlock')>0;
+  puz.scoreMult=1+lv('score_bonus')*0.2;
+  puz.maxUndos=3+lv('undo')*3;
+  puz.timeBonus=lv('time_bonus')*10;
+}
+loadMeta();
+
+// ─── THREE.JS ─────────────────────────────────────────────────────────────────
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.shadowMap.enabled=true;
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x080610);
+
+const camera=new THREE.PerspectiveCamera(60,window.innerWidth/window.innerHeight,0.1,200);
+camera.position.set(0,6,14);
+camera.lookAt(0,0,0);
+
+const clock=new THREE.Clock();
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+// ─── LIGHTING ─────────────────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x221133,1.0));
+const keyLight=new THREE.DirectionalLight(0xffeeff,1.0); keyLight.position.set(8,12,8); keyLight.castShadow=true; scene.add(keyLight);
+const fillLight=new THREE.DirectionalLight(0x334466,0.5); fillLight.position.set(-8,5,-8); scene.add(fillLight);
+// Colored point lights for atmosphere
+[[0x8844ff,8,8],[0xff44aa,-8,8],[0x44aaff,0,-8]].forEach(([col,x,z])=>{
+  const pl=new THREE.PointLight(col,1.5,20); pl.position.set(x,4,z); scene.add(pl);
+});
+
+// ─── ORBITAL CAMERA ──────────────────────────────────────────────────────────
+let camTheta=0, camPhi=0.6, camDist=14;
+let dragStart=null;
+canvas.addEventListener('mousedown',e=>{ if(e.button===2||e.button===1) dragStart={x:e.clientX,y:e.clientY,theta:camTheta,phi:camPhi}; });
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('mousemove',e=>{
+  if(!dragStart) return;
+  camTheta=dragStart.theta+(e.clientX-dragStart.x)*0.008;
+  camPhi=Math.max(0.1,Math.min(Math.PI*0.45,dragStart.phi-(e.clientY-dragStart.y)*0.008));
+});
+canvas.addEventListener('mouseup',()=>dragStart=null);
+canvas.addEventListener('wheel',e=>{ camDist=Math.max(5,Math.min(25,camDist+e.deltaY*0.02)); });
+
+// left button drag when not clicking a piece
+let leftDragStart=null;
+canvas.addEventListener('mousedown',e=>{
+  if(e.button===0) leftDragStart={x:e.clientX,y:e.clientY,theta:camTheta,phi:camPhi};
+});
+canvas.addEventListener('mousemove',e=>{
+  if(!leftDragStart) return;
+  const dx=e.clientX-leftDragStart.x, dy=e.clientY-leftDragStart.y;
+  if(Math.hypot(dx,dy)>4){
+    camTheta=leftDragStart.theta+dx*0.008;
+    camPhi=Math.max(0.1,Math.min(Math.PI*0.45,leftDragStart.phi-dy*0.008));
+  }
+});
+canvas.addEventListener('mouseup',()=>leftDragStart=null);
+
+// ─── PUZZLE STATE ─────────────────────────────────────────────────────────────
+const puz={
+  level:1, score:0, moves:0,
+  totalTime:0, levelTime:0,
+  hasHint:false, scoreMult:1, maxUndos:3, timeBonus:0,
+  undosLeft:3,
+  solved:false, dead:false,
+};
+
+// Puzzle types:
+// Each level has a set of colored blocks placed randomly on a board,
+// and a target arrangement shown via ghost pieces.
+// Player clicks a block to select it, clicks a slot to move it there.
+
+const COLORS=[
+  0xff4466, 0x44aaff, 0xffd700, 0x44ff88,
+  0xff8800, 0x8844ff, 0x00ffcc, 0xff44aa,
+];
+const COLOR_NAMES=['RED','BLUE','GOLD','GREEN','ORANGE','VIOLET','CYAN','PINK'];
+
+const GRID_SIZE=3; // 3x3 grid on a platform
+const CELL=1.8;
+const slots=[]; // {pos:Vector3, pieceId:null}
+const pieces=[]; // {id,colorIdx,mesh,slotIdx}
+const targets=[]; // target arrangement: slotIdx -> colorIdx
+const ghosts=[]; // ghost meshes showing targets
+const undoStack=[];
+
+let selectedPiece=null;
+let solvedBannerTimer=0;
+
+function clearPuzzle(){
+  pieces.forEach(p=>scene.remove(p.mesh));
+  pieces.length=0;
+  ghosts.forEach(g=>scene.remove(g));
+  ghosts.length=0;
+  slots.forEach(s=>{ s.pieceId=null; });
+  undoStack.length=0;
+  selectedPiece=null;
+}
+
+function buildPlatform(){
+  // Platform base
+  const platMat=new THREE.MeshLambertMaterial({color:0x1a1030});
+  const plat=new THREE.Mesh(new THREE.BoxGeometry(GRID_SIZE*CELL+1,0.3,GRID_SIZE*CELL+1),platMat);
+  plat.position.y=-0.3; plat.receiveShadow=true; scene.add(plat);
+
+  // Grid lines
+  const lineMat=new THREE.MeshBasicMaterial({color:0x332266});
+  for(let x=0;x<=GRID_SIZE;x++){
+    const px=x*CELL-(GRID_SIZE*CELL/2);
+    const lm=new THREE.Mesh(new THREE.BoxGeometry(0.04,0.02,GRID_SIZE*CELL),lineMat);
+    lm.position.set(px,0.01,0); scene.add(lm);
+  }
+  for(let z=0;z<=GRID_SIZE;z++){
+    const pz=z*CELL-(GRID_SIZE*CELL/2);
+    const lm=new THREE.Mesh(new THREE.BoxGeometry(GRID_SIZE*CELL,0.02,0.04),lineMat);
+    lm.position.set(0,0.01,pz); scene.add(lm);
+  }
+
+  // Slot positions
+  slots.length=0;
+  for(let z=0;z<GRID_SIZE;z++){
+    for(let x=0;x<GRID_SIZE;x++){
+      const px=(x+0.5)*CELL-(GRID_SIZE*CELL/2);
+      const pz=(z+0.5)*CELL-(GRID_SIZE*CELL/2);
+      slots.push({pos:new THREE.Vector3(px,0,pz), pieceId:null});
+    }
+  }
+
+  // Surrounding gems / atmosphere
+  for(let i=0;i<12;i++){
+    const a=i/12*Math.PI*2, r=6+Math.random()*2;
+    const gem=new THREE.Mesh(new THREE.OctahedronGeometry(0.18+Math.random()*0.12,0),
+      new THREE.MeshLambertMaterial({color:COLORS[Math.floor(Math.random()*COLORS.length)],emissive:0x220022}));
+    gem.position.set(Math.cos(a)*r,-0.2+Math.random()*0.3,Math.sin(a)*r);
+    gem.userData.spinY=Math.random()*2-1;
+    scene.add(gem);
+    scene.userData.gems=scene.userData.gems||[]; scene.userData.gems.push(gem);
+  }
+}
+
+function buildLevel(lv){
+  clearPuzzle();
+  puz.moves=0; puz.levelTime=0; puz.solved=false; puz.undosLeft=puz.maxUndos;
+
+  const n=Math.min(GRID_SIZE*GRID_SIZE, 3+lv); // pieces used (up to 9)
+  const colorCount=Math.min(COLORS.length, 2+Math.floor(lv/2));
+  const par=n+Math.floor(lv/2); // par moves
+
+  // Choose which slots are used
+  const slotIndices=[...Array(GRID_SIZE*GRID_SIZE).keys()];
+  shuffleArr(slotIndices);
+  const usedSlots=slotIndices.slice(0,n);
+
+  // Assign target colors
+  targets.length=0;
+  for(let i=0;i<GRID_SIZE*GRID_SIZE;i++) targets[i]=null;
+  usedSlots.forEach((si,pi)=>{
+    targets[si]=pi%colorCount;
+  });
+
+  // Ghost (target) pieces — semi-transparent
+  usedSlots.forEach(si=>{
+    const col=COLORS[targets[si]];
+    const mat=new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.18});
+    const ghost=new THREE.Mesh(new THREE.BoxGeometry(CELL*0.82,CELL*0.82,CELL*0.82),mat);
+    ghost.position.copy(slots[si].pos).add(new THREE.Vector3(0,CELL*0.41,0));
+    scene.add(ghost);
+    ghosts.push(ghost);
+  });
+
+  // Scramble: place pieces on random slots
+  const scrambledSlots=[...usedSlots];
+  shuffleArr(scrambledSlots);
+  usedSlots.forEach((origSi,pi)=>{
+    const colorIdx=targets[origSi];
+    const placedSlotIdx=scrambledSlots[pi];
+    spawnPiece(pi,colorIdx,placedSlotIdx);
+  });
+
+  document.getElementById('par-disp').textContent=`PAR: ${par} MOVES`;
+  document.getElementById('level-disp').textContent=`LEVEL ${puz.level}`;
+  updateHUD3();
+}
+
+function shuffleArr(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+}
+
+function spawnPiece(id,colorIdx,slotIdx){
+  const col=COLORS[colorIdx];
+  const mat=new THREE.MeshLambertMaterial({color:col,emissive:new THREE.Color(col).multiplyScalar(0.15)});
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(CELL*0.8,CELL*0.8,CELL*0.8),mat);
+  const s=slots[slotIdx];
+  mesh.position.copy(s.pos).add(new THREE.Vector3(0,CELL*0.4,0));
+  mesh.castShadow=true;
+  scene.add(mesh);
+  s.pieceId=id;
+  pieces.push({id,colorIdx,mesh,slotIdx,mat,baseCol:col});
+}
+
+// ─── RAYCASTING (click pieces / slots) ───────────────────────────────────────
+const raycaster=new THREE.Raycaster();
+const mouse2d=new THREE.Vector2();
+let lastClickTime=0;
+
+canvas.addEventListener('click',e=>{
+  if(gameState!=='playing') return;
+  const now=Date.now();
+  if(now-lastClickTime<200) return; // debounce
+  lastClickTime=now;
+
+  mouse2d.x=(e.clientX/window.innerWidth)*2-1;
+  mouse2d.y=-(e.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouse2d,camera);
+
+  // Check piece clicks
+  const pieceMeshes=pieces.map(p=>p.mesh);
+  const pHits=raycaster.intersectObjects(pieceMeshes);
+  if(pHits.length>0){
+    const hitMesh=pHits[0].object;
+    const piece=pieces.find(p=>p.mesh===hitMesh);
+    if(piece){
+      if(selectedPiece===piece){
+        deselectPiece();
+      } else {
+        if(selectedPiece) deselectPiece();
+        selectPiece(piece);
+      }
+      return;
+    }
+  }
+
+  // Check slot clicks (when a piece is selected)
+  if(selectedPiece){
+    // Use floor plane hit
+    const plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+    const pt=new THREE.Vector3();
+    raycaster.ray.intersectPlane(plane,pt);
+    if(pt){
+      // Find nearest slot
+      let bestSlot=null, bestD=Infinity;
+      slots.forEach((s,idx)=>{
+        const d=Math.hypot(pt.x-s.pos.x,pt.z-s.pos.z);
+        if(d<CELL*0.6&&d<bestD){ bestD=d; bestSlot={slot:s,idx}; }
+      });
+      if(bestSlot){
+        movePiece(selectedPiece,bestSlot.idx);
+        deselectPiece();
+      }
+    }
+  }
+});
+
+function selectPiece(piece){
+  selectedPiece=piece;
+  piece.mesh.scale.setScalar(1.1);
+  piece.mat.emissive=new THREE.Color(0.4,0.4,0.4);
+}
+function deselectPiece(){
+  if(!selectedPiece) return;
+  selectedPiece.mesh.scale.setScalar(1);
+  selectedPiece.mat.emissive=new THREE.Color(selectedPiece.baseCol).multiplyScalar(0.15);
+  selectedPiece=null;
+}
+
+function movePiece(piece,targetSlotIdx){
+  const fromSlot=piece.slotIdx;
+  const toSlot=slots[targetSlotIdx];
+
+  // If occupied, swap
+  if(toSlot.pieceId!==null && toSlot.pieceId!==piece.id){
+    const otherPiece=pieces.find(p=>p.id===toSlot.pieceId);
+    if(otherPiece){
+      undoStack.push({type:'swap',a:{piece:piece,slot:fromSlot},b:{piece:otherPiece,slot:targetSlotIdx}});
+      // Swap
+      slots[fromSlot].pieceId=otherPiece.id;
+      otherPiece.slotIdx=fromSlot;
+      otherPiece.mesh.position.copy(slots[fromSlot].pos).add(new THREE.Vector3(0,CELL*0.4,0));
+    }
+  } else {
+    undoStack.push({type:'move',piece,fromSlot});
+    slots[fromSlot].pieceId=null;
+  }
+
+  toSlot.pieceId=piece.id;
+  piece.slotIdx=targetSlotIdx;
+  piece.mesh.position.copy(toSlot.pos).add(new THREE.Vector3(0,CELL*0.4,0));
+  puz.moves++;
+
+  checkSolved();
+  updateHUD3();
+}
+
+function doUndo(){
+  if(undoStack.length===0||puz.undosLeft<=0) return;
+  puz.undosLeft--;
+  const entry=undoStack.pop();
+  if(entry.type==='move'){
+    slots[entry.piece.slotIdx].pieceId=null;
+    slots[entry.fromSlot].pieceId=entry.piece.id;
+    entry.piece.slotIdx=entry.fromSlot;
+    entry.piece.mesh.position.copy(slots[entry.fromSlot].pos).add(new THREE.Vector3(0,CELL*0.4,0));
+  } else if(entry.type==='swap'){
+    const {a,b}=entry;
+    slots[a.slot].pieceId=a.piece.id; a.piece.slotIdx=a.slot;
+    a.piece.mesh.position.copy(slots[a.slot].pos).add(new THREE.Vector3(0,CELL*0.4,0));
+    slots[b.slot].pieceId=b.piece.id; b.piece.slotIdx=b.slot;
+    b.piece.mesh.position.copy(slots[b.slot].pos).add(new THREE.Vector3(0,CELL*0.4,0));
+  }
+  puz.moves++;
+  updateHUD3();
+}
+
+window.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&e.code==='KeyZ') doUndo();
+  if(e.code==='Escape') deselectPiece();
+  if(e.code==='KeyH'&&puz.hasHint) showHint();
+});
+
+function showHint(){
+  // Briefly highlight misplaced pieces red, correct pieces green
+  pieces.forEach(p=>{
+    const correct=targets[p.slotIdx]===p.colorIdx;
+    p.mat.emissive=new THREE.Color(correct?0x00ff00:0xff0000).multiplyScalar(0.4);
+    setTimeout(()=>{
+      p.mat.emissive=new THREE.Color(p.baseCol).multiplyScalar(0.15);
+    },1200);
+  });
+}
+
+function checkSolved(){
+  const allCorrect=pieces.every(p=>targets[p.slotIdx]===p.colorIdx);
+  if(allCorrect){
+    puz.solved=true;
+    // Score: base + par bonus + time bonus
+    const parPenalty=Math.max(0,puz.moves-4)*5;
+    const timePenalty=Math.floor(puz.levelTime)*2;
+    const base=300*puz.level;
+    const earned=Math.max(50, Math.round((base-parPenalty-timePenalty)*puz.scoreMult));
+    puz.score+=earned;
+    const coins=Math.floor(earned/10)+puz.level;
+    meta.coins+=coins; saveMeta();
+
+    // Flash
+    const sf=document.getElementById('solve-flash');
+    sf.style.background='rgba(255,255,255,0.4)';
+    setTimeout(()=>sf.style.background='rgba(255,255,255,0)',300);
+    document.getElementById('solve-banner').style.opacity='1';
+    solvedBannerTimer=2;
+
+    // Next level after delay
+    setTimeout(()=>{
+      puz.level++;
+      buildLevel(puz.level);
+    },2500);
+  }
+}
+
+// ─── HUD ──────────────────────────────────────────────────────────────────────
+function updateHUD3(){
+  document.getElementById('score-disp').textContent=puz.score.toLocaleString();
+  document.getElementById('level-disp').textContent=`LEVEL ${puz.level}`;
+  document.getElementById('moves-disp').textContent=`MOVES: ${puz.moves}`;
+  document.getElementById('coins-disp').textContent=`🪙 ${meta.coins}`;
+  // Progress: pieces in correct position
+  const correct=pieces.filter(p=>targets[p.slotIdx]===p.colorIdx).length;
+  document.getElementById('progress-fill').style.width=(pieces.length>0?correct/pieces.length*100:0)+'%';
+  document.getElementById('hint-disp').textContent=puz.hasHint?
+    `DRAG — ORBIT  •  CLICK — SELECT/PLACE  •  H — HINT  •  CTRL+Z — UNDO (${puz.undosLeft})`:
+    `DRAG — ORBIT  •  CLICK — SELECT/PLACE  •  CTRL+Z — UNDO (${puz.undosLeft})`;
+}
+
+// ─── GAME STATE ───────────────────────────────────────────────────────────────
+let gameState='menu';
+
+function startGame(){
+  applyUpgrades();
+  puz.score=0; puz.level=1; puz.totalTime=0; puz.dead=false;
+  buildLevel(1);
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('hud').style.display='block';
+  gameState='playing'; updateHUD3();
+}
+
+function openShop(){ gameState='shop'; renderShop(); document.getElementById('shop-overlay').style.display='flex'; }
+function closeShop(){ document.getElementById('shop-overlay').style.display='none'; startGame(); }
+function renderShop(){
+  document.getElementById('shop-coins-disp').textContent=`🪙 ${meta.coins}`;
+  const grid=document.getElementById('shop-grid'); grid.innerHTML='';
+  UPGRADES.forEach(u=>{
+    const lv=meta.upgrades[u.id]||0,cost=u.cost*(lv+1),maxed=lv>=u.maxLv;
+    const card=document.createElement('div'); card.className='shop-card';
+    card.innerHTML=`<h3>${u.name}<span class="lvl">LV${lv}/${u.maxLv}</span></h3><p>${u.desc}</p><span class="cost">${maxed?'MAXED':'🪙 '+cost}</span>`;
+    if(!maxed&&meta.coins>=cost) card.onclick=()=>{buyUpgrade(u.id);renderShop();};
+    else card.style.opacity=maxed?'0.4':'0.6';
+    grid.appendChild(card);
+  });
+  document.getElementById('shop-skip').onclick=closeShop;
+}
+
+// ─── UPDATE ───────────────────────────────────────────────────────────────────
+function update(dt){
+  // Orbital camera
+  const cx=camDist*Math.sin(camTheta)*Math.cos(camPhi);
+  const cy=camDist*Math.sin(camPhi);
+  const cz=camDist*Math.cos(camTheta)*Math.cos(camPhi);
+  camera.position.set(cx,cy,cz);
+  camera.lookAt(0,0,0);
+
+  // Ambient gem rotation
+  (scene.userData.gems||[]).forEach(g=>{
+    g.rotation.y+=g.userData.spinY*dt;
+    g.position.y+= Math.sin(Date.now()*0.001+g.userData.spinY)*0.003;
+  });
+
+  // Piece hover float
+  pieces.forEach(p=>{
+    if(p===selectedPiece){
+      p.mesh.position.y=slots[p.slotIdx].pos.y+CELL*0.4+Math.sin(Date.now()*0.004)*0.15+0.2;
+    } else {
+      p.mesh.position.y=slots[p.slotIdx].pos.y+CELL*0.4;
+    }
+    p.mesh.rotation.y+=dt*0.4*(p===selectedPiece?2:0.2);
+  });
+
+  // Ghost pulse
+  ghosts.forEach((g,i)=>{ g.material.opacity=0.12+Math.sin(Date.now()*0.002+i)*0.06; });
+
+  if(gameState==='playing' && !puz.solved){
+    puz.levelTime+=dt; puz.totalTime+=dt;
+    const m=Math.floor(puz.totalTime/60); const s=Math.floor(puz.totalTime%60);
+    document.getElementById('timer-disp').textContent=`${m}:${s.toString().padStart(2,'0')}`;
+  }
+
+  if(solvedBannerTimer>0){
+    solvedBannerTimer-=dt;
+    if(solvedBannerTimer<=0) document.getElementById('solve-banner').style.opacity='0';
+  }
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+buildPlatform();
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  update(dt);
+  renderer.render(scene,camera);
+}
+animate();
+document.getElementById('btn-play').onclick=startGame;
+</script>
+</body>
+</html>

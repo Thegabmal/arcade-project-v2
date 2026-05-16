@@ -12,6 +12,11 @@ import re
 from config import call_gemini, with_fallback
 from logger import phase3_log
 
+try:
+    from rag import search_bug_fixes as _rag_search_bug_fixes
+except Exception:
+    def _rag_search_bug_fixes(*a, **kw): return []
+
 _IDENTIFIER_RE = re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_]{2,})\b')
 
 
@@ -150,10 +155,27 @@ Corrige EXACTEMENT cette erreur sans en introduire de nouvelles.
 
 """
 
+    # RAG lookup — inject known fix example if available
+    _rag_section = ""
+    try:
+        _rag_hits = _rag_search_bug_fixes(issue, n=1)
+        if _rag_hits:
+            hit = _rag_hits[0]
+            _rag_section = f"""
+KNOWN FIX PATTERN (from bug database — apply this approach):
+Symptom: {hit.get('symptom', '')}
+Buggy:   {hit.get('buggy_pattern', '')}
+Fixed:   {hit.get('fix_pattern', '')}
+Why:     {hit.get('explanation', '')}
+
+"""
+    except Exception:
+        pass
+
     prompt = f"""Bug à corriger dans cet extrait JavaScript :
 
 PROBLÈME : {issue}
-{_retry_section}
+{_rag_section}{_retry_section}
 RÈGLES ABSOLUES :
 - Corrige UNIQUEMENT ce problème précis, ne modifie rien d'autre
 - Retourne l'extrait corrigé COMPLET
@@ -385,13 +407,25 @@ def run(html: str, issues: list) -> str:
 
     phase3_log.agent_start("Pre-Patcher", f"{len(issues)} issue(s) — correction chirurgicale")
 
-    # Extraire le script principal
-    script_match = re.search(
-        r'(<script(?:\s[^>]*)?>)(.+?)(</script>)',
+    # Extraire le script principal (le plus long, hors CDN src= et polyfills)
+    # For 3D games the HTML has: CDN <script src=>, polyfill <script>, game <script>.
+    # Using re.search would match the polyfill (first non-empty block), causing the
+    # pre-patcher to inject variables there. Those variables also exist in the game
+    # script, so Node.js (which concatenates all blocks for checking) raises
+    # "Identifier already declared" → pre-patch rejected. Fix: pick the longest block.
+    _all_matches = list(re.finditer(
+        r'(<script(?:\s[^>]*)?>)(.*?)(</script>)',
         html, re.DOTALL | re.IGNORECASE
-    )
-    if not script_match:
+    ))
+    _valid_matches = [
+        m for m in _all_matches
+        if not re.search(r'\bsrc\s*=', m.group(1), re.IGNORECASE)
+        and len(m.group(2).strip()) > 50
+        and '// Polyfill' not in m.group(2)[:200]
+    ]
+    if not _valid_matches:
         return html
+    script_match = max(_valid_matches, key=lambda m: len(m.group(2)))
 
     prefix = html[:script_match.start(2)]
     script = script_match.group(2)
@@ -1027,13 +1061,23 @@ def run(html: str, issues: list) -> str:
                     continue
 
         if keyword:
-            # S5 — skip LLM si code syntaxiquement cassé
-            if not _code_syntaxically_ok:
-                phase3_log.info(f"Pre-Patcher : skip LLM '{keyword}' (code cassé)")
-                continue
-
             # S2 — Extraction function-boundary au lieu de N lignes arbitraires
             snippet, s_start, s_end = _extract_function_boundary(script, keyword)
+
+            # B1: snippet-level syntax check — allow LLM even if full script is broken,
+            # as long as the extracted snippet itself is syntactically valid.
+            # This unblocks the LLM when an error in a different function breaks the global check.
+            if not _code_syntaxically_ok:
+                try:
+                    # _quick_syntax_ok takes raw JS (not HTML) — wrap snippet in a closure
+                    _snip_js = f"var _b1=function(){{\n{snippet}\n}};"
+                    _snip_ok = _quick_syntax_ok(_snip_js)
+                except Exception:
+                    _snip_ok = False
+                if not _snip_ok:
+                    phase3_log.info(f"Pre-Patcher : skip LLM '{keyword}' (snippet cassé)")
+                    continue
+                phase3_log.info(f"Pre-Patcher : B1 snippet OK — LLM autorisé malgré script cassé ({keyword})")
 
             # P1 — Retry LLM avec feedback si premier essai rejeté (max 2 tentatives)
             _accepted = False
@@ -1098,6 +1142,22 @@ def run(html: str, issues: list) -> str:
                 applied.append(f"snippet corrigé ({keyword})" + (f" [retry {_llm_try+1}]" if _llm_try > 0 else ""))
                 _accepted = True
                 break
+
+            # Fix 6 — LLM failed both tries: fall back to COMMON_VARS deterministic injection
+            if not _accepted and keyword:
+                from code_validator import COMMON_VARS as _CV
+                _cv_val = _CV.get(keyword)
+                if _cv_val is not None:
+                    _already = (
+                        re.search(rf'\b(?:let|const|var)\s+{re.escape(keyword)}\b', script)
+                        or re.search(rf'(?:^|\n)\s*{re.escape(keyword)}\s*=\s*[^\s=]', script)
+                    )
+                    if not _already:
+                        _inject = f"let {keyword} = {_cv_val};\n"
+                        _candidate_cv = _inject_before_domready(script, _inject)
+                        if _quick_syntax_ok(_candidate_cv):
+                            script = _candidate_cv
+                            applied.append(f"{keyword} déclaré via COMMON_VARS fallback (LLM rejected)")
 
     # ── Event listeners canvas hors DOMContentLoaded (cause principale d'écran noir) ──
     script, el_fixed = _fix_canvas_listeners_outside_domready(script)
@@ -1210,6 +1270,10 @@ def _dedup_declarations(script: str, keep_last: bool = False) -> tuple[str, int]
             # ce qui trompe ensuite _fix_orphan_closing_braces et peut corrompre le code.
             line_stripped_end = line.rstrip()
             if line_stripped_end.endswith('{') or line_stripped_end.endswith('['):
+                continue
+            # Never remove declarations of critical canvas/timing globals
+            _NEVER_REMOVE = {'W', 'H', 'canvas', 'ctx', 'dt', 'gameState', 'lastTime'}
+            if name in _NEVER_REMOVE:
                 continue
             key = (name, indent)
             if key in seen:
@@ -1460,4 +1524,4 @@ def _fix_gameloop_scope(script: str) -> tuple[str, bool]:
 
 @with_fallback(None)
 def _call_llm(prompt: str) -> str:
-    return call_gemini(prompt, temperature=0.1, system_instruction=SYSTEM, max_tokens=8000)
+    return call_gemini(prompt, temperature=0.1, system_instruction=SYSTEM, max_tokens=8000, disable_thinking=True)

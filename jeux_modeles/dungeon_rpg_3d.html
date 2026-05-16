@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CRYPT OF IRON — Dungeon RPG 3D</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+  #c { display: block; width: 100vw; height: 100vh; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; font-family: system-ui, sans-serif; }
+  #hp-wrap { position: absolute; bottom: 50px; left: 24px; }
+  #hp-label { font-size: 11px; color: #888; letter-spacing: 2px; margin-bottom: 4px; }
+  #hp-bg { width: 180px; height: 14px; background: #222; border-radius: 7px; overflow: hidden; }
+  #hp-fill { height: 100%; background: linear-gradient(90deg,#c0392b,#e74c3c); border-radius: 7px; transition: width 0.2s; }
+  #mp-wrap { position: absolute; bottom: 76px; left: 24px; }
+  #mp-label { font-size: 11px; color: #888; letter-spacing: 2px; margin-bottom: 4px; }
+  #mp-bg { width: 180px; height: 10px; background: #222; border-radius: 5px; overflow: hidden; }
+  #mp-fill { height: 100%; background: linear-gradient(90deg,#2c3e9e,#3498db); border-radius: 5px; transition: width 0.3s; }
+  #xp-wrap { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 240px; }
+  #xp-label { font-size: 11px; color: #888; letter-spacing: 2px; margin-bottom: 4px; text-align: center; }
+  #xp-bg { width: 100%; height: 8px; background: #222; border-radius: 4px; overflow: hidden; }
+  #xp-fill { height: 100%; background: linear-gradient(90deg,#f39c12,#ffd700); border-radius: 4px; transition: width 0.3s; }
+  #score-disp {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    font-size: 20px; font-weight: 700; color: #ffd700; letter-spacing: 2px; text-shadow: 0 0 10px #ffd70055;
+  }
+  #floor-disp {
+    position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; color: #888; letter-spacing: 3px; text-transform: uppercase;
+  }
+  #level-disp { position: absolute; top: 20px; left: 24px; font-size: 16px; color: #ffd700; font-weight: 700; }
+  #coins-disp { position: absolute; top: 20px; right: 24px; font-size: 15px; color: #ffd700; }
+  #atk-disp { position: absolute; bottom: 50px; right: 24px; font-size: 14px; color: #ff8888; }
+  #def-disp { position: absolute; bottom: 72px; right: 24px; font-size: 14px; color: #88aaff; }
+  #hit-flash { position: absolute; inset: 0; background: rgba(192,57,43,0); pointer-events: none; transition: background 0.08s; }
+  #dmg-popup {
+    position: absolute; top: 40%; left: 50%; transform: translateX(-50%);
+    font-size: 28px; font-weight: 900; color: #ffd700;
+    opacity: 0; transition: opacity 0.3s; text-shadow: 0 0 12px #ffd700;
+    pointer-events: none;
+  }
+  #levelup-banner {
+    position: absolute; top: 35%; left: 50%; transform: translateX(-50%);
+    font-size: 26px; font-weight: 700; color: #ffd700;
+    opacity: 0; transition: opacity 0.3s; letter-spacing: 4px;
+    text-shadow: 0 0 20px #ffd700; pointer-events: none;
+  }
+
+  #overlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.9); color: #fff;
+  }
+  #overlay h1 {
+    font-size: 48px; font-weight: 900; letter-spacing: 6px;
+    color: #cc8800; text-shadow: 0 0 30px #cc880088;
+    font-family: 'Impact', system-ui; margin-bottom: 6px;
+  }
+  #overlay .sub { font-size: 13px; color: #666; letter-spacing: 4px; margin-bottom: 40px; }
+  .menu-btn {
+    padding: 13px 36px; margin: 5px;
+    font-size: 14px; font-weight: 700; letter-spacing: 2px;
+    border: 2px solid #cc8800; background: transparent; color: #cc8800;
+    cursor: pointer; text-transform: uppercase; transition: all 0.15s; font-family: system-ui;
+  }
+  .menu-btn:hover { background: #cc8800; color: #000; }
+  #gameover-score { font-size: 28px; color: #cc8800; margin: 16px 0; }
+
+  #shop-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.93);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; font-family: system-ui;
+  }
+  #shop-overlay h2 { font-size: 30px; color: #cc8800; letter-spacing: 4px; margin-bottom: 6px; }
+  #shop-coins-disp { font-size: 15px; color: #ffd700; margin-bottom: 24px; }
+  #shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 540px; width: 100%; }
+  .shop-card { border: 2px solid #333; padding: 16px; cursor: pointer; transition: all 0.15s; background: #080500; }
+  .shop-card:hover { border-color: #cc8800; background: #140a00; }
+  .shop-card h3 { font-size: 13px; color: #cc8800; margin-bottom: 6px; }
+  .shop-card p  { font-size: 11px; color: #666; margin-bottom: 10px; line-height: 1.4; }
+  .shop-card .cost { font-size: 12px; color: #ffd700; font-weight: 700; }
+  .shop-card .lvl  { font-size: 11px; color: #444; float: right; }
+  #shop-skip { margin-top: 18px; font-size: 13px; color: #444; cursor: pointer; letter-spacing: 2px; }
+  #shop-skip:hover { color: #aaa; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" style="display:none;">
+  <div id="hit-flash"></div>
+  <div id="score-disp">0</div>
+  <div id="floor-disp">FLOOR 1</div>
+  <div id="level-disp">LV 1</div>
+  <div id="coins-disp">🪙 0</div>
+  <div id="hp-wrap">
+    <div id="hp-label">HP</div>
+    <div id="hp-bg"><div id="hp-fill" style="width:100%"></div></div>
+  </div>
+  <div id="mp-wrap">
+    <div id="mp-label">MP</div>
+    <div id="mp-bg"><div id="mp-fill" style="width:100%"></div></div>
+  </div>
+  <div id="atk-disp">⚔ ATK 10</div>
+  <div id="def-disp">🛡 DEF 2</div>
+  <div id="xp-wrap">
+    <div id="xp-label">XP</div>
+    <div id="xp-bg"><div id="xp-fill" style="width:0%"></div></div>
+  </div>
+  <div id="dmg-popup"></div>
+  <div id="levelup-banner">LEVEL UP!</div>
+</div>
+
+<div id="overlay">
+  <h1>CRYPT OF IRON</h1>
+  <div class="sub">DUNGEON RPG 3D</div>
+  <button class="menu-btn" id="btn-play">DESCEND</button>
+  <div style="font-size:11px;color:#555;margin-top:14px;">WASD — MOVE &nbsp;|&nbsp; LMB — ATTACK &nbsp;|&nbsp; MOUSE — LOOK &nbsp;|&nbsp; F — MAGIC</div>
+</div>
+
+<div id="shop-overlay">
+  <h2>BLACKSMITH</h2>
+  <div id="shop-coins-disp">🪙 0</div>
+  <div id="shop-grid"></div>
+  <div id="shop-skip">[ SKIP → ]</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js"></script>
+<script>
+// ─── META ─────────────────────────────────────────────────────────────────────
+const META_KEY='meta_crypt_of_iron';
+const UPGRADES=[
+  {id:'sword',  name:'Tempered Blade', desc:'+5 ATK per level',           cost:35,maxLv:4,effect:'atk'},
+  {id:'shield', name:'Iron Ward',      desc:'+3 DEF per level',           cost:30,maxLv:4,effect:'def'},
+  {id:'vitality',name:'Vitality',      desc:'+20 max HP per level',       cost:40,maxLv:4,effect:'hp'},
+  {id:'arcana', name:'Arcana Tome',    desc:'+10 max MP per level',       cost:35,maxLv:3,effect:'mp'},
+];
+let meta={coins:0,upgrades:{}};
+function loadMeta(){try{const s=localStorage.getItem(META_KEY);if(s)meta=JSON.parse(s);}catch(e){}
+  UPGRADES.forEach(u=>{if(!meta.upgrades[u.id])meta.upgrades[u.id]=0;});}
+function saveMeta(){try{localStorage.setItem(META_KEY,JSON.stringify(meta));}catch(e){}}
+function buyUpgrade(id){
+  const u=UPGRADES.find(u=>u.id===id);if(!u)return;
+  const lv=meta.upgrades[id];if(lv>=u.maxLv)return;
+  const cost=u.cost*(lv+1);if(meta.coins<cost)return;
+  meta.coins-=cost;meta.upgrades[id]++;saveMeta();
+}
+function applyUpgrades(){
+  const lv=id=>meta.upgrades[id]||0;
+  hero.bonusAtk=lv('sword')*5;
+  hero.bonusDef=lv('shield')*3;
+  hero.maxHp=80+lv('vitality')*20;
+  hero.maxMp=40+lv('arcana')*10;
+}
+loadMeta();
+
+// ─── THREE.JS ─────────────────────────────────────────────────────────────────
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+renderer.setSize(window.innerWidth,window.innerHeight);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x060408);
+scene.fog=new THREE.FogExp2(0x060408,0.06);
+
+const camera=new THREE.PerspectiveCamera(65,window.innerWidth/window.innerHeight,0.1,80);
+const clock=new THREE.Clock();
+
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+// ─── LIGHTING ─────────────────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x110815,1.2));
+const heroLight=new THREE.PointLight(0xff8833,2,12);
+scene.add(heroLight);
+
+// ─── HERO ─────────────────────────────────────────────────────────────────────
+const hero={
+  pos:new THREE.Vector3(0,0,0),
+  hp:80,maxHp:80,mp:40,maxMp:40,
+  atk:10,def:2,level:1,xp:0,xpNext:30,
+  bonusAtk:0,bonusDef:0,
+  score:0,floor:1,
+  attackCooldown:0, magicCooldown:0,
+  dead:false,
+};
+
+// ─── CAMERA CONTROL ───────────────────────────────────────────────────────────
+let camYaw=0,camPitch=0.6;
+canvas.addEventListener('click',()=>canvas.requestPointerLock());
+document.addEventListener('mousemove',e=>{
+  if(document.pointerLockElement!==canvas) return;
+  camYaw-=e.movementX*0.003;
+  camPitch=Math.max(0.2,Math.min(1.4,camPitch-e.movementY*0.002));
+});
+const keys={};
+window.addEventListener('keydown',e=>keys[e.code]=true);
+window.addEventListener('keyup',  e=>keys[e.code]=false);
+
+let attacking=false, casting=false;
+window.addEventListener('mousedown',e=>{if(e.button===0) attacking=true;});
+window.addEventListener('mouseup',  e=>{if(e.button===0) attacking=false;});
+window.addEventListener('keydown',  e=>{if(e.code==='KeyF') casting=true;});
+window.addEventListener('keyup',    e=>{if(e.code==='KeyF') casting=false;});
+
+// ─── DUNGEON GRID ─────────────────────────────────────────────────────────────
+const ROOM_W=10, ROOM_D=12, CELL=2;
+const dungeonMeshes=[], enemies=[], items=[], magicOrbs=[];
+
+const matFloor=new THREE.MeshLambertMaterial({color:0x1a1018});
+const matWall =new THREE.MeshLambertMaterial({color:0x2a2030});
+const matBoss =new THREE.MeshLambertMaterial({color:0x6600cc});
+
+function buildDungeon(floorNum){
+  dungeonMeshes.forEach(m=>scene.remove(m)); dungeonMeshes.length=0;
+  enemies.length=0; items.length=0;
+
+  const W=ROOM_W,D=ROOM_D;
+  // Floor
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(W*CELL,D*CELL),matFloor);
+  floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor); dungeonMeshes.push(floor);
+
+  // Ceiling
+  const ceil=new THREE.Mesh(new THREE.PlaneGeometry(W*CELL,D*CELL),matWall);
+  ceil.rotation.x=Math.PI/2; ceil.position.y=CELL*2; scene.add(ceil); dungeonMeshes.push(ceil);
+
+  // Walls
+  const wallConfigs=[
+    {s:[W*CELL,CELL*2,0.3],p:[0,CELL,-D*CELL/2]},
+    {s:[W*CELL,CELL*2,0.3],p:[0,CELL, D*CELL/2]},
+    {s:[0.3,CELL*2,D*CELL],p:[-W*CELL/2,CELL,0]},
+    {s:[0.3,CELL*2,D*CELL],p:[ W*CELL/2,CELL,0]},
+  ];
+  wallConfigs.forEach(({s,p})=>{
+    const m=new THREE.Mesh(new THREE.BoxGeometry(...s),matWall);
+    m.position.set(...p); m.castShadow=true; m.receiveShadow=true;
+    scene.add(m); dungeonMeshes.push(m);
+  });
+
+  // Pillars + torches
+  [[-3,0,-4],[3,0,-4],[-3,0,4],[3,0,4]].forEach(([x,,z])=>{
+    const p=new THREE.Mesh(new THREE.BoxGeometry(0.6,CELL*2,0.6),matWall);
+    p.position.set(x,CELL,z); scene.add(p); dungeonMeshes.push(p);
+    // Torch glow
+    const torch=new THREE.PointLight(0xff6600,2,6);
+    torch.position.set(x,CELL*1.5,z); scene.add(torch); dungeonMeshes.push(torch);
+  });
+
+  // Enemies
+  const enemyCount=3+floorNum;
+  const isBossFloor=floorNum%5===0;
+  for(let i=0;i<(isBossFloor?1:enemyCount);i++){
+    const boss=isBossFloor;
+    spawnEnemy(boss?'boss':(['skeleton','orc','spider'][Math.floor(Math.random()*3)]),
+      (Math.random()-0.5)*(W-2)*CELL, (Math.random()-0.5)*(D-2)*CELL, boss);
+  }
+
+  // Items (heal potions, gold)
+  const ic=2+Math.floor(floorNum/2);
+  for(let i=0;i<ic;i++){
+    const type=Math.random()<0.5?'hp':'mp';
+    const ix=(Math.random()-0.5)*(W-2)*CELL;
+    const iz=(Math.random()-0.5)*(D-2)*CELL;
+    const mat=new THREE.MeshLambertMaterial({color:type==='hp'?0xff4444:0x4444ff,emissive:type==='hp'?0x441111:0x111144});
+    const mesh=new THREE.Mesh(new THREE.SphereGeometry(0.2,8,8),mat);
+    mesh.position.set(ix,0.3,iz); scene.add(mesh); dungeonMeshes.push(mesh);
+    items.push({mesh,type,taken:false});
+  }
+
+  // Stairs to next floor
+  const stairMat=new THREE.MeshLambertMaterial({color:0xffd700,emissive:0x443300});
+  const stairMesh=new THREE.Mesh(new THREE.BoxGeometry(1,0.2,1),stairMat);
+  stairMesh.position.set((W/2-1)*CELL,0.1,(D/2-1)*CELL); scene.add(stairMesh); dungeonMeshes.push(stairMesh);
+  scene.userData.stairs=stairMesh;
+
+  // Lights
+  [0,Math.PI/2,Math.PI,Math.PI*3/2].forEach(a=>{
+    const pl=new THREE.PointLight(0xaa3300,1,10);
+    pl.position.set(Math.cos(a)*3,CELL*1.8,Math.sin(a)*3); scene.add(pl); dungeonMeshes.push(pl);
+  });
+}
+
+const ENEMY_DEFS={
+  skeleton:{hp:8, atk:4, speed:1.5, reward:15, xp:8, col:0xccccaa},
+  orc:     {hp:18,atk:8, speed:1.0, reward:25, xp:15,col:0x449922},
+  spider:  {hp:6, atk:5, speed:2.5, reward:12, xp:10,col:0x664422},
+  boss:    {hp:60,atk:15,speed:1.2, reward:100,xp:60,col:0x8800cc},
+};
+
+function spawnEnemy(type,x,z){
+  const def=ENEMY_DEFS[type];
+  const scale=type==='boss'?1.8:1;
+  const mat=new THREE.MeshLambertMaterial({color:def.col});
+  const grp=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(0.7*scale,1.4*scale,0.6*scale),mat);
+  body.position.y=0.7*scale; grp.add(body);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(0.6*scale,0.6*scale,0.6*scale),mat);
+  head.position.y=1.7*scale; grp.add(head);
+  grp.position.set(x,0,z);
+  scene.add(grp);
+  enemies.push({type,grp,mat,hp:def.hp,maxHp:def.hp,atk:def.atk,speed:def.speed,
+    reward:def.reward,xp:def.xp,attackTimer:0,dead:false});
+}
+
+// ─── ATTACK VFX ──────────────────────────────────────────────────────────────
+let swingTimer=0;
+function attackFlash(){
+  swingTimer=0.15;
+}
+
+// ─── MAGIC ────────────────────────────────────────────────────────────────────
+const orbMat=new THREE.MeshBasicMaterial({color:0x66aaff});
+function castMagic(){
+  if(hero.mp<10) return;
+  hero.mp-=10;
+  const dir=new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const mesh=new THREE.Mesh(new THREE.SphereGeometry(0.15,8,8),orbMat);
+  mesh.position.copy(camera.position).addScaledVector(dir,0.5);
+  scene.add(mesh);
+  magicOrbs.push({mesh,dir:dir.clone(),life:2,dmg:15});
+}
+
+// ─── HUD ──────────────────────────────────────────────────────────────────────
+let dmgPopTimer=0,levelupTimer=0;
+function updateHUD(){
+  document.getElementById('score-disp').textContent=hero.score.toLocaleString();
+  document.getElementById('floor-disp').textContent=`FLOOR ${hero.floor}`;
+  document.getElementById('level-disp').textContent=`LV ${hero.level}`;
+  document.getElementById('coins-disp').textContent=`🪙 ${meta.coins}`;
+  document.getElementById('hp-fill').style.width=(hero.hp/hero.maxHp*100)+'%';
+  document.getElementById('mp-fill').style.width=(hero.mp/hero.maxMp*100)+'%';
+  document.getElementById('xp-fill').style.width=(hero.xp/hero.xpNext*100)+'%';
+  document.getElementById('xp-label').textContent=`XP ${hero.xp}/${hero.xpNext}`;
+  document.getElementById('atk-disp').textContent=`⚔ ATK ${hero.atk+hero.bonusAtk}`;
+  document.getElementById('def-disp').textContent=`🛡 DEF ${hero.def+hero.bonusDef}`;
+}
+
+function showDmg(val){
+  const el=document.getElementById('dmg-popup');
+  el.textContent=`-${val}`; el.style.opacity='1'; dmgPopTimer=0.8;
+}
+function flashHit(){
+  const el=document.getElementById('hit-flash');
+  el.style.background='rgba(192,57,43,0.4)';
+  setTimeout(()=>el.style.background='rgba(192,57,43,0)',100);
+}
+function gainXP(amount){
+  hero.xp+=amount;
+  if(hero.xp>=hero.xpNext){
+    hero.xp-=hero.xpNext; hero.level++;
+    hero.xpNext=Math.floor(hero.xpNext*1.4);
+    hero.atk+=3; hero.def+=1; hero.maxHp+=10;
+    hero.hp=Math.min(hero.maxHp,hero.hp+20);
+    const el=document.getElementById('levelup-banner');
+    el.style.opacity='1'; levelupTimer=2;
+  }
+}
+
+// ─── GAME STATE ───────────────────────────────────────────────────────────────
+let gameState='menu';
+
+function startGame(){
+  applyUpgrades();
+  hero.hp=hero.maxHp; hero.mp=hero.maxMp;
+  hero.atk=10; hero.def=2; hero.level=1; hero.xp=0; hero.xpNext=30;
+  hero.score=0; hero.floor=1; hero.dead=false;
+  hero.pos.set(0,0,0); camYaw=0; camPitch=0.6;
+  buildDungeon(1);
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('hud').style.display='block';
+  gameState='playing'; updateHUD();
+}
+
+function triggerGameOver(){
+  hero.dead=true; gameState='gameover';
+  document.exitPointerLock();
+  const coins=Math.floor(hero.score/8);
+  meta.coins+=coins; saveMeta();
+  document.getElementById('hud').style.display='none';
+  const ov=document.getElementById('overlay');
+  ov.innerHTML=`<h1>CRYPT OF IRON</h1><div class="sub">YOU FELL</div>
+    <div id="gameover-score">${hero.score.toLocaleString()}</div>
+    <div style="font-size:13px;color:#666;margin-bottom:22px;">FLOOR ${hero.floor} — +${coins} 🪙</div>
+    <button class="menu-btn" id="btn-shop">BLACKSMITH</button>
+    <button class="menu-btn" id="btn-retry">DESCEND AGAIN</button>`;
+  ov.style.display='flex';
+  document.getElementById('btn-shop').onclick=()=>{ov.style.display='none';openShop();};
+  document.getElementById('btn-retry').onclick=startGame;
+}
+
+function openShop(){ gameState='shop'; renderShop(); document.getElementById('shop-overlay').style.display='flex'; }
+function closeShop(){ document.getElementById('shop-overlay').style.display='none'; startGame(); }
+function renderShop(){
+  document.getElementById('shop-coins-disp').textContent=`🪙 ${meta.coins}`;
+  const grid=document.getElementById('shop-grid'); grid.innerHTML='';
+  UPGRADES.forEach(u=>{
+    const lv=meta.upgrades[u.id]||0, cost=u.cost*(lv+1), maxed=lv>=u.maxLv;
+    const card=document.createElement('div'); card.className='shop-card';
+    card.innerHTML=`<h3>${u.name}<span class="lvl">LV${lv}/${u.maxLv}</span></h3><p>${u.desc}</p><span class="cost">${maxed?'MAXED':'🪙 '+cost}</span>`;
+    if(!maxed&&meta.coins>=cost) card.onclick=()=>{buyUpgrade(u.id);renderShop();};
+    else card.style.opacity=maxed?'0.4':'0.6';
+    grid.appendChild(card);
+  });
+  document.getElementById('shop-skip').onclick=closeShop;
+}
+
+// ─── UPDATE ───────────────────────────────────────────────────────────────────
+const MOVE_SPEED=4;
+function update(dt){
+  if(gameState!=='playing') return;
+
+  // Camera rotation
+  camera.rotation.order='YXZ';
+  camera.rotation.y=camYaw;
+  camera.rotation.x=0;
+
+  // Movement
+  const fwd=new THREE.Vector3(-Math.sin(camYaw),0,-Math.cos(camYaw));
+  const rgt=new THREE.Vector3(Math.cos(camYaw),0,-Math.sin(camYaw));
+  const move=new THREE.Vector3();
+  if(keys['KeyW']||keys['ArrowUp'])    move.add(fwd);
+  if(keys['KeyS']||keys['ArrowDown'])  move.sub(fwd);
+  if(keys['KeyA']||keys['ArrowLeft'])  move.sub(rgt);
+  if(keys['KeyD']||keys['ArrowRight']) move.add(rgt);
+  if(move.lengthSq()>0){
+    move.normalize().multiplyScalar(MOVE_SPEED*dt);
+    const nx=hero.pos.x+move.x, nz=hero.pos.z+move.z;
+    const hw=ROOM_W*CELL/2-0.5, hd=ROOM_D*CELL/2-0.5;
+    hero.pos.x=Math.max(-hw,Math.min(hw,nx));
+    hero.pos.z=Math.max(-hd,Math.min(hd,nz));
+  }
+
+  camera.position.set(hero.pos.x,1.7,hero.pos.z);
+  heroLight.position.copy(camera.position);
+
+  // Attack cooldown
+  hero.attackCooldown=Math.max(0,hero.attackCooldown-dt);
+  if(swingTimer>0) swingTimer-=dt;
+
+  // Attack
+  if(attacking && hero.attackCooldown<=0){
+    hero.attackCooldown=0.6;
+    attackFlash();
+    const fwd2=new THREE.Vector3(); camera.getWorldDirection(fwd2);
+    enemies.forEach(e=>{
+      if(e.dead) return;
+      const toE=new THREE.Vector3().subVectors(e.grp.position,camera.position);
+      if(toE.length()<2.5 && toE.dot(fwd2)>0){
+        const dmg=Math.max(1,hero.atk+hero.bonusAtk-e.type==='boss'?2:0);
+        e.hp-=dmg; hero.score+=5;
+        if(e.hp<=0){
+          e.dead=true; scene.remove(e.grp);
+          hero.score+=e.reward; gainXP(e.xp);
+          meta.coins+=Math.floor(e.reward/5); saveMeta();
+        }
+      }
+    });
+  }
+
+  // Magic
+  hero.magicCooldown=Math.max(0,hero.magicCooldown-dt);
+  if(casting && hero.magicCooldown<=0 && hero.mp>=10){
+    castMagic(); hero.magicCooldown=0.4;
+  }
+
+  // Magic orbs
+  for(let i=magicOrbs.length-1;i>=0;i--){
+    const o=magicOrbs[i];
+    o.mesh.position.addScaledVector(o.dir,14*dt); o.life-=dt;
+    if(o.life<=0){ scene.remove(o.mesh); magicOrbs.splice(i,1); continue; }
+    let hit=false;
+    enemies.forEach(e=>{ if(e.dead||hit) return;
+      if(o.mesh.position.distanceTo(e.grp.position)<1.2){
+        e.hp-=o.dmg; hit=true;
+        if(e.hp<=0){ e.dead=true; scene.remove(e.grp); hero.score+=e.reward; gainXP(e.xp); meta.coins+=Math.floor(e.reward/5); saveMeta(); }
+      }
+    });
+    if(hit){ scene.remove(o.mesh); magicOrbs.splice(i,1); }
+  }
+
+  // Enemy AI
+  enemies.forEach(e=>{
+    if(e.dead) return;
+    const toHero=new THREE.Vector3().subVectors(hero.pos,e.grp.position);
+    const dist=toHero.length();
+    if(dist<12){
+      toHero.normalize();
+      e.grp.position.addScaledVector(toHero,e.speed*dt);
+      e.grp.lookAt(hero.pos.x,e.grp.position.y,hero.pos.z);
+      e.grp.position.y=0;
+    }
+    e.attackTimer-=dt;
+    if(dist<1.4 && e.attackTimer<=0){
+      e.attackTimer=1.5;
+      const dmg=Math.max(1,e.atk-(hero.def+hero.bonusDef));
+      hero.hp-=dmg; flashHit(); showDmg(dmg);
+      if(hero.hp<=0){ hero.hp=0; triggerGameOver(); }
+    }
+  });
+
+  // Items
+  items.forEach(it=>{
+    if(it.taken) return;
+    if(hero.pos.distanceTo(it.mesh.position)<0.8){
+      it.taken=true; scene.remove(it.mesh);
+      if(it.type==='hp') hero.hp=Math.min(hero.maxHp,hero.hp+25);
+      else hero.mp=Math.min(hero.maxMp,hero.mp+15);
+    }
+    it.mesh.rotation.y+=dt;
+  });
+
+  // Stairs
+  if(scene.userData.stairs){
+    const s=scene.userData.stairs;
+    s.rotation.y+=dt;
+    if(hero.pos.distanceTo(s.position)<1.2 && enemies.every(e=>e.dead)){
+      hero.floor++; hero.score+=200; meta.coins+=5; saveMeta();
+      buildDungeon(hero.floor);
+      hero.pos.set(0,0,0);
+    }
+  }
+
+  // HP regen
+  hero.mp=Math.min(hero.maxMp,hero.mp+2*dt);
+
+  // Timers
+  if(dmgPopTimer>0){ dmgPopTimer-=dt; if(dmgPopTimer<=0) document.getElementById('dmg-popup').style.opacity='0'; }
+  if(levelupTimer>0){ levelupTimer-=dt; if(levelupTimer<=0) document.getElementById('levelup-banner').style.opacity='0'; }
+
+  updateHUD();
+}
+
+buildDungeon(1); // initial build for background
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  update(dt);
+  renderer.render(scene,camera);
+}
+camera.position.set(0,1.7,0);
+animate();
+document.getElementById('btn-play').onclick=startGame;
+</script>
+</body>
+</html>

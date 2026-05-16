@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -51,12 +51,12 @@
     .btn-log-sm:hover { background: rgba(255,255,255,0.1); color: #fff; }
     .btn-reeval-sm {
       display: inline-flex; align-items: center; gap: 4px;
-      padding: 4px 10px; background: rgba(80,140,255,0.08);
-      border: 1px solid rgba(80,140,255,0.2); border-radius: 6px;
-      color: rgba(120,170,255,0.7); font-size: 11px; cursor: pointer;
+      padding: 4px 10px; background: rgba(124,92,252,0.08);
+      border: 1px solid rgba(124,92,252,0.22); border-radius: 6px;
+      color: rgba(185,168,255,0.8); font-size: 11px; cursor: pointer;
       transition: background 0.15s;
     }
-    .btn-reeval-sm:hover { background: rgba(80,140,255,0.18); color: #fff; }
+    .btn-reeval-sm:hover { background: rgba(124,92,252,0.18); color: #fff; }
     .reeval-overlay {
       display: none; position: fixed; inset: 0; z-index: 9000;
       background: rgba(0,0,0,0.75); backdrop-filter: blur(6px);
@@ -64,14 +64,14 @@
     }
     .reeval-overlay.open { display: flex; }
     .reeval-card {
-      background: #0d0d14; border: 1px solid rgba(80,140,255,0.2);
+      background: #0d0d14; border: 1px solid rgba(124,92,252,0.25);
       border-radius: 14px; padding: 28px 32px; min-width: 300px;
       text-align: center; font-family: 'Inter', sans-serif;
     }
     .reeval-card h3 { color: rgba(255,255,255,0.8); font-size: 14px; margin-bottom: 8px; }
     .reeval-card p  { color: rgba(255,255,255,0.35); font-size: 11px; margin-bottom: 20px; }
     .reeval-progress { height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; margin-bottom: 16px; }
-    .reeval-progress-bar { height: 100%; background: rgba(80,140,255,0.7); border-radius: 2px; animation: reeval-slide 1.4s ease-in-out infinite; }
+    .reeval-progress-bar { height: 100%; background: rgba(124,92,252,0.7); border-radius: 2px; animation: reeval-slide 1.4s ease-in-out infinite; }
     @keyframes reeval-slide { 0%{width:0%;margin-left:0} 50%{width:60%;margin-left:20%} 100%{width:0%;margin-left:100%} }
     .reeval-status { font-size: 11px; color: rgba(255,255,255,0.3); min-height: 16px; }
     .reeval-score-big { font-size: 36px; font-weight: 700; margin: 10px 0 4px; display: none; }
@@ -151,16 +151,16 @@
     </div>
   </div>
 
-  <!-- Overlay réévaluation -->
+  <!-- Re-evaluation overlay -->
   <div id="reeval-overlay" class="reeval-overlay">
     <div class="reeval-card">
-      <h3 id="reeval-title">Réévaluation en cours</h3>
-      <p>Les agents analysent le code actuel du jeu…</p>
+      <h3 id="reeval-title">Re-evaluating...</h3>
+      <p>Agents are analyzing the current game code…</p>
       <div class="reeval-progress"><div class="reeval-progress-bar" id="reeval-bar"></div></div>
-      <div class="reeval-status" id="reeval-status">Initialisation…</div>
+      <div class="reeval-status" id="reeval-status">Initializing…</div>
       <div class="reeval-score-big" id="reeval-score-big">—</div>
-      <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:4px;display:none" id="reeval-score-label">Score global / 10</div>
-      <button class="reeval-close" id="reeval-close" onclick="closeReevalOverlay()">Fermer & actualiser</button>
+      <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:4px;display:none" id="reeval-score-label">Global score / 10</div>
+      <button class="reeval-close" id="reeval-close" onclick="closeReevalOverlay()">Close & refresh</button>
     </div>
   </div>
 
@@ -187,8 +187,8 @@
     function formatDate(iso) {
       if (!iso) return '—';
       const d = new Date(iso);
-      return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })
-        + ' · ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: '2-digit' })
+        + ' · ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     }
 
     function formatDuration(secs) {
@@ -230,7 +230,7 @@
         <div class="game-card-bottom">
           <span class="game-date">${formatDate(game.date)}${dur}</span>
           <div class="game-actions">
-            <button class="btn-reeval-sm" onclick="startReevaluation('${game.html_basename}', '${(game.titre||'').replace(/'/g,'\\\'')}')">Réévaluer</button>
+            <button class="btn-reeval-sm" onclick="startReevaluation('${game.html_basename}', '${(game.titre||'').replace(/'/g,'\\\'')}')">Re-evaluate</button>
             <button class="btn-log-sm" onclick="openLogModal('${game.html_basename}', '${(game.titre||'').replace(/'/g,'\\\'')}')" title="View pipeline log">Log</button>
             <a href="/play/${game.html_basename}" class="btn-play-sm" target="_blank">Play</a>
             <a href="/debug/${game.html_basename}" class="btn-log-sm" target="_blank">Debug</a>
@@ -248,13 +248,13 @@
       try {
         const res = await fetch(`/api/game-log/${htmlBasename}`);
         if (!res.ok) {
-          document.getElementById('log-modal-body').textContent = 'Log non disponible pour ce jeu.';
+          document.getElementById('log-modal-body').textContent = 'No log available for this game.';
           return;
         }
         const text = await res.text();
         renderLog(text);
       } catch(e) {
-        document.getElementById('log-modal-body').textContent = `Erreur : ${e.message}`;
+        document.getElementById('log-modal-body').textContent = `Error: ${e.message}`;
       }
     }
 
@@ -371,8 +371,8 @@
     loadHistory();
 
     async function startReevaluation(filename, titre) {
-      document.getElementById('reeval-title').textContent = titre ? `Réévaluation — ${titre.slice(0,30)}` : 'Réévaluation en cours';
-      document.getElementById('reeval-status').textContent = 'Lancement des agents…';
+      document.getElementById('reeval-title').textContent = titre ? `Re-evaluating — ${titre.slice(0,30)}` : 'Re-evaluating...';
+      document.getElementById('reeval-status').textContent = 'Launching agents…';
       document.getElementById('reeval-score-big').style.display = 'none';
       document.getElementById('reeval-score-label').style.display = 'none';
       document.getElementById('reeval-close').style.display = 'none';
@@ -405,13 +405,13 @@
             scoreEl.style.color = score >= 8 ? 'rgba(100,220,100,0.9)' : score >= 6 ? 'rgba(220,180,50,0.9)' : 'rgba(220,80,80,0.9)';
             scoreEl.style.display = 'block';
             document.getElementById('reeval-score-label').style.display = 'block';
-            document.getElementById('reeval-status').textContent = 'Metadata mis à jour.';
+            document.getElementById('reeval-status').textContent = 'Metadata updated.';
             document.getElementById('reeval-close').style.display = 'inline-block';
             bar.style.animation = 'none';
             bar.style.width = '100%';
           } else if (event.type === 'error') {
             evtSource.close();
-            document.getElementById('reeval-status').textContent = `Erreur : ${event.data.message}`;
+            document.getElementById('reeval-status').textContent = `Error: ${event.data.message}`;
             document.getElementById('reeval-close').style.display = 'inline-block';
           } else if (event.type === 'end') {
             evtSource.close();
@@ -419,11 +419,11 @@
         };
         evtSource.onerror = () => {
           evtSource.close();
-          document.getElementById('reeval-status').textContent = 'Connexion perdue.';
+          document.getElementById('reeval-status').textContent = 'Connection lost.';
           document.getElementById('reeval-close').style.display = 'inline-block';
         };
       } catch(err) {
-        document.getElementById('reeval-status').textContent = `Erreur : ${err.message}`;
+        document.getElementById('reeval-status').textContent = `Error: ${err.message}`;
         document.getElementById('reeval-close').style.display = 'inline-block';
       }
     }

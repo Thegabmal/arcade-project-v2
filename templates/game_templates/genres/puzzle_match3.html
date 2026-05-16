@@ -1,0 +1,724 @@
+<!--
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ARCADE PROJECT — MATCH-3 / PUZZLE TEMPLATE — USAGE GUIDE                      ║
+║  Read this entirely before writing a single line of code.                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ ROLE ──────────────────────────────────────────────────────────────────────┐
+│ You are a senior HTML5 Canvas 2D game developer.                            │
+│ Your job: fill the [FILL: ...] sections to create a complete, playable game. │
+│ You do NOT write the engine — it is already written and tested.             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ THE TWO ZONES ─────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  1. ENGINE — DO NOT MODIFY  (lines below this comment, until first [FILL])  │
+│     ┌───────────────────────────────────────────────────────────────────┐   │
+│     │  Complete, crash-proof boilerplate. Copy EVERY character exactly. │   │
+│     │  Any change to ENGINE will break the game in a non-obvious way.   │   │
+│     └───────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  2. [FILL: ...] sections  — YOUR creative contribution                       │
+│     ┌───────────────────────────────────────────────────────────────────┐   │
+│     │  Replace EVERY placeholder with real, working JavaScript.         │   │
+│     │  Any [FILL] left in your output = a broken or incomplete game.    │   │
+│     └───────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SACRED CONTRACT — ENGINE VARIABLES (NEVER redeclare these) ────────────────┐
+│                                                                              │
+│  The ENGINE already declares and initialises these. If you add another      │
+│  "var/let/const X = ..." for any of these names, you WILL overwrite them    │
+│  with null/0 at runtime — guaranteed crash on the first draw call.          │
+│                                                                              │
+│  canvas   → HTMLCanvasElement  (getElementById — already set up)            │
+│  ctx       → CanvasRenderingContext2D (getContext — already set up)         │
+│  W, H      → logical canvas dimensions (480 × 640 — fixed for this genre)  │
+│  DPR       → device pixel ratio (handled by resizeCanvas)                   │
+│  gameState → string: 'menu' | 'playing' | 'paused' | 'gameover' | 'shop'   │
+│  Keys      → { down:{}, pressed:{}, released:{} }  — keyboard state        │
+│  Touch     → { justTapped, x, y }  — touch state                           │
+│  Mouse     → { clicked, x, y }  — mouse state                              │
+│  lastTime, accumulator  → game loop timing                                  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ENGINE FUNCTIONS — USE THESE, DO NOT REWRITE THEM ─────────────────────────┐
+│                                                                              │
+│  Input:                                                                      │
+│    keyDown('ArrowLeft')      → is key held this frame?                      │
+│    keyPressed('Space')       → was key just pressed?                        │
+│    anyAction()               → any key/click/tap?                           │
+│    flushInput()              → called automatically at end of update()      │
+│                                                                              │
+│  Pooling & FX:                                                              │
+│    createPool(factory, n)    → reusable object pool for enemies/bullets     │
+│    spawnParticles(x,y,n,opts)→ visual burst feedback                        │
+│    triggerShake(mag, dur)    → screen shake (use on hits and explosions)    │
+│    spawnPopup(x,y,txt,color) → floating score text                          │
+│                                                                              │
+│  Drawing helpers:                                                            │
+│    drawText(txt,x,y,col,sz,align) → quick HUD text                         │
+│    drawBar(x,y,w,h,val,max,fg,bg)  → health / progress bar                 │
+│                                                                              │
+│  Audio (NO external files allowed):                                          │
+│    sfx.play(freq, dur, type, vol)  → synthesised WebAudio sound            │
+│                                                                              │
+│  Math:                                                                       │
+│    lerp(a,b,t)   clamp(v,min,max)  aabb(ax,ay,aw,ah,bx,by,bw,bh)          │
+│    randInt(a,b)  randFloat(a,b)    randChoice(arr)                          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ GAME LOOP CONTRACT — HOW update/render WORK ───────────────────────────────┐
+│                                                                              │
+│  Fixed 60 Hz step:  loop(ts) → update(FIXED_DT) → renderFrame()            │
+│                                                                              │
+│  YOU MUST IMPLEMENT:                                                         │
+│    startGame()        → reset all state, spawn initial entities             │
+│    updatePlaying(dt)  → all gameplay: input, AI, physics, collisions        │
+│    renderPlaying()    → all drawing: background, entities, HUD              │
+│                                                                              │
+│  The ENGINE calls these automatically via the state machine.                │
+│  Do NOT write your own requestAnimationFrame or setInterval.                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ABSOLUTE PROHIBITIONS — any of these guarantees a crash ───────────────────┐
+│                                                                              │
+│  ✗  var canvas = ...       Redeclaring ENGINE globals KILLS context         │
+│  ✗  var ctx    = ...       ctx becomes null → crash on first ctx.save()     │
+│  ✗  var W      = ...       Use W and H directly — they are already set      │
+│  ✗  setInterval()          NEVER. The ENGINE loop already runs.             │
+│  ✗  new Image()            NO external resources. Draw with Canvas API.     │
+│  ✗  fetch() / XHR          NO network calls in game logic.                  │
+│  ✗  Audio() with src       Use sfx.play(freq, dur, type, vol) only.        │
+│  ✗  location.reload()      Reset variables in JS — never force a reload.   │
+│  ✗  Truncating output      Incomplete HTML always crashes. Finish the file. │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ QUALITY CHECKLIST — verify before submitting ──────────────────────────────┐
+│                                                                              │
+│  ✓  Every [FILL: ...] placeholder is replaced with real code                │
+│  ✓  Game works: menu → play → game over / victory → restart                 │
+│  ✓  Score, lives/HP, level visible in HUD at all times                      │
+│  ✓  At least 3 distinct enemy / obstacle / element types with AI            │
+│  ✓  Difficulty scales over time (speed, spawn rate, damage)                 │
+│  ✓  Audio feedback on: shoot, hit, collect, level up, game over             │
+│  ✓  Particle effects on: kills, power-up collect, player death              │
+│  ✓  Your output starts with <!DOCTYPE html> — no markdown fences            │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+-->
+<!DOCTYPE html>
+<html><head><title>[FILL: GAME_TITLE]</title><style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;}
+canvas{display:block;}
+</style></head><body>
+<canvas id="gameCanvas"></canvas>
+<script>
+// ══════════════════════════════════════════════════════════════════
+// ENGINE — DO NOT MODIFY
+// Dev console bridge — AI patches execute in game scope via eval
+window.__devPatch = function(code) { return eval(code); };
+// ══════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+let W = 480, H = 640;
+function resizeCanvas() {
+  const vw=window.innerWidth,vh=window.innerHeight;
+  const scale=Math.min(vw/W,vh/H);
+  canvas.style.width=Math.round(W*scale)+'px'; canvas.style.height=Math.round(H*scale)+'px';
+  canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR); ctx.scale(DPR,DPR);
+}
+resizeCanvas(); window.addEventListener('resize',()=>{resizeCanvas();ctx.scale(DPR,DPR);});
+
+// States: menu | playing | swapping | resolving | falling | victory | gameover
+let gameState = 'menu';
+function setState(s) { gameState = s; }
+
+const Keys={down:{},pressed:{}};
+window.addEventListener('keydown',e=>{if(!Keys.down[e.code])Keys.pressed[e.code]=true;Keys.down[e.code]=true;});
+window.addEventListener('keyup',e=>{Keys.down[e.code]=false;});
+
+// Mouse and touch unified input
+const Pointer={x:0,y:0,down:false,justDown:false,justUp:false,startX:0,startY:0,dragX:0,dragY:0};
+function pointerDown(cx,cy){Pointer.x=cx;Pointer.y=cy;Pointer.startX=cx;Pointer.startY=cy;Pointer.dragX=0;Pointer.dragY=0;Pointer.down=true;Pointer.justDown=true;}
+function pointerMove(cx,cy){Pointer.x=cx;Pointer.y=cy;Pointer.dragX=cx-Pointer.startX;Pointer.dragY=cy-Pointer.startY;}
+function pointerUp(){Pointer.down=false;Pointer.justUp=true;}
+canvas.addEventListener('mousedown',e=>{const r=canvas.getBoundingClientRect();pointerDown((e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height));});
+canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect();pointerMove((e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height));});
+canvas.addEventListener('mouseup',()=>pointerUp());
+canvas.addEventListener('touchstart',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();pointerDown((e.touches[0].clientX-r.left)*(W/r.width),(e.touches[0].clientY-r.top)*(H/r.height));},{passive:false});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();pointerMove((e.touches[0].clientX-r.left)*(W/r.width),(e.touches[0].clientY-r.top)*(H/r.height));},{passive:false});
+canvas.addEventListener('touchend',e=>{e.preventDefault();pointerUp();},{passive:false});
+
+function flushInput(){Keys.pressed={};Pointer.justDown=false;Pointer.justUp=false;}
+
+// Particles
+const Particles=[];
+function spawnParticles(x,y,count,opts){
+  opts=opts||{};
+  for(let i=0;i<count;i++){
+    const a=opts.angle!==undefined?opts.angle+(Math.random()-0.5)*(opts.spread||Math.PI*2):Math.random()*Math.PI*2;
+    const sp=opts.speed||(50+Math.random()*80);
+    Particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:opts.life||(0.4+Math.random()*0.4),maxLife:opts.life||(0.4+Math.random()*0.4),size:opts.size||(3+Math.random()*4),color:opts.color||'#fff',gravity:opts.gravity!==undefined?opts.gravity:100});
+  }
+}
+function updateParticles(dt){for(let i=Particles.length-1;i>=0;i--){const p=Particles[i];p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=p.gravity*dt;if(p.life<=0)Particles.splice(i,1);}}
+function drawParticles(){Particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life/p.maxLife);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size*0.5,0,Math.PI*2);ctx.fill();});ctx.globalAlpha=1;}
+
+// Popups
+const Popups=[];
+function spawnPopup(x,y,text,color,size){Popups.push({x,y,text,color:color||'#fff',size:size||14,vy:-50,life:1.2});}
+function updatePopups(dt){for(let i=Popups.length-1;i>=0;i--){Popups[i].y+=Popups[i].vy*dt;Popups[i].life-=dt;if(Popups[i].life<=0)Popups.splice(i,1);}}
+function drawPopups(){Popups.forEach(p=>{ctx.globalAlpha=Math.min(p.life,1);ctx.fillStyle=p.color;ctx.font=`bold ${p.size}px monospace`;ctx.textAlign='center';ctx.fillText(p.text,p.x,p.y);});ctx.globalAlpha=1;ctx.textAlign='left';}
+
+const sfx={_ctx:null,init(){try{if(!this._ctx)this._ctx=new(window.AudioContext||window.webkitAudioContext)();if(this._ctx.state==='suspended')this._ctx.resume();}catch(e){}},
+play(f,d,t,v){try{this.init();if(!this._ctx)return;const o=this._ctx.createOscillator(),g=this._ctx.createGain();o.type=t||'sine';o.frequency.value=f||440;g.gain.setValueAtTime(v||0.12,this._ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,this._ctx.currentTime+(d||0.1));o.connect(g);g.connect(this._ctx.destination);o.start();o.stop(this._ctx.currentTime+(d||0.1));}catch(e){}}};
+
+function lerp(a,b,t){return a+(b-a)*t;}
+function clamp(v,mn,mx){return v<mn?mn:v>mx?mx:v;}
+function drawText(t,x,y,c,s,a){ctx.fillStyle=c||'#fff';ctx.font=`bold ${s||14}px monospace`;ctx.textAlign=a||'left';ctx.fillText(t,x,y);}
+let _hiScore=parseInt(localStorage.getItem('hs_match3')||'0');
+function saveHiScore(s){if(s>_hiScore){_hiScore=s;localStorage.setItem('hs_match3',s);}}
+
+const FIXED_DT=1/60,MAX_DT=0.1;let lastTime=0,accumulator=0;
+function loop(ts){const rd=Math.min((ts-lastTime)/1000,MAX_DT);lastTime=ts;accumulator+=rd;while(accumulator>=FIXED_DT){update(FIXED_DT);accumulator-=FIXED_DT;}renderFrame();requestAnimationFrame(loop);}
+function update(dt){updateParticles(dt);updatePopups(dt);switch(gameState){case'menu':if(Pointer.justDown){sfx.play(440,0.08,'sine',0.1);startGame();setState('playing');}break;case'playing':updatePlaying(dt);break;case'swapping':updateSwapping(dt);break;case'resolving':updateResolving(dt);break;case'falling':updateFalling(dt);break;case'victory':if(Pointer.justDown){nextLevel();}break;case'gameover':updateGameover(dt);break;case'shop':updateShop(dt);break;}flushInput();}
+function renderFrame(){switch(gameState){case'menu':renderMenu();break;case'playing':case'swapping':case'resolving':case'falling':renderPlaying();break;case'victory':renderPlaying();renderVictoryOverlay();break;case'gameover':renderPlaying();renderGameoverOverlay();break;case'shop':renderShop();break;}drawParticles();drawPopups();}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME CONSTANTS — [FILL: Adjust to match your design]
+// ══════════════════════════════════════════════════════════════════
+const GAME_TITLE = '[FILL: Game Title]';
+
+// [FILL: color palette — one color per gem type]
+const GEM_COLORS  = ['#ff4444','#ff8800','#ffdd00','#44cc44','#4488ff','#cc44ff'];
+const GEM_LABELS  = ['♦','●','★','♣','▲','◆']; // [FILL: icons per gem type]
+
+const PALETTE = {
+  bg:     '#0d0d1f',
+  board:  '#1a1a3a',
+  select: '#ffffff',
+  ui:     '#ffffff',
+  accent: '#ffdd00',
+  // Cascade combo colors
+  combo:  ['#fff','#ff0','#f80','#f00','#f0f','#0ff'],
+  shopBg:   '#0a1a0a',
+  shopCard: '#1a2a1a',
+  shopSel:  '#2a4a2a',
+};
+
+const ROWS = 8, COLS = 8;
+const GEM_TYPES = GEM_COLORS.length;  // 6
+
+// Grid geometry (centered in canvas)
+const CELL = Math.floor((W - 20) / COLS);
+const GRID_X = Math.floor((W - COLS * CELL) / 2);
+const GRID_Y = 120;
+const GRID_W = COLS * CELL;
+const GRID_H = ROWS * CELL;
+
+let GAME_SCORE = 0;
+let level = 1;
+let movesLeft = 30;
+let cascadeDepth = 0;
+
+// ── Objectives (per level) ────────────────────────────────────────
+// [FILL: define objectives per level]
+// Types: { type:'score', target:1000 }
+//        { type:'clear_type', gemType:0, target:20 }
+//        { type:'moves', target:20 }  ← implicit, movesLeft tracks it
+let objective = { type:'score', target:1000, current:0 };
+
+// ══════════════════════════════════════════════════════════════════
+// GRID — DO NOT MODIFY the grid management logic
+// ══════════════════════════════════════════════════════════════════
+// grid[r][c] = { type: 0-5, special: null|'hline'|'vline'|'bomb'|'rainbow', drawY: (animated) }
+let grid = [];
+
+function cellToPixel(r,c) {
+  return { x: GRID_X + c*CELL + CELL/2, y: GRID_Y + r*CELL + CELL/2 };
+}
+function pixelToCell(px,py) {
+  const c = Math.floor((px - GRID_X) / CELL);
+  const r = Math.floor((py - GRID_Y) / CELL);
+  return { r, c };
+}
+function inGrid(r,c) { return r>=0&&r<ROWS&&c>=0&&c<COLS; }
+
+function fillGrid() {
+  grid = [];
+  for (let r=0;r<ROWS;r++) {
+    grid[r]=[];
+    for (let c=0;c<COLS;c++) {
+      grid[r][c] = makeGem(Math.floor(Math.random()*GEM_TYPES));
+    }
+  }
+  // Avoid starting matches
+  for (let pass=0;pass<3;pass++) {
+    for (let r=0;r<ROWS;r++) {
+      for (let c=0;c<COLS;c++) {
+        while (causesMatch(r,c)) {
+          grid[r][c].type = Math.floor(Math.random()*GEM_TYPES);
+        }
+      }
+    }
+  }
+}
+
+function makeGem(type, special) {
+  return { type: type>=0?type:Math.floor(Math.random()*GEM_TYPES), special:special||null, drawY:0, animY:0, scale:1.0 };
+}
+
+function causesMatch(r,c) {
+  const t=grid[r][c].type;
+  if (c>=2 && grid[r][c-1].type===t && grid[r][c-2].type===t) return true;
+  if (r>=2 && grid[r-1][c].type===t && grid[r-2][c].type===t) return true;
+  return false;
+}
+
+// ── Selection & swap state ────────────────────────────────────────
+let selR=-1,selC=-1;          // selected gem
+let swapState=null;            // {r1,c1,r2,c2,t,maxT,isUndo}
+let resolveQueue=[];           // matched sets to clear
+let fallState=null;            // fall animation progress
+let resolveTimer=0;
+
+// ══════════════════════════════════════════════════════════════════
+// MATCH DETECTION — DO NOT MODIFY
+// Returns array of {r,c} cells that are part of a match (3+).
+// ══════════════════════════════════════════════════════════════════
+function findAllMatches() {
+  const matched = new Set();
+  const key = (r,c) => r*COLS+c;
+
+  // Horizontal
+  for (let r=0;r<ROWS;r++) {
+    let c=0;
+    while (c<COLS) {
+      let end=c+1;
+      while (end<COLS && grid[end][c]===undefined && grid[r][end].type===grid[r][c].type && grid[r][c].type>=0) end++;
+      if (end-c>=3) { for(let k=c;k<end;k++) matched.add(key(r,k)); }
+      c=end;
+    }
+  }
+  // Vertical
+  for (let c=0;c<COLS;c++) {
+    let r=0;
+    while (r<ROWS) {
+      let end=r+1;
+      while (end<ROWS && grid[end][c].type===grid[r][c].type && grid[r][c].type>=0) end++;
+      if (end-r>=3) { for(let k=r;k<end;k++) matched.add(key(k,c)); }
+      r=end;
+    }
+  }
+  return [...matched].map(k=>({r:Math.floor(k/COLS),c:k%COLS}));
+}
+
+function countMatchLength(r,c,dr,dc) {
+  const t=grid[r][c].type; let len=1;
+  let nr=r+dr,nc=c+dc;
+  while(inGrid(nr,nc)&&grid[nr][nc].type===t){len++;nr+=dr;nc+=dc;}
+  return len;
+}
+
+// Determine special gem type from match length/shape at (r,c)
+function getSpecialForMatch(cells) {
+  // 5 in a row → rainbow; 4 → line clear; L/T shape → bomb
+  if (cells.length >= 5) return 'rainbow';
+  if (cells.length === 4) {
+    const allSameRow = cells.every(c2=>c2.r===cells[0].r);
+    return allSameRow ? 'hline' : 'vline';
+  }
+  // L/T detection (≥5 cells spanning both axes)
+  const rows=new Set(cells.map(c2=>c2.r)), cols=new Set(cells.map(c2=>c2.c));
+  if (rows.size>=2&&cols.size>=2) return 'bomb';
+  return null;
+}
+
+// ── Meta-progression runtime ──────────────────────────────────────────────────
+let _runCoins      = 0;
+let _gameoverTimer = 0;
+let _shopIdx       = 0;
+let _scoreMultiplier = 1.0;
+let _extraMoves    = 0;
+
+const UPGRADES = [
+  {id:'moves',   name:'Extra Moves',   desc:'+5 moves per run',        maxLevel:3, costs:[25,55,110],  icon:'🔀'},
+  {id:'cascade', name:'Cascade Boost', desc:'Cascade score ×1.5',      maxLevel:2, costs:[50,120],     icon:'💫'},
+  {id:'special', name:'Special Gems',  desc:'More special gem spawns', maxLevel:2, costs:[40,90],      icon:'💎'},
+  {id:'time',    name:'Time Bonus',    desc:'+30 seconds per level',   maxLevel:2, costs:[35,80],      icon:'⏱️'},
+];
+
+const _META_KEY = 'meta_match3';
+let _meta = { coins:0, upgrades:{} };
+function loadMeta(){try{_meta=JSON.parse(localStorage.getItem(_META_KEY))||{coins:0,upgrades:{}};}catch(e){_meta={coins:0,upgrades:{}};} if(!_meta.upgrades)_meta.upgrades={};}
+function saveMeta(){try{localStorage.setItem(_META_KEY,JSON.stringify(_meta));}catch(e){}}
+function addRunCoins(n){_meta.coins+=Math.floor(n);saveMeta();}
+function getUpgradeLevel(id){return _meta.upgrades[id]||0;}
+function buyUpgrade(id){const up=UPGRADES.find(u=>u.id===id);if(!up)return false;const lvl=getUpgradeLevel(id);if(lvl>=up.maxLevel)return false;const cost=up.costs[lvl];if(_meta.coins<cost)return false;_meta.coins-=cost;_meta.upgrades[id]=lvl+1;saveMeta();return true;}
+
+function updateGameover(dt){_gameoverTimer-=dt;if(_gameoverTimer<=0||Pointer.justDown){addRunCoins(_runCoins);_shopIdx=0;setState('shop');}}
+function _shopHit(mx,my,x,y,w,h){return mx>=x&&mx<=x+w&&my>=y&&my<=y+h;}
+function updateShop(dt){
+  if(!Pointer.justDown)return;
+  const cardW=160,cardH=128,gap=16,cols=Math.min(UPGRADES.length,UPGRADES.length<=4?4:3),totalW=cols*cardW+(cols-1)*gap,sx=(W-totalW)/2,sy=Math.round(H*0.22);
+  for(let i=0;i<UPGRADES.length;i++){
+    if(_shopHit(Pointer.x,Pointer.y,sx+i*(cardW+gap),sy,cardW,cardH)){_shopIdx=i;if(buyUpgrade(UPGRADES[i].id)){sfx.play(660,0.12,'sine',0.1);applyUpgrades();}else sfx.play(110,0.06,'sawtooth',0.08);return;}
+  }
+  const btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+32;
+  if(_shopHit(Pointer.x,Pointer.y,btnX,btnY,btnW,btnH)){sfx.play(440,0.08,'square',0.1);startGame();setState('playing');}
+}
+function renderShop(){
+  ctx.fillStyle=PALETTE.shopBg;ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle=PALETTE.accent||'#ffdd00';ctx.font='bold 24px system-ui,sans-serif';ctx.fillText('UPGRADE SHOP',W/2,Math.round(H*0.10));
+  ctx.fillStyle='#ffdd00';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,Math.round(H*0.18));
+  const cardW=160,cardH=128,gap=16,cols=Math.min(UPGRADES.length,UPGRADES.length<=4?4:3),totalW=cols*cardW+(cols-1)*gap,sx=(W-totalW)/2,sy=Math.round(H*0.22);
+  for(let i=0;i<UPGRADES.length;i++){
+    const up=UPGRADES[i],lvl=getUpgradeLevel(up.id),cx=sx+i*(cardW+gap),maxed=lvl>=up.maxLevel,canBuy=!maxed&&_meta.coins>=up.costs[lvl];
+    ctx.fillStyle=i===_shopIdx?PALETTE.shopSel:PALETTE.shopCard;ctx.strokeStyle=maxed?'#4caf50':canBuy?'#ffdd00':'#444';ctx.lineWidth=i===_shopIdx?2:1;
+    ctx.beginPath();ctx.roundRect(cx,sy,cardW,cardH,8);ctx.fill();ctx.stroke();
+    ctx.font='24px system-ui,sans-serif';ctx.fillStyle='#fff';ctx.fillText(up.icon,cx+cardW/2,sy+30);
+    ctx.font='bold 11px system-ui,sans-serif';ctx.fillText(up.name,cx+cardW/2,sy+50);
+    ctx.fillStyle='#aaa';ctx.font='10px system-ui,sans-serif';ctx.fillText(up.desc,cx+cardW/2,sy+64);
+    for(let p=0;p<up.maxLevel;p++){ctx.fillStyle=p<lvl?'#ffdd00':'#333';ctx.beginPath();ctx.arc(cx+cardW/2-(up.maxLevel-1)*7+p*14,sy+84,5,0,Math.PI*2);ctx.fill();}
+    ctx.font='bold 11px system-ui,sans-serif';ctx.fillStyle=maxed?'#4caf50':canBuy?'#ffdd00':'#555';ctx.fillText(maxed?'MAXED':`${up.costs[lvl]} coins`,cx+cardW/2,sy+108);
+  }
+  const btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+30;
+  ctx.fillStyle='#1a4a1a';ctx.strokeStyle='#4caf50';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(btnX,btnY,btnW,btnH,8);ctx.fill();ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='bold 16px system-ui,sans-serif';ctx.fillText('▶  PLAY',W/2,btnY+26);
+  ctx.textAlign='left';
+}
+
+function applyUpgrades(){
+  _extraMoves=[0,5,10,15][getUpgradeLevel('moves')];
+  _scoreMultiplier=getUpgradeLevel('cascade')>=1?1.5:1.0;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME INIT
+// ══════════════════════════════════════════════════════════════════
+function initLevel() {
+  loadMeta();
+  movesLeft = 25 + Math.floor(level*2.5);
+  objective = getObjective(level);
+  objective.current = 0;
+  fillGrid();
+  selR=-1; selC=-1; resolveQueue=[]; fallState=null; cascadeDepth=0;
+}
+
+function getObjective(n) {
+  // [FILL: define objectives per level]
+  if (n%3===0) return {type:'clear_type', gemType:n%GEM_TYPES, target:15+n*3, current:0};
+  return {type:'score', target:800+n*400, current:0};
+}
+
+function startGame() {
+  loadMeta(); _runCoins=0; _gameoverTimer=1.5;
+  GAME_SCORE=0; level=1;
+  Popups.length=0; Particles.length=0;
+  initLevel();
+  applyUpgrades();
+}
+
+function nextLevel() { level++; initLevel(); setState('playing'); }
+
+// ══════════════════════════════════════════════════════════════════
+// UPDATE STATES
+// ══════════════════════════════════════════════════════════════════
+function updatePlaying(dt) {
+  // Handle pointer input for gem selection and swap
+  if (Pointer.justDown) {
+    const {r,c} = pixelToCell(Pointer.x, Pointer.y);
+    if (!inGrid(r,c)) { selR=-1;selC=-1; return; }
+    if (selR===-1) {
+      selR=r; selC=c;
+      grid[r][c].scale=1.15;
+      sfx.play(660,0.05,'sine',0.07);
+    } else {
+      // Try swap if adjacent
+      const dr=Math.abs(r-selR),dc=Math.abs(c-selC);
+      if ((dr===1&&dc===0)||(dr===0&&dc===1)) {
+        attemptSwap(selR,selC,r,c);
+      } else {
+        grid[selR][selC].scale=1.0;
+        selR=r; selC=c; grid[r][c].scale=1.15;
+        sfx.play(550,0.05,'sine',0.07);
+      }
+    }
+  }
+  // Drag direction detection
+  if (selR>=0 && Pointer.down && !Pointer.justDown) {
+    const adx=Math.abs(Pointer.dragX), ady=Math.abs(Pointer.dragY);
+    if (adx>CELL*0.45||ady>CELL*0.45) {
+      const dr=ady>adx ? (Pointer.dragY>0?1:-1) : 0;
+      const dc=adx>=ady ? (Pointer.dragX>0?1:-1) : 0;
+      const nr=selR+dr, nc=selC+dc;
+      if (inGrid(nr,nc)) attemptSwap(selR,selC,nr,nc);
+    }
+  }
+}
+
+function attemptSwap(r1,c1,r2,c2) {
+  if (selR>=0) { grid[selR][selC].scale=1.0; selR=-1;selC=-1; }
+  if (movesLeft<=0) return;
+  // Simulate swap and check for matches
+  const tmp={...grid[r1][c1]};
+  grid[r1][c1]={...grid[r2][c2]}; grid[r2][c2]=tmp;
+  const matches=findAllMatches();
+  // Undo immediately — animation handles the visual swap
+  grid[r2][c2]={...grid[r1][c1]}; grid[r1][c1]=tmp;
+
+  const valid=matches.length>0;
+  swapState={r1,c1,r2,c2,t:0,maxT:0.14,isUndo:!valid};
+  if (valid) {
+    movesLeft--;
+    sfx.play(440,0.06,'sine',0.08);
+  } else {
+    sfx.play(220,0.08,'sawtooth',0.06);
+  }
+  setState('swapping');
+}
+
+function updateSwapping(dt) {
+  swapState.t+=dt;
+  if (swapState.t>=swapState.maxT) {
+    // Commit real swap
+    const {r1,c1,r2,c2,isUndo}=swapState;
+    if (!isUndo) {
+      const tmp={...grid[r1][c1]};
+      grid[r1][c1]={...grid[r2][c2]}; grid[r2][c2]=tmp;
+      cascadeDepth=0;
+      setState('resolving');
+      startResolve();
+    } else {
+      setState('playing');
+    }
+    swapState=null;
+  }
+}
+
+function startResolve() {
+  const matches=findAllMatches();
+  if (matches.length===0) {
+    checkObjective();
+    setState('playing');
+    return;
+  }
+  resolveQueue=matches;
+  resolveTimer=0.12;
+  // Create special gems for large matches
+  const special=getSpecialForMatch(matches);
+  if (special && matches.length>=4) {
+    const pivot=matches[Math.floor(matches.length/2)];
+    grid[pivot.r][pivot.c].special=special;
+    grid[pivot.r][pivot.c].type=grid[pivot.r][pivot.c].type; // keep type for color
+  }
+  setState('resolving');
+}
+
+function updateResolving(dt) {
+  resolveTimer-=dt;
+  if (resolveTimer>0) return;
+
+  // Clear matched cells + trigger specials
+  const pts=10*(cascadeDepth+1)*resolveQueue.length;
+  GAME_SCORE+=pts;
+  objective.current+=(objective.type==='clear_type' ?
+    resolveQueue.filter(c2=>grid[c2.r][c2.c].type===objective.gemType).length : pts);
+
+  resolveQueue.forEach(({r,c})=>{
+    const gem=grid[r][c];
+    const {x,y}=cellToPixel(r,c);
+    spawnParticles(x,y,8,{color:GEM_COLORS[gem.type]||'#fff',speed:70,life:0.5,gravity:60});
+    triggerSpecial(gem.special,r,c);
+    grid[r][c]={type:-1,special:null,drawY:0,animY:0,scale:1.0}; // empty
+  });
+
+  spawnPopup(GRID_X+GRID_W/2, GRID_Y + ROWS*CELL/2,
+    cascadeDepth>0?`COMBO ×${cascadeDepth+1}! +${pts}`:'+'+pts,
+    PALETTE.combo[Math.min(cascadeDepth,PALETTE.combo.length-1)], 14);
+  sfx.play(330+cascadeDepth*110, 0.12, 'sine', 0.10);
+  cascadeDepth++;
+
+  startFall();
+}
+
+function triggerSpecial(special,r,c) {
+  if (!special) return;
+  if (special==='hline') {
+    for(let cc=0;cc<COLS;cc++) if(grid[r][cc].type>=0){spawnParticles(...Object.values(cellToPixel(r,cc)),5,{color:'#fff',speed:60,life:0.4});grid[r][cc]={type:-1,special:null,drawY:0,animY:0,scale:1.0};}
+  } else if (special==='vline') {
+    for(let rr=0;rr<ROWS;rr++) if(grid[rr][c].type>=0){spawnParticles(...Object.values(cellToPixel(rr,c)),5,{color:'#fff',speed:60,life:0.4});grid[rr][c]={type:-1,special:null,drawY:0,animY:0,scale:1.0};}
+  } else if (special==='bomb') {
+    for(let dr=-2;dr<=2;dr++) for(let dc=-2;dc<=2;dc++) {
+      const nr=r+dr,nc=c+dc;
+      if(inGrid(nr,nc)&&grid[nr][nc].type>=0){spawnParticles(...Object.values(cellToPixel(nr,nc)),4,{color:'#f80',speed:50,life:0.35});grid[nr][nc]={type:-1,special:null,drawY:0,animY:0,scale:1.0};}
+    }
+  } else if (special==='rainbow') {
+    // Clears all gems of the same type as the swap partner
+    const targetType=Math.floor(Math.random()*GEM_TYPES);
+    for(let rr=0;rr<ROWS;rr++) for(let cc=0;cc<COLS;cc++) {
+      if(grid[rr][cc].type===targetType){spawnParticles(...Object.values(cellToPixel(rr,cc)),5,{color:GEM_COLORS[targetType],speed:60,life:0.4});grid[rr][cc]={type:-1,special:null,drawY:0,animY:0,scale:1.0};}
+    }
+  }
+}
+
+function startFall() {
+  // Mark gems that need to fall
+  fallState = { timer: 0, maxT: 0.18, ready: false };
+  // Apply gravity: gems fall into empty cells
+  for (let c=0;c<COLS;c++) {
+    let writeR=ROWS-1;
+    for (let r=ROWS-1;r>=0;r--) {
+      if (grid[r][c].type>=0) {
+        if (r!==writeR) {
+          grid[writeR][c]=grid[r][c];
+          grid[r][c]={type:-1,special:null,drawY:(writeR-r)*CELL,animY:(writeR-r)*CELL,scale:1.0};
+          grid[writeR][c].animY=(writeR-r)*CELL;
+        }
+        writeR--;
+      }
+    }
+    // Fill empties from top
+    for (let r=writeR;r>=0;r--) {
+      grid[r][c]=makeGem(-1);
+      grid[r][c].animY=-(writeR-r+1)*CELL;
+    }
+  }
+  setState('falling');
+}
+
+function updateFalling(dt) {
+  fallState.timer+=dt;
+  const progress=Math.min(fallState.timer/fallState.maxT,1);
+  // Animate drawY toward 0
+  let allSettled=true;
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) {
+    if(grid[r][c].animY!==0){
+      grid[r][c].animY=lerp(grid[r][c].animY,0,progress*3.5*dt/fallState.maxT);
+      if(Math.abs(grid[r][c].animY)<1)grid[r][c].animY=0;
+      else allSettled=false;
+    }
+  }
+  if (progress>=1 && allSettled) {
+    // Check for more matches (cascade)
+    startResolve();
+  }
+}
+
+function checkObjective() {
+  const met = objective.type==='score' ? GAME_SCORE>=objective.target
+            : objective.current>=objective.target;
+  if (met) { setState('victory'); sfx.play(880,0.4,'sine',0.12); return; }
+  if (movesLeft<=0 && findAllMatches().length===0) {
+    saveHiScore(GAME_SCORE);
+    _runCoins=Math.floor(GAME_SCORE/100); _gameoverTimer=1.5;
+    setState('gameover');
+  }
+}
+
+function triggerShake(m,d){} // no shake for puzzle (intentional)
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════════════════
+function renderMenu() {
+  ctx.fillStyle=PALETTE.bg; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle=PALETTE.accent; ctx.font='bold 28px system-ui,sans-serif'; ctx.fillText(GAME_TITLE, W/2, H*0.30);
+  ctx.fillStyle='#aaa'; ctx.font='12px system-ui,sans-serif'; ctx.fillText('Swap adjacent gems to match 3+', W/2, H*0.44);
+  if(_meta.coins>0){ctx.fillStyle='#ffdd00';ctx.font='bold 13px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,H*0.52);}
+  ctx.fillStyle='#fff'; ctx.font='bold 16px system-ui,sans-serif'; ctx.fillText('TAP / CLICK to play', W/2, H*0.60);
+  ctx.fillStyle='#888'; ctx.font='13px system-ui,sans-serif'; ctx.fillText(`BEST: ${_hiScore}`, W/2, H*0.70);
+  ctx.textAlign='left';
+}
+
+function renderVictoryOverlay() { ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(0,0,W,H); drawText('LEVEL CLEAR!',W/2,H*0.35,'#ff0',28,'center'); drawText(`SCORE: ${GAME_SCORE}`,W/2,H*0.47,'#fff',18,'center'); drawText('TAP to continue',W/2,H*0.60,'#aaa',13,'center'); }
+function renderGameoverOverlay() { ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fillRect(0,0,W,H); ctx.textAlign='center'; ctx.fillStyle='#f44'; ctx.font='bold 26px system-ui,sans-serif'; ctx.fillText('OUT OF MOVES',W/2,H*0.35); ctx.fillStyle='#fff'; ctx.font='bold 18px system-ui,sans-serif'; ctx.fillText(`SCORE: ${GAME_SCORE}`,W/2,H*0.45); ctx.fillStyle='#ff0'; ctx.font='bold 16px system-ui,sans-serif'; ctx.fillText(`BEST: ${_hiScore}`,W/2,H*0.53); if(_runCoins>0){ctx.fillStyle='#ffdd00';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText(`🪙 ${_runCoins} coins earned`,W/2,H*0.61);} ctx.fillStyle='#aaa'; ctx.font='13px system-ui,sans-serif'; ctx.fillText('Waiting for shop...',W/2,H*0.70); ctx.textAlign='left'; }
+
+function renderPlaying() {
+  ctx.fillStyle=PALETTE.bg; ctx.fillRect(0,0,W,H);
+  // [FILL: animated background — glowing grid, floating particles]
+
+  // ── Grid background ───────────────────────────────────────────
+  ctx.fillStyle=PALETTE.board;
+  ctx.beginPath(); ctx.roundRect(GRID_X-4,GRID_Y-4,GRID_W+8,GRID_H+8,8); ctx.fill();
+
+  // ── Grid lines ────────────────────────────────────────────────
+  ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
+  for(let r=0;r<=ROWS;r++){ctx.beginPath();ctx.moveTo(GRID_X,GRID_Y+r*CELL);ctx.lineTo(GRID_X+GRID_W,GRID_Y+r*CELL);ctx.stroke();}
+  for(let c=0;c<=COLS;c++){ctx.beginPath();ctx.moveTo(GRID_X+c*CELL,GRID_Y);ctx.lineTo(GRID_X+c*CELL,GRID_Y+GRID_H);ctx.stroke();}
+
+  // ── Gems ─────────────────────────────────────────────────────
+  ctx.save(); ctx.beginPath(); ctx.rect(GRID_X,GRID_Y,GRID_W,GRID_H); ctx.clip();
+  for(let r=0;r<ROWS;r++) {
+    for(let c=0;c<COLS;c++) {
+      const gem=grid[r][c];
+      if(gem.type<0) continue;
+      const {x,y}=cellToPixel(r,c);
+      const ay=gem.animY||0;
+      const selected=r===selR&&c===selC;
+      const sc=gem.scale||1.0;
+      const R=(CELL/2-4)*sc;
+
+      ctx.save(); ctx.translate(x,y+ay);
+      // Glow on selection
+      if (selected) { ctx.shadowBlur=16; ctx.shadowColor='#fff'; }
+      // [FILL: draw gem with shape matching icon — circle, diamond, star, etc.]
+      ctx.fillStyle=GEM_COLORS[gem.type];
+      ctx.beginPath(); ctx.arc(0,0,R,0,Math.PI*2); ctx.fill();
+      // Shine
+      ctx.fillStyle='rgba(255,255,255,0.25)';
+      ctx.beginPath(); ctx.arc(-R*0.25,-R*0.28,R*0.4,0,Math.PI*2); ctx.fill();
+      // Icon
+      ctx.shadowBlur=0;
+      ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.font=`bold ${Math.round(R)}px monospace`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(GEM_LABELS[gem.type]||'●',0,1);
+      // Special marker
+      if(gem.special){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,0,R+2,0,Math.PI*2);ctx.stroke();}
+      // Selection ring
+      if(selected){ctx.strokeStyle='#fff';ctx.lineWidth=2.5;ctx.globalAlpha=0.8;ctx.beginPath();ctx.arc(0,0,R+4,0,Math.PI*2);ctx.stroke();}
+      ctx.restore();
+    }
+  }
+  ctx.restore(); // end clip
+
+  // ── HUD ───────────────────────────────────────────────────────
+  drawText(`SCORE: ${GAME_SCORE}`, 10, 22, PALETTE.ui, 13);
+  drawText(`LV ${level}`, W/2, 22, '#aaa', 12, 'center');
+  drawText(`BEST: ${_hiScore}`, W-10, 22, '#888', 11, 'right');
+  // Moves left
+  drawText(`MOVES: ${movesLeft}`, 10, GRID_Y+GRID_H+24, movesLeft<=5?'#f44':PALETTE.ui, 14);
+  // Objective
+  const objText = objective.type==='score'
+    ? `GOAL: ${objective.current||GAME_SCORE}/${objective.target}`
+    : `CLEAR: ${objective.current}/${objective.target}`;
+  drawText(objText, W-10, GRID_Y+GRID_H+24, PALETTE.accent, 12, 'right');
+  // Swap animation hint
+  if (swapState) {
+    const {r1,c1,r2,c2,t,maxT,isUndo}=swapState;
+    const prog=Math.min(t/maxT,1);
+    const {x:x1,y:y1}=cellToPixel(r1,c1);
+    const {x:x2,y:y2}=cellToPixel(r2,c2);
+    const gem1=grid[r1][c1],gem2=grid[r2][c2];
+    if(gem1.type>=0) {
+      const cx2=lerp(x1,x2,isUndo?1-prog:prog),cy2=lerp(y1,y2,isUndo?1-prog:prog);
+      ctx.fillStyle=GEM_COLORS[gem1.type]; ctx.beginPath(); ctx.arc(cx2,cy2,CELL/2-5,0,Math.PI*2); ctx.fill();
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// START
+// ══════════════════════════════════════════════════════════════════
+initLevel();
+requestAnimationFrame(t=>{lastTime=t;requestAnimationFrame(loop);});
+</script>
+</body></html>

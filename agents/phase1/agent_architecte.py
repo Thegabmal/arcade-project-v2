@@ -80,6 +80,7 @@ Réponds avec ce JSON :
   "startup_code": "init();"
 }}
 
+RÈGLE STARTUP — 3D (Three.js) : startup_code DOIT utiliser le nom du module comme namespace si les fonctions sont exportées via objet. Exemple 3D : "core.init();" — PAS "init();" si init est dans le module core. Pour les jeux 2D (Canvas), "init();" suffit car les fonctions sont globales.
 IMPORTANT : Génère EXACTEMENT 3 modules pour un jeu simple, 4 pour un jeu moyen, 5 maximum pour un jeu complexe."""
 
     raw = _call(prompt)
@@ -154,7 +155,7 @@ def _fallback_architecture(technologie: str) -> ModuleArchitecture:
             variables_globales=["scene", "camera", "renderer", "gameState", "score", "clock", "player", "obstacles"],
             variables_init={"gameState": "'menu'", "score": "0", "obstacles": "[]"},
             ordre_execution=["core", "player", "world", "ui"],
-            startup_code="init(); requestAnimationFrame(gameLoop);",
+            startup_code="core.init();",
             technologie="threejs",
         )
     else:

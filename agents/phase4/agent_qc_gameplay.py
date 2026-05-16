@@ -35,7 +35,8 @@ def _genre_checklist(genre: str, sous_genre: str) -> str:
             "2. BOSS MULTI-PHASES : boss présent avec ≥ 2 phases déclenchées par seuil HP\n"
             "3. POWER-UPS : ≥ 2 types collectables avec effets visuellement distincts\n"
             "4. PATTERNS DE TIR : au moins 2 patterns ennemis différents (droit, visé, éventail…)\n"
-            "5. SYSTÈME DE VAGUES : vague N+1 plus difficile que vague N (plus d'ennemis OU plus rapides OU nouveaux types)"
+            "5. SYSTÈME DE VAGUES : vague N+1 plus difficile que vague N (plus d'ennemis OU plus rapides OU nouveaux types)\n"
+            "6. META-PROGRESSION (−1.0 pt) : pièces persistantes via localStorage + boutique avec ≥ 2 upgrades aux effets distincts (firerate, damage, shield…)"
         )
     if any(k in g for k in ["platformer", "plateforme", "jump", "mario", "metroidvania"]):
         return (
@@ -43,7 +44,8 @@ def _genre_checklist(genre: str, sous_genre: str) -> str:
             "2. VARIÉTÉ ENNEMIS : ≥ 2 types avec comportements distincts (patrouille, charge, projectile…)\n"
             "3. NIVEAUX OU SCROLL : ≥ 2 niveaux distincts OU monde scrollant avec zone finale\n"
             "4. COLLECTIBLES : pièces, étoiles ou power-ups qui changent le gameplay (pas juste déco)\n"
-            "5. BOSS OU DÉFI FINAL : boss room OU niveau climax avec obstacle/ennemi renforcé"
+            "5. BOSS OU DÉFI FINAL : boss room OU niveau climax avec obstacle/ennemi renforcé\n"
+            "6. META-PROGRESSION (−1.0 pt) : pièces persistantes via localStorage + boutique avec ≥ 2 upgrades aux effets distincts (double saut, magnet, vitesse…)"
         )
     if any(k in g for k in ["rpg", "aventure", "zelda", "action-rpg", "action rpg", "dungeon", "roguelite", "rogue"]):
         return (
@@ -51,7 +53,8 @@ def _genre_checklist(genre: str, sous_genre: str) -> str:
             "2. PROGRESSION STATS : XP + level up OU loot qui augmente des stats visibles\n"
             "3. VARIÉTÉ ENNEMIS : ≥ 2 types avec stats et comportements distincts\n"
             "4. INTERACTION ENVIRONNEMENT : coffres, PNJ ou leviers déclenchables avec [E] ou clic\n"
-            "5. CONDITION DE VICTOIRE : objectif clair (quête, boss final, étage max) — pas juste survie infinie"
+            "5. CONDITION DE VICTOIRE : objectif clair (quête, boss final, étage max) — pas juste survie infinie\n"
+            "6. META-PROGRESSION (−1.0 pt) : pièces/gold persistants via localStorage + boutique avec ≥ 2 upgrades permanents (force, agilité, HP, XP boost…)"
         )
     if any(k in g for k in ["tower defense", "tower_defense", "td", "defense"]):
         return (
@@ -59,7 +62,8 @@ def _genre_checklist(genre: str, sous_genre: str) -> str:
             "2. ÉCONOMIE : gold gagné en tuant des ennemis, dépensé pour placer/améliorer des tours\n"
             "3. ANNONCE VAGUE : compte à rebours visible avant chaque vague + composition annoncée\n"
             "4. UPGRADE TOURS : au moins un palier d'amélioration de tour fonctionnel\n"
-            "5. SANTÉ BASE : barre HP visible pour la base — game over si elle tombe à 0"
+            "5. SANTÉ BASE : barre HP visible pour la base — game over si elle tombe à 0\n"
+            "6. META-PROGRESSION (−1.0 pt) : gold persistant via localStorage + boutique avec ≥ 2 upgrades permanents (gold de départ, dégâts tours, cadence, vie extra…)"
         )
     if any(k in g for k in ["puzzle", "match3", "match-3", "match 3"]):
         return (
@@ -67,7 +71,8 @@ def _genre_checklist(genre: str, sous_genre: str) -> str:
             "2. CASCADE : après suppression, les tuiles tombent et génèrent de nouveaux matchs en chaîne\n"
             "3. VARIÉTÉ TUILES : ≥ 4 types de tuiles visuellement distincts\n"
             "4. SCORE COMBO : combinaisons successives multiplient les points\n"
-            "5. PROGRESSION : niveaux avec objectif (score cible, nombre de matchs) OU difficulté croissante"
+            "5. PROGRESSION : niveaux avec objectif (score cible, nombre de matchs) OU difficulté croissante\n"
+            "6. META-PROGRESSION (−1.0 pt) : pièces persistantes via localStorage + boutique avec ≥ 2 upgrades permanents (mouvements sup, cascade boost, gemmes spéciales…)"
         )
     if any(k in g for k in ["runner", "endless", "course infinie", "infinite runner"]):
         return (
@@ -75,7 +80,8 @@ def _genre_checklist(genre: str, sous_genre: str) -> str:
             "2. ACCÉLÉRATION : la vitesse augmente progressivement — début accessible, fin difficile\n"
             "3. MÉCANIQUE BONUS : double saut OU slide OU couloirs multiples (pas juste avancer+sauter)\n"
             "4. SCORE DISTANCE : score ou distance clairement visible et progressant\n"
-            "5. GÉNÉRATION PROCÉDURALE : obstacles générés différemment à chaque run (pas séquence fixe)"
+            "5. GÉNÉRATION PROCÉDURALE : obstacles générés différemment à chaque run (pas séquence fixe)\n"
+            "6. META-PROGRESSION (−1.0 pt) : pièces persistantes via localStorage + boutique avec ≥ 2 upgrades aux effets distincts (magnet, shield, vitesse…)"
         )
     if any(k in g for k in ["breakout", "casse-briques", "brique", "arcade", "arkanoid", "pong"]):
         return (
@@ -83,7 +89,8 @@ def _genre_checklist(genre: str, sous_genre: str) -> str:
             "2. TYPES DE BRIQUES : ≥ 3 types (résistance différente, briques indestructibles, power-up drop)\n"
             "3. POWER-UPS : ≥ 2 types tombant des briques (balle large, multi-balles, laser…)\n"
             "4. VIES ET GAME OVER : système de vies (≥ 3) avec game over et écran de score\n"
-            "5. NIVEAUX : ≥ 2 dispositions de briques différentes avec difficulté croissante"
+            "5. NIVEAUX : ≥ 2 dispositions de briques différentes avec difficulté croissante\n"
+            "6. META-PROGRESSION (−1.0 pt) : pièces persistantes via localStorage + boutique avec ≥ 2 upgrades permanents (multi-balles, raquette large, balle rapide, vie extra…)"
         )
     if any(k in g for k in ["visual novel", "visual_novel", "roman visuel", "vn", "kinetic"]):
         return (
@@ -91,7 +98,24 @@ def _genre_checklist(genre: str, sous_genre: str) -> str:
             "2. PORTRAITS PERSONNAGES : illustrations ou dessins affichés pendant les dialogues\n"
             "3. FLAGS NARRATIFS : variables d'état (flags/chapitres) qui conditionnent la suite\n"
             "4. ≥ 3 SCÈNES/CHAPITRES : progression narrative en plusieurs actes distincts\n"
-            "5. FIN CONDITIONNELLE : au moins 2 fins différentes selon les choix du joueur"
+            "5. FIN CONDITIONNELLE : au moins 2 fins différentes selon les choix du joueur\n"
+            "6. META-PROGRESSION (−1.0 pt) : pièces persistantes via localStorage + boutique avec ≥ 2 upgrades permanents (routes alternatives, hint system, fast skip, galerie…)"
+        )
+    if any(k in g for k in ["racing", "course", "voiture", "kart", "f1", "moto", "drift"]):
+        return (
+            "1. CONTRÔLES STEERING : accélération + direction responsive avec delta time (pas teleport)\n"
+            "2. ADVERSAIRES IA : ≥ 2 adversaires suivant le circuit avec comportement IA minimal\n"
+            "3. TOURS ET PROGRESSION : ≥ 3 tours avec décompte, chrono par tour visible\n"
+            "4. COLLISION RÉALISTE : contacts avec murs ralentissent le joueur, ne l'arrêtent pas net\n"
+            "5. CLASSEMENT : position joueur vs adversaires affichée pendant la course et au podium final"
+        )
+    if any(k in g for k in ["3d platformer", "platformer 3d", "plateforme 3d", "3d platform"]):
+        return (
+            "1. SAUTS PRÉCIS : coyote time + jump buffer — sauts ne doivent pas échouer sur les bords\n"
+            "2. CAMÉRA SUIVANTE : caméra 3rd-person qui suit le joueur et évite les angles morts\n"
+            "3. PLATEFORMES VARIÉES : ≥ 3 types (mobiles, tournantes, qui disparaissent)\n"
+            "4. COLLECTIBLES 3D : étoiles ou items collectables avec hitbox 3D et compteur HUD\n"
+            "5. CONDITION VICTOIRE : zone d'arrivée ou boss final clairement signalé"
         )
     return ""
 
@@ -109,10 +133,11 @@ def run(code: str, genre_profile: GenreProfile, gdd: dict) -> dict:
     if _checklist_raw:
         genre_checklist_section = (
             "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "INCONTOURNABLES DU GENRE — 5 CRITÈRES BLOQUANTS\n"
+            "INCONTOURNABLES DU GENRE — CRITÈRES BLOQUANTS\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "Vérifie chacun EXPLICITEMENT dans le code. Chaque critère absent = -1.5 pts gameplay.\n"
-            "Un jeu ne peut PAS dépasser 7.0 s'il en manque ≥ 2.\n\n"
+            "Vérifie chacun EXPLICITEMENT dans le code. Critères 1-5 absents = -1.5 pts chacun. "
+            "Critères marqués (−1.0 pt) = -1.0 pt si absent.\n"
+            "Un jeu ne peut PAS dépasser 7.0 s'il manque ≥ 2 critères.\n\n"
             + _checklist_raw + "\n"
         )
 

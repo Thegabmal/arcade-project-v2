@@ -1,0 +1,711 @@
+<!--
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ARCADE PROJECT — ENDLESS RUNNER TEMPLATE — USAGE GUIDE                      ║
+║  Read this entirely before writing a single line of code.                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ ROLE ──────────────────────────────────────────────────────────────────────┐
+│ You are a senior HTML5 Canvas 2D game developer.                            │
+│ Your job: fill the [FILL: ...] sections to create a complete, playable game. │
+│ You do NOT write the engine — it is already written and tested.             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SACRED CONTRACT — ENGINE VARIABLES (NEVER redeclare these) ────────────────┐
+│                                                                              │
+│  canvas   → HTMLCanvasElement  (getElementById — already set up)            │
+│  ctx       → CanvasRenderingContext2D (getContext — already set up)         │
+│  W, H      → logical canvas dimensions (800 × 450)                         │
+│  DPR       → device pixel ratio (handled by resizeCanvas)                   │
+│  gameState → string: 'menu' | 'playing' | 'gameover' | 'shop'              │
+│  Keys      → { down:{}, pressed:{}, released:{} }                           │
+│  Touch     → { justTapped, x, y, swipeDy }                                 │
+│  Mouse     → { clicked, x, y }                                              │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ENGINE FUNCTIONS ───────────────────────────────────────────────────────────┐
+│  keyDown(c)  keyPressed(c)  anyAction()  flushInput()                       │
+│  createPool(factory,n)  spawnParticles(x,y,n,opts)                          │
+│  triggerShake(mag,dur)  spawnPopup(x,y,txt,color)                           │
+│  drawText(t,x,y,c,s,a)  drawBar(x,y,w,h,val,max,fg,bg)                    │
+│  sfx.play(freq,dur,type,vol)                                                 │
+│  lerp(a,b,t)  clamp(v,mn,mx)  aabb(ax,ay,aw,ah,bx,by,bw,bh)              │
+│  randInt(a,b)  randFloat(a,b)  randChoice(arr)                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ GAME LOOP CONTRACT ────────────────────────────────────────────────────────┐
+│  YOU MUST IMPLEMENT: startGame()  updatePlaying(dt)  renderPlaying()        │
+│  State flow: menu → playing → gameover → shop → playing                    │
+│  Do NOT write requestAnimationFrame or setInterval.                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ TYPOGRAPHY RULE — CRITICAL ────────────────────────────────────────────────┐
+│  Decorative/pixel fonts ONLY for the game title/logo.                       │
+│  ALL menus, dialogs, HUD, shop MUST use readable system fonts:              │
+│    ctx.font = '14px system-ui, sans-serif'                                  │
+│    ctx.font = '13px "Courier New", monospace'  (for numbers/stats)         │
+│  NEVER use pixel/decorative fonts for button labels or body text.           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ABSOLUTE PROHIBITIONS ─────────────────────────────────────────────────────┐
+│  ✗  var canvas / ctx / W — redeclaring ENGINE globals crashes the game      │
+│  ✗  setInterval  ✗  new Image()  ✗  fetch()  ✗  Audio() with src           │
+│  ✗  location.reload()  ✗  truncating output (incomplete HTML = crash)       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ QUALITY CHECKLIST ─────────────────────────────────────────────────────────┐
+│  ✓  Every [FILL: ...] replaced with real code                               │
+│  ✓  Game works: menu → play → gameover → shop → play again                  │
+│  ✓  Score, HP, coins visible in HUD                                         │
+│  ✓  3+ distinct obstacle types, difficulty scales                           │
+│  ✓  Audio on: jump, hit, collect, game over                                 │
+│  ✓  Meta coins persist, shop upgrades work                                  │
+│  ✓  Shop uses system-ui font — no pixel/decorative font in UI text          │
+│  ✓  Output starts with <!DOCTYPE html> — no markdown fences                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+-->
+<!DOCTYPE html>
+<html><head><title>[FILL: GAME_TITLE]</title><style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;}
+canvas{display:block;}
+</style></head><body>
+<canvas id="gameCanvas"></canvas>
+<script>
+// ══════════════════════════════════════════════════════════════════
+// ENGINE — DO NOT MODIFY
+// Dev console bridge — AI patches execute in game scope via eval
+window.__devPatch = function(code) { return eval(code); };
+// ══════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const GAME_W = 800, GAME_H = 450;
+let W = GAME_W, H = GAME_H;
+function resizeCanvas() {
+  const s = Math.min(window.innerWidth/W, window.innerHeight/H);
+  canvas.style.width=Math.round(W*s)+'px'; canvas.style.height=Math.round(H*s)+'px';
+  canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR);
+  ctx.scale(DPR, DPR);
+}
+resizeCanvas(); window.addEventListener('resize', () => { resizeCanvas(); ctx.scale(DPR,DPR); });
+
+let gameState = 'menu'; // menu | playing | gameover | shop
+function setState(s) { gameState = s; }
+
+const Keys = { down:{}, pressed:{}, released:{} };
+window.addEventListener('keydown', e => {
+  if (!Keys.down[e.code]) Keys.pressed[e.code]=true;
+  Keys.down[e.code]=true;
+  if (['Space','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { Keys.down[e.code]=false; Keys.released[e.code]=true; });
+const Touch = { justTapped:false, x:0, y:0, startY:0, swipeDy:0 };
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const r=canvas.getBoundingClientRect();
+  Touch.x=(e.touches[0].clientX-r.left)*(W/r.width);
+  Touch.y=(e.touches[0].clientY-r.top)*(H/r.height);
+  Touch.startY=Touch.y; Touch.justTapped=true;
+}, {passive:false});
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const r=canvas.getBoundingClientRect();
+  Touch.swipeDy=(e.touches[0].clientY-r.top)*(H/r.height)-Touch.startY;
+}, {passive:false});
+canvas.addEventListener('touchend', e => { e.preventDefault(); Touch.swipeDy=0; }, {passive:false});
+const Mouse = { clicked:false, x:0, y:0 };
+canvas.addEventListener('click', () => { Mouse.clicked=true; });
+canvas.addEventListener('mousemove', e => { const r=canvas.getBoundingClientRect(); Mouse.x=(e.clientX-r.left)*(W/r.width); Mouse.y=(e.clientY-r.top)*(H/r.height); });
+
+function keyDown(c){return !!Keys.down[c];}
+function keyPressed(c){return !!Keys.pressed[c];}
+function anyAction(){return Mouse.clicked||Touch.justTapped||keyPressed('Space')||keyPressed('Enter');}
+function flushInput(){Keys.pressed={};Keys.released={};Touch.justTapped=false;Mouse.clicked=false;Touch.swipeDy=0;}
+
+function createPool(factory, size) {
+  const inactive=Array.from({length:size},factory),active=[];
+  return {
+    active,
+    get(fn){const o=inactive.length>0?inactive.pop():factory();o.alive=true;if(fn)fn(o);active.push(o);return o;},
+    update(fn){for(let i=active.length-1;i>=0;i--)if(!fn(active[i])){active[i].alive=false;inactive.push(active.splice(i,1)[0]);}},
+    clear(){while(active.length){active[0].alive=false;inactive.push(active.shift());}}
+  };
+}
+
+const Particles=createPool(()=>({alive:false,x:0,y:0,vx:0,vy:0,life:0,maxLife:0,size:3,color:'#fff',gravity:200}),150);
+function spawnParticles(x,y,count,opts){
+  opts=opts||{};
+  for(let i=0;i<count;i++){
+    const a=opts.angle!==undefined?opts.angle+(Math.random()-0.5)*(opts.spread||Math.PI*2):Math.random()*Math.PI*2;
+    const sp=opts.speed||(40+Math.random()*60);
+    Particles.get(p=>{p.x=x;p.y=y;p.vx=Math.cos(a)*sp;p.vy=Math.sin(a)*sp;p.life=p.maxLife=opts.life||(0.3+Math.random()*0.35);p.size=opts.size||(2+Math.random()*3);p.color=opts.color||'#fff';p.gravity=opts.gravity!==undefined?opts.gravity:200;});
+  }
+}
+function updateParticles(dt){Particles.update(p=>{p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=p.gravity*dt;return p.life>0;});}
+function drawParticles(){Particles.active.forEach(p=>{ctx.globalAlpha=p.life/p.maxLife;ctx.fillStyle=p.color;ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);});ctx.globalAlpha=1;}
+
+const Popups=[];
+function spawnPopup(x,y,text,color,size){Popups.push({x,y,text,color:color||'#fff',size:size||13,vy:-45,life:0.9});}
+function updatePopups(dt){for(let i=Popups.length-1;i>=0;i--){Popups[i].y+=Popups[i].vy*dt;Popups[i].life-=dt;if(Popups[i].life<=0)Popups.splice(i,1);}}
+function drawPopups(){Popups.forEach(p=>{ctx.globalAlpha=Math.min(p.life,1);ctx.fillStyle=p.color;ctx.font=`bold ${p.size}px system-ui,sans-serif`;ctx.textAlign='center';ctx.fillText(p.text,p.x,p.y);});ctx.globalAlpha=1;ctx.textAlign='left';}
+
+const Shake={x:0,y:0,mag:0,dur:0};
+function triggerShake(m,d){Shake.mag=Math.max(Shake.mag,m);Shake.dur=Math.max(Shake.dur,d);}
+function updateShake(dt){if(Shake.dur>0){Shake.dur-=dt;Shake.x=(Math.random()*2-1)*Shake.mag;Shake.y=(Math.random()*2-1)*Shake.mag;if(Shake.dur<=0){Shake.x=0;Shake.y=0;}}}
+
+const sfx={_ctx:null,init(){try{if(!this._ctx)this._ctx=new(window.AudioContext||window.webkitAudioContext)();if(this._ctx.state==='suspended')this._ctx.resume();}catch(e){}},
+play(f,d,t,v){try{this.init();if(!this._ctx)return;const o=this._ctx.createOscillator(),g=this._ctx.createGain();o.type=t||'square';o.frequency.value=f||440;g.gain.setValueAtTime(v||0.12,this._ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,this._ctx.currentTime+(d||0.1));o.connect(g);g.connect(this._ctx.destination);o.start();o.stop(this._ctx.currentTime+(d||0.1));}catch(e){}}};
+
+function lerp(a,b,t){return a+(b-a)*t;}
+function clamp(v,mn,mx){return v<mn?mn:v>mx?mx:v;}
+function aabb(ax,ay,aw,ah,bx,by,bw,bh){return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by;}
+function randInt(a,b){return a+Math.floor(Math.random()*(b-a+1));}
+function randFloat(a,b){return a+Math.random()*(b-a);}
+function randChoice(arr){return arr[Math.floor(Math.random()*arr.length)];}
+let _hiScore=parseInt(localStorage.getItem('hs_runner')||'0');
+function saveHiScore(s){if(s>_hiScore){_hiScore=s;localStorage.setItem('hs_runner',s);}}
+function drawText(t,x,y,c,s,a){ctx.fillStyle=c||'#fff';ctx.font=`bold ${s||14}px system-ui,sans-serif`;ctx.textAlign=a||'left';ctx.fillText(t,x,y);}
+function drawBar(x,y,w,h,val,max,fg,bg){ctx.fillStyle=bg||'#333';ctx.fillRect(x,y,w,h);ctx.fillStyle=fg||'#0f0';ctx.fillRect(x,y,w*clamp(val/max,0,1),h);}
+
+const FIXED_DT=1/60,MAX_DT=0.1;let lastTime=0,accumulator=0;
+function loop(ts){const rd=Math.min((ts-lastTime)/1000,MAX_DT);lastTime=ts;accumulator+=rd;while(accumulator>=FIXED_DT){update(FIXED_DT);accumulator-=FIXED_DT;}renderFrame();requestAnimationFrame(loop);}
+function update(dt){updateShake(dt);updateParticles(dt);updatePopups(dt);switch(gameState){case'menu':updateMenu(dt);break;case'playing':updatePlaying(dt);break;case'gameover':updateGameover(dt);break;case'shop':updateShop(dt);break;}flushInput();}
+function renderFrame(){ctx.save();ctx.translate(Shake.x,Shake.y);switch(gameState){case'menu':renderMenu();break;case'playing':renderPlaying();break;case'gameover':renderPlaying();renderGameoverOverlay();break;case'shop':renderShop();break;}drawParticles();drawPopups();ctx.restore();}
+function updateMenu(dt){if(anyAction()){sfx.play(440,0.08,'square',0.1);startGame();setState('playing');}}
+function renderGameoverOverlay(){
+  ctx.fillStyle='rgba(0,0,0,0.78)';ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle='#f44';ctx.font='bold 36px system-ui,sans-serif';ctx.fillText('GAME OVER',W/2,H*0.34);
+  ctx.fillStyle='#fff';ctx.font='bold 18px system-ui,sans-serif';ctx.fillText(`${Math.floor(worldX/10)}m  •  +${Math.floor(_runCoins)} coins`,W/2,H*0.48);
+  ctx.fillStyle='#ff0';ctx.font='14px system-ui,sans-serif';ctx.fillText(`Best: ${Math.floor(_hiScore/10)}m`,W/2,H*0.58);
+  ctx.fillStyle='#aaa';ctx.font='13px system-ui,sans-serif';ctx.fillText('Heading to shop…',W/2,H*0.70);
+  ctx.textAlign='left';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME CONSTANTS — [FILL: Adjust to match your design]
+// ══════════════════════════════════════════════════════════════════
+const GAME_TITLE = '[FILL: Game Title]';
+
+// [FILL: color palette — shopBg/shopCard/shopSel must contrast with other colors]
+const PALETTE = {
+  bg:        '#1a1a2e',
+  ground:    '#2d5a27',
+  groundFill:'#1a3a18',
+  player:    '#00ccff',
+  obstacle:  '#cc4400',
+  coin:      '#ffdd00',
+  ui:        '#ffffff',
+  accent:    '#ff8800',
+  shopBg:    '#0d1b2a',
+  shopCard:  '#1a2a3a',
+  shopSel:   '#2a4a6a',
+};
+
+let GAME_SCORE = 0;
+
+// ── World scroll ──────────────────────────────────────────────────
+let worldX        = 0;
+let worldSpeed    = 280;
+const SPEED_INIT  = 280;
+const SPEED_MAX   = 620;
+const SPEED_RAMP  = 12;
+
+// ── Ground ────────────────────────────────────────────────────────
+const GROUND_Y    = 340;
+const GROUND_H    = H - GROUND_Y;
+
+// ── Physics ───────────────────────────────────────────────────────
+const GRAVITY     = 1500;
+const JUMP_FORCE  = -560;
+const JUMP_RELEASE= 0.38;
+const MAX_FALL    = 900;
+const COYOTE_TIME = 0.08;
+const JUMP_BUFFER = 0.10;
+const MAX_JUMPS   = 2;
+
+// ── Player ────────────────────────────────────────────────────────
+const PLAYER_X    = 130;
+const player = {
+  x: PLAYER_X, y: GROUND_Y - 52,
+  vx: 0, vy: 0,
+  w: 38, h: 52,
+  onGround: false, wasOnGround: false,
+  jumpsLeft: MAX_JUMPS,
+  isJumping: false,
+  coyoteTimer: 0,
+  jumpBufferTimer: 0,
+  crouching: false,
+  crouchH: 28,
+  hp: 3, maxHp: 3,
+  iframes: 0, IFRAME_DUR: 1.2,
+  squashX: 1.0, squashY: 1.0,
+  animTimer: 0,
+  coins: 0,
+  // [FILL: add any extra per-run state here]
+};
+
+// ── Obstacle & coin pools ─────────────────────────────────────────
+// Obstacle types: 'ground_low' | 'ground_high' | 'aerial'
+const obstaclePool = createPool(()=>({alive:false,x:0,y:0,w:0,h:0,type:'ground_low',color:'#c44'}), 20);
+const coinPool     = createPool(()=>({alive:false,x:0,y:0,w:18,h:18,bobTimer:0,value:10}), 30);
+
+// ── Spawner state ─────────────────────────────────────────────────
+let nextObstacleIn = 1.2;
+let nextCoinIn     = 0.5;
+let distSinceStart = 0;
+
+// ── Parallax background ───────────────────────────────────────────
+const bgLayers = [];
+
+// ── Meta-progression runtime (set by applyUpgrades each run) ─────
+let _magnetRange     = 0;
+let _scoreMultiplier = 1.0;
+let _runCoins        = 0;   // coins collected this run, saved on death
+let _gameoverTimer   = 0;
+let _shopIdx         = 0;
+
+// ══════════════════════════════════════════════════════════════════
+// [FILL: UPGRADE_DEFS]
+// 3–5 upgrades. Each: { id, name, desc, maxLevel, costs[], icon }
+// costs[i] = meta-coins to buy level i+1.
+// The shop renders these automatically — just define them here.
+// ══════════════════════════════════════════════════════════════════
+const UPGRADES = [
+  { id:'magnet',     name:'Coin Magnet',  desc:'Pull coins from farther away', maxLevel:3, costs:[30,60,120],  icon:'🧲' },
+  { id:'shield',     name:'Shield',       desc:'Start each run with extra HP',  maxLevel:2, costs:[50,120],    icon:'🛡' },
+  { id:'headstart',  name:'Head Start',   desc:'Begin each run faster',         maxLevel:3, costs:[25,50,100], icon:'🚀' },
+  { id:'multiplier', name:'Score Boost',  desc:'Score ×1.25 per level',         maxLevel:3, costs:[40,80,160], icon:'⚡' },
+];
+
+// ══════════════════════════════════════════════════════════════════
+// META-PERSISTENCE — fixed infrastructure, do not modify
+// ══════════════════════════════════════════════════════════════════
+const _META_KEY = 'meta_runner';
+let _meta = { coins:0, upgrades:{} };
+
+function loadMeta() {
+  try { _meta = JSON.parse(localStorage.getItem(_META_KEY)) || { coins:0, upgrades:{} }; }
+  catch(e) { _meta = { coins:0, upgrades:{} }; }
+  if (!_meta.upgrades) _meta.upgrades = {};
+}
+function saveMeta() { try { localStorage.setItem(_META_KEY, JSON.stringify(_meta)); } catch(e){} }
+function addRunCoins(n) { _meta.coins += Math.floor(n); saveMeta(); }
+function getUpgradeLevel(id) { return _meta.upgrades[id] || 0; }
+function buyUpgrade(id) {
+  const up = UPGRADES.find(u => u.id === id);
+  if (!up) return false;
+  const lvl = getUpgradeLevel(id);
+  if (lvl >= up.maxLevel) return false;
+  const cost = up.costs[lvl];
+  if (_meta.coins < cost) return false;
+  _meta.coins -= cost;
+  _meta.upgrades[id] = lvl + 1;
+  saveMeta();
+  return true;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SHOP LOGIC — fixed infrastructure, do not modify
+// ══════════════════════════════════════════════════════════════════
+function updateGameover(dt) {
+  _gameoverTimer -= dt;
+  if (_gameoverTimer <= 0 || anyAction()) {
+    addRunCoins(_runCoins);
+    _shopIdx = 0;
+    setState('shop');
+  }
+}
+
+function _shopHit(mx, my, x, y, w, h) { return mx>=x&&mx<=x+w&&my>=y&&my<=y+h; }
+
+function updateShop(dt) {
+  if (!anyAction()) return;
+  const cardW=160, cardH=128, gap=16;
+  const cols=Math.min(UPGRADES.length,4);
+  const totalW=cols*cardW+(cols-1)*gap;
+  const sx=(W-totalW)/2, sy=108;
+  for (let i=0; i<UPGRADES.length; i++) {
+    if (_shopHit(Mouse.x,Mouse.y, sx+i*(cardW+gap),sy, cardW,cardH)) {
+      _shopIdx=i;
+      if (buyUpgrade(UPGRADES[i].id)) { sfx.play(660,0.12,'sine',0.1); applyUpgrades(); }
+      else sfx.play(110,0.06,'sawtooth',0.08);
+      return;
+    }
+  }
+  const btnW=180,btnH=44,btnX=(W-180)/2,btnY=sy+cardH+36;
+  if (_shopHit(Mouse.x,Mouse.y, btnX,btnY,btnW,btnH)) {
+    sfx.play(440,0.08,'square',0.1);
+    startGame(); setState('playing');
+  }
+}
+
+function renderShop() {
+  ctx.fillStyle=PALETTE.shopBg; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle=PALETTE.accent; ctx.font='bold 26px system-ui,sans-serif';
+  ctx.fillText('UPGRADE SHOP',W/2,50);
+  ctx.fillStyle=PALETTE.coin; ctx.font='bold 15px system-ui,sans-serif';
+  ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,76);
+
+  const cardW=160,cardH=128,gap=16;
+  const cols=Math.min(UPGRADES.length,4);
+  const totalW=cols*cardW+(cols-1)*gap;
+  const sx=(W-totalW)/2, sy=100;
+
+  for (let i=0; i<UPGRADES.length; i++) {
+    const up=UPGRADES[i];
+    const lvl=getUpgradeLevel(up.id);
+    const cx=sx+i*(cardW+gap);
+    const maxed=lvl>=up.maxLevel;
+    const canBuy=!maxed && _meta.coins>=up.costs[lvl];
+    const sel=i===_shopIdx;
+
+    ctx.fillStyle=sel?PALETTE.shopSel:PALETTE.shopCard;
+    ctx.strokeStyle=maxed?'#4caf50':canBuy?PALETTE.coin:'#444';
+    ctx.lineWidth=sel?2:1;
+    ctx.beginPath(); ctx.roundRect(cx,sy,cardW,cardH,8); ctx.fill(); ctx.stroke();
+
+    ctx.font='26px system-ui,sans-serif'; ctx.fillStyle='#fff';
+    ctx.fillText(up.icon, cx+cardW/2, sy+32);
+    ctx.font='bold 12px system-ui,sans-serif';
+    ctx.fillText(up.name, cx+cardW/2, sy+52);
+    ctx.fillStyle='#aaa'; ctx.font='11px system-ui,sans-serif';
+    ctx.fillText(up.desc, cx+cardW/2, sy+68);
+
+    for (let p=0; p<up.maxLevel; p++) {
+      ctx.fillStyle=p<lvl?PALETTE.coin:'#333';
+      ctx.beginPath(); ctx.arc(cx+cardW/2-(up.maxLevel-1)*7+p*14, sy+86, 5, 0, Math.PI*2); ctx.fill();
+    }
+
+    ctx.font='bold 11px system-ui,sans-serif';
+    ctx.fillStyle=maxed?'#4caf50':canBuy?PALETTE.coin:'#555';
+    ctx.fillText(maxed?'MAXED':`${up.costs[lvl]} coins`, cx+cardW/2, sy+110);
+  }
+
+  const btnW=180,btnH=44,btnX=(W-btnW)/2,btnY=sy+cardH+36;
+  ctx.fillStyle='#1a4a1a'; ctx.strokeStyle='#4caf50'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.roundRect(btnX,btnY,btnW,btnH,8); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#fff'; ctx.font='bold 17px system-ui,sans-serif';
+  ctx.fillText('▶  PLAY',W/2,btnY+28);
+  ctx.textAlign='left';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [FILL: APPLY_UPGRADES]
+// Read upgrade levels and configure runtime vars.
+// Called once at run start inside startGame().
+// ══════════════════════════════════════════════════════════════════
+function applyUpgrades() {
+  // [FILL: customize effects to match your UPGRADES array]
+  _magnetRange     = [0, 80, 140, 220][getUpgradeLevel('magnet')];
+  _scoreMultiplier = [1.0, 1.25, 1.5, 2.0][getUpgradeLevel('multiplier')];
+  player.maxHp     = 3 + getUpgradeLevel('shield');
+  player.hp        = player.maxHp;
+  worldSpeed       = SPEED_INIT + [0, 40, 80, 120][getUpgradeLevel('headstart')];
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [FILL: OBSTACLE & COIN SPAWN RULES]
+// Tune timing and obstacle mix to match your visual theme.
+// ══════════════════════════════════════════════════════════════════
+function spawnObstacle() {
+  const types = distSinceStart < 30
+    ? ['ground_low']
+    : distSinceStart < 80
+    ? ['ground_low','ground_low','aerial']
+    : ['ground_low','ground_high','aerial','ground_high'];
+  const type = randChoice(types);
+  obstaclePool.get(o => {
+    o.type=type; o.x=W+20;
+    if (type==='ground_low') {
+      o.w=randInt(22,38); o.h=randInt(44,58); o.y=GROUND_Y-o.h; o.color=PALETTE.obstacle;
+    } else if (type==='ground_high') {
+      o.w=randInt(22,34); o.h=randInt(72,96); o.y=GROUND_Y-o.h; o.color='#aa2200';
+    } else {
+      o.w=randInt(60,110); o.h=22;
+      o.y=GROUND_Y-player.crouchH-26-randInt(0,20); o.color='#884400';
+    }
+  });
+  nextObstacleIn = Math.max(0.55, 1.6-distSinceStart*0.005) + randFloat(-0.15,0.20);
+}
+
+function spawnCoin() {
+  const count = randInt(1,4);
+  for (let i=0; i<count; i++) {
+    coinPool.get(c => {
+      c.x=W+30+i*28; c.y=GROUND_Y-randInt(60,160); c.bobTimer=Math.random()*Math.PI*2; c.value=10;
+    });
+  }
+  nextCoinIn = randFloat(1.4, 3.0);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// BACKGROUND INIT
+// ══════════════════════════════════════════════════════════════════
+function buildParallax() {
+  bgLayers.length = 0;
+  const speeds=[0,0.15,0.40], counts=[0,8,14];
+  for (let li=1; li<=2; li++) {
+    const c=document.createElement('canvas'); c.width=W*2; c.height=H;
+    const cx=c.getContext('2d');
+    // [FILL: draw scenery elements for each layer]
+    if (li===1) {
+      cx.fillStyle='#16213e';
+      for (let m=0; m<counts[li]; m++) {
+        const mx=(m/(counts[li]-1))*c.width, mh=60+Math.random()*80;
+        cx.beginPath(); cx.moveTo(mx,GROUND_Y); cx.lineTo(mx+40,GROUND_Y-mh); cx.lineTo(mx+80,GROUND_Y); cx.fill();
+      }
+    } else {
+      cx.fillStyle='#1e3a1e';
+      for (let t=0; t<counts[li]; t++) {
+        const tx=(t/(counts[li]-1))*c.width, th=30+Math.random()*50;
+        cx.fillRect(tx+16,GROUND_Y-th,8,th);
+        cx.beginPath(); cx.arc(tx+20,GROUND_Y-th,18,0,Math.PI*2); cx.fill();
+      }
+    }
+    bgLayers.push({ canvas:c, scrollX:0, speed:speeds[li] });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME INIT
+// ══════════════════════════════════════════════════════════════════
+function initGame() { buildParallax(); loadMeta(); }
+
+function startGame() {
+  loadMeta();
+  GAME_SCORE=0; worldX=0; worldSpeed=SPEED_INIT; distSinceStart=0;
+  _runCoins=0; _gameoverTimer=1.5;
+  player.x=PLAYER_X; player.y=GROUND_Y-52; player.h=52;
+  player.vx=0; player.vy=0;
+  player.onGround=true; player.wasOnGround=true;
+  player.jumpsLeft=MAX_JUMPS; player.coyoteTimer=0; player.jumpBufferTimer=0;
+  player.isJumping=false; player.crouching=false;
+  player.maxHp=3; player.hp=3; player.iframes=0; player.coins=0;
+  player.squashX=1; player.squashY=1; player.animTimer=0;
+  obstaclePool.clear(); coinPool.clear(); Popups.length=0;
+  nextObstacleIn=1.5; nextCoinIn=0.8;
+  buildParallax();
+  applyUpgrades();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// JUMPING (research-proven mechanics — DO NOT MODIFY)
+// ══════════════════════════════════════════════════════════════════
+function executeJump() {
+  const isDouble = !player.onGround && player.coyoteTimer <= 0;
+  player.vy = isDouble ? JUMP_FORCE * 0.85 : JUMP_FORCE;
+  if (!isDouble) { player.jumpsLeft=MAX_JUMPS-1; player.coyoteTimer=0; }
+  else player.jumpsLeft--;
+  player.isJumping=true; player.jumpBufferTimer=0;
+  player.squashX=0.72; player.squashY=1.30;
+  spawnParticles(player.x+player.w/2, player.y+player.h, 4,
+    {color:'#aaa',speed:40,angle:Math.PI/2,spread:0.8,gravity:60,life:0.22});
+  sfx.play(isDouble?660:440, 0.08, 'square', 0.09);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// UPDATE
+// ══════════════════════════════════════════════════════════════════
+function updatePlaying(dt) {
+  // ── World speed ramp ──────────────────────────────────────────
+  worldSpeed = Math.min(worldSpeed + SPEED_RAMP*dt, SPEED_MAX);
+  worldX += worldSpeed*dt;
+  distSinceStart = worldX/100;
+  GAME_SCORE = Math.floor((Math.floor(worldX/10) + player.coins*5) * _scoreMultiplier);
+
+  // ── Parallax scroll ───────────────────────────────────────────
+  bgLayers.forEach(l => { l.scrollX+=worldSpeed*l.speed*dt; if(l.scrollX>=W) l.scrollX-=W; });
+
+  // ── Crouch ───────────────────────────────────────────────────
+  const wantCrouch = keyDown('ArrowDown')||keyDown('KeyS')||(Touch.swipeDy>20);
+  if (wantCrouch && player.onGround) {
+    if (!player.crouching) { player.crouching=true; player.y+=player.h-player.crouchH; player.h=player.crouchH; }
+  } else if (player.crouching) {
+    player.crouching=false; player.y-=(52-player.crouchH); player.h=52;
+  }
+
+  // ── Jump input ────────────────────────────────────────────────
+  player.wasOnGround=player.onGround;
+  if (player.wasOnGround && !player.onGround) player.coyoteTimer=COYOTE_TIME;
+  player.coyoteTimer=Math.max(0,player.coyoteTimer-dt);
+  const jumpPressed=keyPressed('Space')||keyPressed('ArrowUp')||keyPressed('KeyW')||Touch.justTapped;
+  if (jumpPressed && !player.crouching) player.jumpBufferTimer=JUMP_BUFFER;
+  player.jumpBufferTimer=Math.max(0,player.jumpBufferTimer-dt);
+  const canJump=player.onGround||player.coyoteTimer>0||player.jumpsLeft>0;
+  if (player.jumpBufferTimer>0 && canJump && !player.crouching) executeJump();
+
+  // Variable jump height
+  if (player.isJumping) {
+    const released=!keyDown('Space')&&!keyDown('ArrowUp')&&!keyDown('KeyW');
+    if (released && player.vy<0) { player.vy*=JUMP_RELEASE; player.isJumping=false; }
+    if (player.vy>=0) player.isJumping=false;
+  }
+
+  // ── Gravity ───────────────────────────────────────────────────
+  const fallMul=player.vy>0?1.5:1.0;
+  player.vy=Math.min(player.vy+GRAVITY*fallMul*dt, MAX_FALL);
+  player.y+=player.vy*dt;
+
+  // ── Ground collision ──────────────────────────────────────────
+  player.onGround=false;
+  const ph=player.crouching?player.crouchH:52;
+  if (player.y+ph>=GROUND_Y) {
+    player.y=GROUND_Y-ph;
+    if (player.vy>200) {
+      player.squashX=1.25; player.squashY=0.72;
+      triggerShake(2,0.10);
+      spawnParticles(player.x+player.w/2, GROUND_Y, 3, {color:PALETTE.ground,speed:30,angle:Math.PI/2,spread:1.2,gravity:120,life:0.18});
+    }
+    player.vy=0; player.onGround=true; player.jumpsLeft=MAX_JUMPS; player.isJumping=false;
+  }
+  if (player.onGround && !player.wasOnGround) { player.squashX=1.22; player.squashY=0.75; }
+  player.squashX=lerp(player.squashX,1.0,dt*12);
+  player.squashY=lerp(player.squashY,1.0,dt*12);
+
+  player.iframes=Math.max(0,player.iframes-dt);
+  if (player.onGround && !player.crouching) player.animTimer+=dt;
+
+  // ── Spawners ──────────────────────────────────────────────────
+  nextObstacleIn-=dt; if(nextObstacleIn<=0) spawnObstacle();
+  nextCoinIn-=dt;     if(nextCoinIn<=0)     spawnCoin();
+
+  // ── Obstacle update ───────────────────────────────────────────
+  obstaclePool.update(o => {
+    o.x-=worldSpeed*dt;
+    if (o.x+o.w<-20) return false;
+    if (player.iframes<=0 && aabb(player.x+8,player.y+6,player.w-16,ph-12,o.x,o.y,o.w,o.h)) {
+      player.hp--;
+      player.iframes=player.IFRAME_DUR;
+      triggerShake(6,0.30);
+      sfx.play(110,0.20,'sawtooth',0.14);
+      spawnParticles(player.x+player.w/2,player.y+ph/2,8,{color:'#f44',speed:65});
+      if (player.hp<=0) { _runCoins=player.coins; saveHiScore(GAME_SCORE); _gameoverTimer=1.5; setState('gameover'); }
+    }
+    return true;
+  });
+
+  // ── Coin update ───────────────────────────────────────────────
+  const pcx=player.x+player.w/2, pcy=player.y+ph/2;
+  coinPool.update(c => {
+    c.x-=worldSpeed*dt; c.bobTimer+=dt;
+    if (c.x+c.w<-10) return false;
+    // Magnet pull
+    if (_magnetRange>0) {
+      const dx=pcx-(c.x+c.w/2), dy=pcy-(c.y+c.h/2);
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      if (dist<_magnetRange && dist>1) {
+        const pull=(1-dist/_magnetRange)*400;
+        c.x+=(dx/dist)*pull*dt; c.y+=(dy/dist)*pull*dt;
+      }
+    }
+    if (aabb(player.x+4,player.y+4,player.w-8,ph-8,c.x,c.y,c.w,c.h)) {
+      player.coins+=c.value/10;
+      GAME_SCORE+=c.value;
+      spawnPopup(c.x+c.w/2,c.y,`+${c.value}`,PALETTE.coin,12);
+      sfx.play(880,0.06,'sine',0.08);
+      spawnParticles(c.x+c.w/2,c.y+c.h/2,4,{color:PALETTE.coin,speed:30,gravity:60,life:0.25});
+      return false;
+    }
+    return true;
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════════════════
+function renderMenu() {
+  ctx.fillStyle=PALETTE.bg; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  // Game title: decorative font OK
+  ctx.fillStyle=PALETTE.accent; ctx.font='bold 30px monospace';
+  ctx.fillText(GAME_TITLE, W/2, H*0.32);
+  // UI text: system font
+  ctx.fillStyle='#aaa'; ctx.font='13px system-ui,sans-serif';
+  ctx.fillText('SPACE / TAP to jump  •  ↓ to crouch', W/2, H*0.48);
+  ctx.fillStyle='#fff'; ctx.font='bold 16px system-ui,sans-serif';
+  ctx.fillText('SPACE / TAP to start', W/2, H*0.60);
+  ctx.fillStyle='#888'; ctx.font='13px system-ui,sans-serif';
+  ctx.fillText(`Best: ${Math.floor(_hiScore/10)}m`, W/2, H*0.70);
+  if (_meta.coins>0) {
+    ctx.fillStyle=PALETTE.coin;
+    ctx.fillText(`🪙 ${_meta.coins} coins saved`, W/2, H*0.80);
+  }
+  ctx.textAlign='left';
+}
+
+function renderPlaying() {
+  // ── Sky gradient ──────────────────────────────────────────────
+  const grad=ctx.createLinearGradient(0,0,0,GROUND_Y);
+  // [FILL: customize sky gradient colors]
+  grad.addColorStop(0,'#0a0a1e'); grad.addColorStop(1,'#1a2a4e');
+  ctx.fillStyle=grad; ctx.fillRect(0,0,W,GROUND_Y);
+
+  // ── Parallax layers ───────────────────────────────────────────
+  bgLayers.forEach(l => { ctx.drawImage(l.canvas,-l.scrollX,0); ctx.drawImage(l.canvas,-l.scrollX+W,0); });
+
+  // ── Ground ────────────────────────────────────────────────────
+  ctx.fillStyle=PALETTE.ground;    ctx.fillRect(0,GROUND_Y,W,8);
+  ctx.fillStyle=PALETTE.groundFill; ctx.fillRect(0,GROUND_Y+8,W,H-(GROUND_Y+8));
+  // [FILL: ground detail — tiles, cracks, etc.]
+
+  // ── Obstacles ─────────────────────────────────────────────────
+  obstaclePool.active.forEach(o => {
+    ctx.fillStyle=o.color; ctx.fillRect(o.x,o.y,o.w,o.h);
+    // [FILL: draw obstacle with distinct visual per type]
+    ctx.fillStyle='rgba(255,255,255,0.15)'; ctx.fillRect(o.x,o.y,o.w,4);
+  });
+
+  // ── Coins ─────────────────────────────────────────────────────
+  coinPool.active.forEach(c => {
+    const bob=Math.sin(c.bobTimer*4)*3;
+    ctx.fillStyle=PALETTE.coin; ctx.shadowBlur=6; ctx.shadowColor=PALETTE.coin;
+    ctx.beginPath(); ctx.arc(c.x+c.w/2,c.y+c.h/2+bob,c.w/2,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+  });
+
+  // ── Player ────────────────────────────────────────────────────
+  const blink=player.iframes>0 && Math.floor(player.iframes/0.07)%2===0;
+  if (!blink) {
+    ctx.globalAlpha=player.iframes>0?0.55:1.0;
+    const rph=player.crouching?player.crouchH:52;
+    const rpw=player.crouching?player.w+10:player.w;
+    const drawW=rpw*player.squashX, drawH=rph*player.squashY;
+    const cx2=player.x+player.w/2, cy2=player.y+rph/2;
+    ctx.fillStyle=PALETTE.player; ctx.shadowBlur=8; ctx.shadowColor=PALETTE.player;
+    // [FILL: draw player character — replace with sprite-like shapes]
+    ctx.beginPath(); ctx.roundRect(cx2-drawW/2,cy2-drawH/2,drawW,drawH,player.crouching?4:6); ctx.fill();
+    ctx.shadowBlur=0; ctx.fillStyle='#001a2e';
+    ctx.beginPath(); ctx.arc(cx2+6,cy2-drawH*0.15,4,0,Math.PI*2); ctx.fill();
+    if (player.onGround && !player.crouching) {
+      const legSwing=Math.sin(player.animTimer*12)*8;
+      ctx.fillStyle=PALETTE.player;
+      ctx.fillRect(cx2-8,cy2+drawH/2-2,8,5+legSwing);
+      ctx.fillRect(cx2+2,cy2+drawH/2-2,8,5-legSwing);
+    }
+    ctx.shadowBlur=0; ctx.globalAlpha=1;
+  }
+
+  // ── HUD — system font for readability ─────────────────────────
+  ctx.font='bold 15px system-ui,sans-serif'; ctx.fillStyle=PALETTE.ui; ctx.textAlign='left';
+  ctx.fillText(`${Math.floor(worldX/10)}m`, 10, 24);
+  ctx.fillStyle='#888'; ctx.font='12px system-ui,sans-serif'; ctx.textAlign='right';
+  ctx.fillText(`Best: ${Math.floor(_hiScore/10)}m`, W-10, 24);
+  ctx.fillStyle=PALETTE.coin; ctx.textAlign='center'; ctx.font='13px system-ui,sans-serif';
+  ctx.fillText(`🪙 ${Math.floor(player.coins)}`, W/2, 22);
+  for (let i=0;i<player.maxHp;i++) {
+    ctx.fillStyle=i<player.hp?'#f44':'#333';
+    ctx.beginPath(); ctx.arc(14+i*22,H-14,7,0,Math.PI*2); ctx.fill();
+  }
+  ctx.textAlign='left';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// START
+// ══════════════════════════════════════════════════════════════════
+initGame();
+requestAnimationFrame(t => { lastTime=t; requestAnimationFrame(loop); });
+</script>
+</body></html>

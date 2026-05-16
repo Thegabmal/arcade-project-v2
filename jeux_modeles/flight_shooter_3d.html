@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IRON SKIES — Flight Shooter 3D</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+  #c { display: block; width: 100vw; height: 100vh; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; font-family: system-ui, sans-serif; }
+  #score-disp {
+    position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+    font-size: 22px; font-weight: 700; color: #88ccff; letter-spacing: 2px; text-shadow: 0 0 10px #88ccff55;
+  }
+  #sector-disp {
+    position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; color: #888; letter-spacing: 3px; text-transform: uppercase;
+  }
+  #hp-wrap { position: absolute; bottom: 60px; left: 24px; }
+  #hp-label { font-size: 11px; color: #888; letter-spacing: 2px; margin-bottom: 4px; }
+  #hp-bg { width: 180px; height: 13px; background: #222; border-radius: 6px; overflow: hidden; }
+  #hp-fill { height: 100%; background: linear-gradient(90deg,#c0392b,#e74c3c); border-radius: 6px; transition: width 0.2s; }
+  #fuel-wrap { position: absolute; bottom: 86px; left: 24px; }
+  #fuel-label { font-size: 11px; color: #888; letter-spacing: 2px; margin-bottom: 4px; }
+  #fuel-bg { width: 180px; height: 10px; background: #222; border-radius: 5px; overflow: hidden; }
+  #fuel-fill { height: 100%; background: linear-gradient(90deg,#f39c12,#ffd700); border-radius: 5px; transition: width 0.2s; }
+  #speed-disp { position: absolute; bottom: 60px; right: 24px; font-size: 32px; font-weight: 700; color: #fff; }
+  #speed-unit { font-size: 12px; color: #888; letter-spacing: 2px; }
+  #altitude-disp { position: absolute; bottom: 100px; right: 24px; font-size: 14px; color: #aaa; }
+  #coins-disp { position: absolute; top: 18px; right: 24px; font-size: 15px; color: #ffd700; }
+  #hit-flash { position: absolute; inset: 0; background: rgba(192,57,43,0); pointer-events: none; transition: background 0.07s; }
+  #reticle {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: 50px; height: 50px; pointer-events: none;
+  }
+  #reticle::before, #reticle::after { content:''; position:absolute; background:rgba(136,204,255,0.8); }
+  #reticle::before { width:1px; height:20px; left:24px; top:-4px; }
+  #reticle::after  { width:20px; height:1px; top:24px; left:-4px; }
+  #lock-ring {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: 60px; height: 60px;
+    border: 2px solid rgba(255,100,100,0); border-radius: 50%;
+    pointer-events: none; transition: border-color 0.2s;
+  }
+  #afterburner {
+    position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
+    font-size: 14px; color: #ff8800; letter-spacing: 3px; opacity: 0; transition: opacity 0.2s;
+  }
+  #barrel-banner {
+    position: absolute; top: 38%; left: 50%; transform: translateX(-50%);
+    font-size: 20px; font-weight: 700; color: #ffd700;
+    opacity: 0; transition: opacity 0.3s; letter-spacing: 4px; pointer-events: none;
+  }
+
+  #overlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.9); color: #fff;
+  }
+  #overlay h1 {
+    font-size: 52px; font-weight: 900; letter-spacing: 7px;
+    color: #88ccff; text-shadow: 0 0 30px #88ccff88;
+    font-family: 'Impact', system-ui; margin-bottom: 6px;
+  }
+  #overlay .sub { font-size: 13px; color: #555; letter-spacing: 4px; margin-bottom: 40px; }
+  .menu-btn {
+    padding: 13px 36px; margin: 5px;
+    font-size: 14px; font-weight: 700; letter-spacing: 2px;
+    border: 2px solid #88ccff; background: transparent; color: #88ccff;
+    cursor: pointer; text-transform: uppercase; transition: all 0.15s; font-family: system-ui;
+  }
+  .menu-btn:hover { background: #88ccff; color: #000; }
+  #gameover-score { font-size: 28px; color: #88ccff; margin: 16px 0; }
+
+  #shop-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.93);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; font-family: system-ui;
+  }
+  #shop-overlay h2 { font-size: 30px; color: #88ccff; letter-spacing: 4px; margin-bottom: 6px; }
+  #shop-coins-disp { font-size: 15px; color: #ffd700; margin-bottom: 24px; }
+  #shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 540px; width: 100%; }
+  .shop-card { border: 2px solid #333; padding: 16px; cursor: pointer; transition: all 0.15s; background: #060810; }
+  .shop-card:hover { border-color: #88ccff; background: #0a0e18; }
+  .shop-card h3 { font-size: 13px; color: #88ccff; margin-bottom: 6px; }
+  .shop-card p  { font-size: 11px; color: #666; margin-bottom: 10px; line-height: 1.4; }
+  .shop-card .cost { font-size: 12px; color: #ffd700; font-weight: 700; }
+  .shop-card .lvl  { font-size: 11px; color: #444; float: right; }
+  #shop-skip { margin-top: 18px; font-size: 13px; color: #444; cursor: pointer; letter-spacing: 2px; }
+  #shop-skip:hover { color: #aaa; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" style="display:none;">
+  <div id="hit-flash"></div>
+  <div id="reticle"></div>
+  <div id="lock-ring"></div>
+  <div id="score-disp">0</div>
+  <div id="sector-disp">SECTOR 1</div>
+  <div id="coins-disp">🪙 0</div>
+  <div id="hp-wrap">
+    <div id="hp-label">HULL</div>
+    <div id="hp-bg"><div id="hp-fill" style="width:100%"></div></div>
+  </div>
+  <div id="fuel-wrap">
+    <div id="fuel-label">AFTERBURNER</div>
+    <div id="fuel-bg"><div id="fuel-fill" style="width:100%"></div></div>
+  </div>
+  <div id="speed-disp">0<br><span id="speed-unit">m/s</span></div>
+  <div id="altitude-disp">ALT: 0m</div>
+  <div id="afterburner">⚡ AFTERBURNER</div>
+  <div id="barrel-banner">BARREL ROLL!</div>
+</div>
+
+<div id="overlay">
+  <h1>IRON SKIES</h1>
+  <div class="sub">DOGFIGHT FLIGHT SHOOTER</div>
+  <button class="menu-btn" id="btn-play">TAKE OFF</button>
+  <div style="font-size:11px;color:#444;margin-top:14px;">MOUSE — PITCH/YAW &nbsp;|&nbsp; LMB/SPACE — FIRE &nbsp;|&nbsp; SHIFT — AFTERBURNER &nbsp;|&nbsp; Q/E — ROLL</div>
+</div>
+
+<div id="shop-overlay">
+  <h2>HANGAR</h2>
+  <div id="shop-coins-disp">🪙 0</div>
+  <div id="shop-grid"></div>
+  <div id="shop-skip">[ SKIP → ]</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js"></script>
+<script>
+// ─── META ─────────────────────────────────────────────────────────────────────
+const META_KEY='meta_iron_skies';
+const UPGRADES=[
+  {id:'cannon',  name:'Auto-Cannon',    desc:'+25% fire rate per level',       cost:35,maxLv:3,effect:'firerate'},
+  {id:'armor',   name:'Titanium Hull',  desc:'+30 max HP per level',           cost:40,maxLv:3,effect:'hp'},
+  {id:'thrust',  name:'Turbo Engine',   desc:'+15% speed per level',           cost:35,maxLv:3,effect:'speed'},
+  {id:'missile', name:'Missile Lock',   desc:'Unlock homing missile (M key)', cost:60,maxLv:1,effect:'missile'},
+];
+let meta={coins:0,upgrades:{}};
+function loadMeta(){try{const s=localStorage.getItem(META_KEY);if(s)meta=JSON.parse(s);}catch(e){}
+  UPGRADES.forEach(u=>{if(!meta.upgrades[u.id])meta.upgrades[u.id]=0;});}
+function saveMeta(){try{localStorage.setItem(META_KEY,JSON.stringify(meta));}catch(e){}}
+function buyUpgrade(id){
+  const u=UPGRADES.find(u=>u.id===id);if(!u)return;
+  const lv=meta.upgrades[id];if(lv>=u.maxLv)return;
+  const cost=u.cost*(lv+1);if(meta.coins<cost)return;
+  meta.coins-=cost;meta.upgrades[id]++;saveMeta();
+}
+function applyUpgrades(){
+  const lv=id=>meta.upgrades[id]||0;
+  plane.fireRate=0.14-lv('cannon')*0.03;
+  plane.maxHp=100+lv('armor')*30;
+  plane.maxSpeed=60+lv('thrust')*9;
+  plane.hasMissile=lv('missile')>0;
+}
+loadMeta();
+
+// ─── THREE.JS ─────────────────────────────────────────────────────────────────
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(window.innerWidth,window.innerHeight);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x1a3a6a);
+scene.fog=new THREE.FogExp2(0x1a3a6a,0.003);
+
+const camera=new THREE.PerspectiveCamera(65,window.innerWidth/window.innerHeight,0.1,800);
+const clock=new THREE.Clock();
+
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+// ─── LIGHTING ─────────────────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x446688,0.8));
+const sun=new THREE.DirectionalLight(0xfff0cc,1.2); sun.position.set(100,200,100); scene.add(sun);
+
+// ─── SKY + CLOUDS ─────────────────────────────────────────────────────────────
+const cloudMat=new THREE.MeshLambertMaterial({color:0xffffff,transparent:true,opacity:0.6});
+const clouds=[];
+for(let i=0;i<30;i++){
+  const grp=new THREE.Group();
+  const n=3+Math.floor(Math.random()*4);
+  for(let j=0;j<n;j++){
+    const m=new THREE.Mesh(new THREE.SphereGeometry(8+Math.random()*8,7,7),cloudMat);
+    m.position.set((Math.random()-0.5)*30,(Math.random()-0.5)*8,(Math.random()-0.5)*20);
+    grp.add(m);
+  }
+  grp.position.set((Math.random()-0.5)*600,80+Math.random()*80,(Math.random()-0.5)*600);
+  scene.add(grp); clouds.push(grp);
+}
+
+// Ground (distant)
+const groundGeo=new THREE.PlaneGeometry(2000,2000,20,20);
+const groundMat=new THREE.MeshLambertMaterial({color:0x336622});
+const ground=new THREE.Mesh(groundGeo,groundMat); ground.rotation.x=-Math.PI/2; ground.position.y=-50;
+scene.add(ground);
+
+// ─── PLAYER PLANE ─────────────────────────────────────────────────────────────
+const plane={
+  grp:null,
+  pos:new THREE.Vector3(0,80,0),
+  vel:new THREE.Vector3(0,0,-40),
+  pitch:0, yaw:0, roll:0,
+  speed:40, maxSpeed:60,
+  hp:100, maxHp:100,
+  score:0, sector:1,
+  afterburner:100, maxAB:100,
+  fireTimer:0, fireRate:0.14,
+  rollTimer:0,
+  hasMissile:false, missileCD:0,
+  dead:false,
+};
+
+function buildPlayerPlane(){
+  const grp=new THREE.Group();
+  const mat=new THREE.MeshLambertMaterial({color:0x88aacc});
+  const matDark=new THREE.MeshLambertMaterial({color:0x334455});
+  const matEngine=new THREE.MeshLambertMaterial({color:0xff8800,emissive:0x441100});
+  // Fuselage
+  const fuse=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.5,4,8),mat);
+  fuse.rotation.x=Math.PI/2; grp.add(fuse);
+  // Wings
+  const wingL=new THREE.Mesh(new THREE.BoxGeometry(5,0.15,2),mat);
+  wingL.position.set(0,0,0); grp.add(wingL);
+  // Tail
+  const tail=new THREE.Mesh(new THREE.BoxGeometry(2,0.15,0.8),mat);
+  tail.position.set(0,0.3,1.8); grp.add(tail);
+  const tailV=new THREE.Mesh(new THREE.BoxGeometry(0.15,1,0.8),mat);
+  tailV.position.set(0,0.5,1.8); grp.add(tailV);
+  // Engine
+  const eng=new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.35,0.6,8),matEngine);
+  eng.rotation.x=Math.PI/2; eng.position.z=2; grp.add(eng);
+  scene.add(grp);
+  plane.grp=grp;
+}
+buildPlayerPlane();
+
+// ─── ENEMY PLANES ─────────────────────────────────────────────────────────────
+const enemies=[], eBullets=[], playerBullets=[];
+const ENEMY_DEFS={
+  fighter:{hp:4,speed:35,reward:20,col:0xcc3322,scale:1,fireInt:3},
+  heavy:  {hp:10,speed:22,reward:40,col:0x884422,scale:1.5,fireInt:4},
+  ace:    {hp:6,speed:50,reward:60,col:0xaa22aa,scale:1,fireInt:2},
+};
+
+function spawnEnemy(type){
+  const def=ENEMY_DEFS[type];
+  const grp=new THREE.Group();
+  const mat=new THREE.MeshLambertMaterial({color:def.col});
+  const fuse=new THREE.Mesh(new THREE.CylinderGeometry(0.3*def.scale,0.5*def.scale,4*def.scale,8),mat);
+  fuse.rotation.x=Math.PI/2; grp.add(fuse);
+  const wing=new THREE.Mesh(new THREE.BoxGeometry(5*def.scale,0.15*def.scale,2*def.scale),mat);
+  grp.add(wing);
+  const angle=Math.random()*Math.PI*2;
+  const r=150+Math.random()*100;
+  grp.position.set(plane.pos.x+Math.cos(angle)*r, plane.pos.y+(Math.random()-0.5)*60, plane.pos.z+Math.sin(angle)*r);
+  scene.add(grp);
+  enemies.push({type,grp,hp:def.hp,maxHp:def.hp,speed:def.speed,reward:def.reward,
+    fireInt:def.fireInt,fireTimer:Math.random()*def.fireInt,dead:false,scale:def.scale});
+}
+
+const pbMat=new THREE.MeshBasicMaterial({color:0xffd700});
+const ebMat=new THREE.MeshBasicMaterial({color:0xff4444});
+function fireCannon(fromPlayer,pos,dir,speed=200){
+  const m=new THREE.Mesh(new THREE.SphereGeometry(fromPlayer?0.2:0.15,4,4),fromPlayer?pbMat:ebMat);
+  m.position.copy(pos); scene.add(m);
+  (fromPlayer?playerBullets:eBullets).push({mesh:m,vel:dir.clone().normalize().multiplyScalar(speed),life:3});
+}
+
+// ─── BARREL ROLL ──────────────────────────────────────────────────────────────
+let barrelRollTimer=0, barrelBannerTimer=0;
+function triggerBarrelRoll(dir){
+  if(barrelRollTimer>0) return;
+  barrelRollTimer=0.5; plane.rollTimer=dir;
+  document.getElementById('barrel-banner').style.opacity='1';
+  barrelBannerTimer=1.2;
+}
+
+// ─── INPUT ────────────────────────────────────────────────────────────────────
+let mx=0,my=0;
+window.addEventListener('mousemove',e=>{
+  mx=(e.clientX/window.innerWidth-0.5)*2;
+  my=-(e.clientY/window.innerHeight-0.5)*2;
+});
+const keys2={};
+window.addEventListener('keydown',e=>{
+  keys2[e.code]=true;
+  if(e.code==='Space') firing=true;
+  if(e.code==='KeyQ') triggerBarrelRoll(-1);
+  if(e.code==='KeyE') triggerBarrelRoll(1);
+  e.preventDefault&&e.key==='Tab'&&e.preventDefault();
+});
+window.addEventListener('keyup',e=>{keys2[e.code]=false; if(e.code==='Space') firing=false;});
+let firing=false;
+window.addEventListener('mousedown',e=>{if(e.button===0) firing=true;});
+window.addEventListener('mouseup',  e=>{if(e.button===0) firing=false;});
+
+// ─── WAVE ─────────────────────────────────────────────────────────────────────
+let waveEnemies=0, waveCooldown=2;
+
+function startSector(s){
+  const n=3+s*2, hasBoss=s%4===0;
+  for(let i=0;i<n;i++){
+    const t=hasBoss&&i===0?'heavy':(s>4?(['fighter','ace'][Math.floor(Math.random()*2)]):'fighter');
+    spawnEnemy(t);
+  }
+  waveEnemies=n;
+}
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let gameState='menu';
+
+function startGame(){
+  enemies.forEach(e=>scene.remove(e.grp)); enemies.length=0;
+  playerBullets.forEach(b=>scene.remove(b.mesh)); playerBullets.length=0;
+  eBullets.forEach(b=>scene.remove(b.mesh)); eBullets.length=0;
+  applyUpgrades();
+  plane.hp=plane.maxHp; plane.score=0; plane.sector=1; plane.dead=false;
+  plane.pos.set(0,80,0); plane.vel.set(0,0,-40);
+  plane.afterburner=plane.maxAB; plane.pitch=0; plane.yaw=0; plane.roll=0;
+  waveCooldown=2; waveEnemies=0;
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('hud').style.display='block';
+  gameState='playing'; updateHUD();
+}
+
+function triggerGameOver(){
+  plane.dead=true; gameState='gameover';
+  const coins=Math.floor(plane.score/12);
+  meta.coins+=coins; saveMeta();
+  document.getElementById('hud').style.display='none';
+  const ov=document.getElementById('overlay');
+  ov.innerHTML=`<h1>IRON SKIES</h1><div class="sub">SHOT DOWN</div>
+    <div id="gameover-score">${plane.score.toLocaleString()}</div>
+    <div style="font-size:13px;color:#555;margin-bottom:22px;">SECTOR ${plane.sector} — +${coins} 🪙</div>
+    <button class="menu-btn" id="btn-shop">HANGAR</button>
+    <button class="menu-btn" id="btn-retry">TAKE OFF AGAIN</button>`;
+  ov.style.display='flex';
+  document.getElementById('btn-shop').onclick=()=>{ov.style.display='none';openShop();};
+  document.getElementById('btn-retry').onclick=startGame;
+}
+
+function openShop(){ gameState='shop'; renderShop(); document.getElementById('shop-overlay').style.display='flex'; }
+function closeShop(){ document.getElementById('shop-overlay').style.display='none'; startGame(); }
+function renderShop(){
+  document.getElementById('shop-coins-disp').textContent=`🪙 ${meta.coins}`;
+  const grid=document.getElementById('shop-grid'); grid.innerHTML='';
+  UPGRADES.forEach(u=>{
+    const lv=meta.upgrades[u.id]||0,cost=u.cost*(lv+1),maxed=lv>=u.maxLv;
+    const card=document.createElement('div'); card.className='shop-card';
+    card.innerHTML=`<h3>${u.name}<span class="lvl">LV${lv}/${u.maxLv}</span></h3><p>${u.desc}</p><span class="cost">${maxed?'MAXED':'🪙 '+cost}</span>`;
+    if(!maxed&&meta.coins>=cost) card.onclick=()=>{buyUpgrade(u.id);renderShop();};
+    else card.style.opacity=maxed?'0.4':'0.6';
+    grid.appendChild(card);
+  });
+  document.getElementById('shop-skip').onclick=closeShop;
+}
+
+function flashHit(){
+  const el=document.getElementById('hit-flash');
+  el.style.background='rgba(192,57,43,0.4)';
+  setTimeout(()=>el.style.background='rgba(192,57,43,0)',100);
+}
+function updateHUD(){
+  document.getElementById('score-disp').textContent=plane.score.toLocaleString();
+  document.getElementById('sector-disp').textContent=`SECTOR ${plane.sector}`;
+  document.getElementById('coins-disp').textContent=`🪙 ${meta.coins}`;
+  document.getElementById('hp-fill').style.width=(plane.hp/plane.maxHp*100)+'%';
+  document.getElementById('fuel-fill').style.width=(plane.afterburner/plane.maxAB*100)+'%';
+  const spd=Math.round(plane.vel.length());
+  document.getElementById('speed-disp').innerHTML=`${spd}<br><span id="speed-unit">m/s</span>`;
+  document.getElementById('altitude-disp').textContent=`ALT: ${Math.round(plane.pos.y)}m`;
+}
+
+// ─── UPDATE ───────────────────────────────────────────────────────────────────
+const planeQuat=new THREE.Quaternion();
+function update(dt){
+  if(gameState!=='playing') return;
+
+  // Afterburner
+  const boosting=keys2['ShiftLeft']||keys2['ShiftRight'];
+  if(boosting&&plane.afterburner>0){
+    plane.afterburner=Math.max(0,plane.afterburner-40*dt);
+    document.getElementById('afterburner').style.opacity='1';
+  } else {
+    plane.afterburner=Math.min(plane.maxAB,plane.afterburner+15*dt);
+    document.getElementById('afterburner').style.opacity='0';
+  }
+  const boost=boosting&&plane.afterburner>0?1.6:1;
+
+  // Pitch + Yaw from mouse
+  plane.pitch+=(my*1.2-plane.pitch)*3*dt;
+  plane.yaw+=(-mx*1.5-plane.yaw)*3*dt;
+
+  // Roll (barrel roll)
+  if(barrelRollTimer>0){
+    barrelRollTimer-=dt;
+    plane.roll+=plane.rollTimer*Math.PI*4*dt;
+  } else {
+    plane.roll*=(1-4*dt);
+  }
+
+  // Build orientation quaternion
+  const q=new THREE.Quaternion();
+  q.setFromEuler(new THREE.Euler(plane.pitch,-plane.yaw,plane.roll,'YXZ'));
+  plane.grp.quaternion.slerp(q,0.15);
+
+  // Thrust in plane's forward direction
+  const fwd=new THREE.Vector3(0,0,-1).applyQuaternion(plane.grp.quaternion);
+  const targetSpeed=plane.maxSpeed*boost;
+  const cs=plane.vel.length();
+  plane.vel.lerp(fwd.multiplyScalar(targetSpeed),2*dt);
+  plane.pos.addScaledVector(plane.vel,dt);
+  plane.pos.y=Math.max(-20,Math.min(300,plane.pos.y));
+  plane.grp.position.copy(plane.pos);
+
+  // TPS camera — behind the plane
+  const back=new THREE.Vector3(0,0,1).applyQuaternion(plane.grp.quaternion);
+  const up=new THREE.Vector3(0,1,0).applyQuaternion(plane.grp.quaternion);
+  const camIdeal=plane.pos.clone()
+    .addScaledVector(back,12)
+    .addScaledVector(up,3);
+  camera.position.lerp(camIdeal,0.1);
+  camera.lookAt(plane.pos.x,plane.pos.y+1,plane.pos.z);
+
+  // Fire cannon
+  plane.fireTimer=Math.max(0,plane.fireTimer-dt);
+  if(firing&&plane.fireTimer<=0){
+    const dir2=new THREE.Vector3(0,0,-1).applyQuaternion(plane.grp.quaternion);
+    fireCannon(true,plane.pos.clone().addScaledVector(dir2,4),dir2,240);
+    plane.fireTimer=plane.fireRate;
+  }
+
+  // Player bullets
+  for(let i=playerBullets.length-1;i>=0;i--){
+    const b=playerBullets[i];
+    b.mesh.position.addScaledVector(b.vel,dt); b.life-=dt;
+    if(b.life<=0){ scene.remove(b.mesh); playerBullets.splice(i,1); continue; }
+    let hit=false;
+    enemies.forEach(e=>{
+      if(e.dead||hit) return;
+      if(b.mesh.position.distanceTo(e.grp.position)<3*e.scale){
+        e.hp--; hit=true;
+        if(e.hp<=0){ e.dead=true; scene.remove(e.grp); const idx=enemies.indexOf(e); if(idx>=0) enemies.splice(idx,1);
+          plane.score+=e.reward; meta.coins+=Math.ceil(e.reward/10); saveMeta();
+          waveEnemies=Math.max(0,waveEnemies-1);
+        }
+      }
+    });
+    if(hit){ scene.remove(b.mesh); playerBullets.splice(i,1); }
+  }
+
+  // Enemy AI
+  enemies.forEach(e=>{
+    if(e.dead) return;
+    const toP=new THREE.Vector3().subVectors(plane.pos,e.grp.position).normalize();
+    e.grp.position.addScaledVector(toP,e.speed*dt);
+    e.grp.lookAt(plane.pos);
+    e.fireTimer-=dt;
+    if(e.fireTimer<=0){
+      e.fireTimer=e.fireInt;
+      const dir3=toP.clone();
+      dir3.x+=(Math.random()-0.5)*0.3; dir3.y+=(Math.random()-0.5)*0.3;
+      fireCannon(false,e.grp.position.clone(),dir3.normalize(),120);
+    }
+    if(e.grp.position.distanceTo(plane.pos)<3){
+      plane.hp-=15; flashHit();
+      scene.remove(e.grp); const idx=enemies.indexOf(e); if(idx>=0) enemies.splice(idx,1);
+      waveEnemies=Math.max(0,waveEnemies-1);
+      if(plane.hp<=0){ plane.hp=0; triggerGameOver(); return; }
+    }
+  });
+
+  // Enemy bullets
+  for(let i=eBullets.length-1;i>=0;i--){
+    const b=eBullets[i];
+    b.mesh.position.addScaledVector(b.vel,dt); b.life-=dt;
+    if(b.life<=0){ scene.remove(b.mesh); eBullets.splice(i,1); continue; }
+    if(b.mesh.position.distanceTo(plane.pos)<2){
+      scene.remove(b.mesh); eBullets.splice(i,1);
+      plane.hp-=10; flashHit();
+      if(plane.hp<=0){ plane.hp=0; triggerGameOver(); return; }
+    }
+  }
+
+  // Wave
+  if(waveEnemies===0&&enemies.length===0){
+    waveCooldown-=dt; if(waveCooldown<=0){ plane.sector++; startSector(plane.sector); waveCooldown=5; }
+  }
+
+  // Banner
+  if(barrelBannerTimer>0){ barrelBannerTimer-=dt;
+    if(barrelBannerTimer<=0) document.getElementById('barrel-banner').style.opacity='0'; }
+
+  updateHUD();
+}
+
+camera.position.set(0,80,20);
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  update(dt);
+  renderer.render(scene,camera);
+}
+animate();
+document.getElementById('btn-play').onclick=startGame;
+</script>
+</body>
+</html>

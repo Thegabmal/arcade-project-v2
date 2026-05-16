@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,44 +12,57 @@
 
   <!-- NAV -->
   <nav class="nav">
-    <a href="/" class="nav-logo">Arcade AI</a>
-    <a href="/history" class="nav-link">Historique</a>
+    <a href="/" class="nav-logo">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M10 1.5L18 5.5V14.5L10 18.5L2 14.5V5.5L10 1.5Z" fill="white" opacity="0.9"/>
+        <path d="M10 6L15 8.5V13.5L10 16L5 13.5V8.5L10 6Z" fill="#060609"/>
+      </svg>
+      Arcade AI
+    </a>
+    <div class="nav-right">
+      <a href="/history" class="nav-link">Library</a>
+    </div>
   </nav>
 
   <!-- HERO VIEW -->
   <section id="view-hero" class="view-hero">
 
+    <div class="hero-badge">
+      <span class="hero-badge-dot"></span>
+      AI Game Generator
+    </div>
+
     <h1 class="hero-title">
-      Génère ton jeu,<br>
-      <em>instantanément.</em>
+      Generate your game,<br>
+      <em>instantly.</em>
     </h1>
     <p class="hero-sub">
-      Décrivez votre idée — notre pipeline IA construit<br>
-      un jeu HTML5 complet en quelques minutes.
+      Describe your idea — our AI pipeline builds<br>
+      a complete HTML5 game in minutes.
     </p>
 
     <div class="prompt-form">
       <textarea
         id="prompt"
         class="prompt-textarea"
-        placeholder="Un shooter spatial avec des boss et des power-ups..."
+        placeholder="A space shooter with boss waves and power-ups..."
         maxlength="500"
       ></textarea>
       <div class="char-hint"><span id="char-count">0</span> / 500</div>
 
       <div class="style-row">
-        <label class="style-label" for="graphic-style">Style graphique</label>
+        <label class="style-label" for="graphic-style">Style</label>
         <select id="graphic-style" class="style-select">
-          <option value="">✨ Auto — l'IA choisit</option>
+          <option value="">✨ Auto — AI chooses</option>
           <optgroup label="Pixel Art">
             <option value="pixel_art_gameboy">🎮 Pixel Art Game Boy (Pokémon)</option>
             <option value="pixel_art_nes_mario">🍄 Pixel Art NES — Mario Bros</option>
-            <option value="pixel_art_nes_zelda">🗡️ Pixel Art NES — Zelda (coloré)</option>
+            <option value="pixel_art_nes_zelda">🗡️ Pixel Art NES — Zelda (colorful)</option>
             <option value="pixel_art_16bit">⭐ Pixel Art 16-bit SNES</option>
           </optgroup>
           <optgroup label="2D">
-            <option value="cartoon_2d">🎨 Cartoon 2D coloré</option>
-            <option value="minimaliste">◼ Minimaliste géométrique</option>
+            <option value="cartoon_2d">🎨 Colorful Cartoon 2D</option>
+            <option value="minimaliste">◼ Geometric Minimal</option>
           </optgroup>
           <optgroup label="3D">
             <option value="3d_lowpoly">🌐 3D Low-poly (Three.js)</option>
@@ -74,9 +87,9 @@
 
     <div class="generate-row">
       <button id="generate-btn" class="btn-generate" onclick="startGeneration()">
-        Générer
+        Generate
       </button>
-      <button id="quick-btn" class="btn-quick" onclick="startGeneration(true)" title="Pipeline allégée ~2min">
+      <button id="quick-btn" class="btn-quick" onclick="startGeneration(true)" title="Lightweight pipeline ~2 min">
         ⚡ Quick
       </button>
     </div>
@@ -109,7 +122,6 @@
       <div id="phases-container" class="phases-list"></div>
       <div id="log-tail" class="log-tail"></div>
 
-      <!-- Live preview bar — visible dès que le code Phase 3 est prêt -->
       <div id="preview-bar" class="preview-bar hidden">
         <span class="preview-bar-label">Game code ready</span>
         <button class="btn-preview" onclick="openPreview()">

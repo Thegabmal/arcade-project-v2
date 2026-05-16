@@ -321,10 +321,12 @@ def get_stats() -> dict:
     collection = _get_collection()
     mech_collection = _get_mechanics_collection()
     snippets_collection = _get_snippets_collection()
+    bug_fixes_collection = _get_bug_fixes_collection()
 
     patterns_count = 0
     mechanics_count = 0
     snippets_count = 0
+    bug_fixes_count = 0
     available = False
 
     try:
@@ -348,9 +350,241 @@ def get_stats() -> dict:
     except Exception:
         pass
 
+    try:
+        if bug_fixes_collection is not None:
+            bug_fixes_count = bug_fixes_collection.count()
+            available = True
+    except Exception:
+        pass
+
     return {
         "available": available,
         "total_patterns": patterns_count,
         "total_mechanics": mechanics_count,
         "total_snippets": snippets_count,
+        "total_bug_fixes": bug_fixes_count,
     }
+
+
+# ── Collection bug_fixes ──────────────────────────────────────────────────────
+_bf_client = None
+_bf_collection = None
+_bf_available = None
+
+# Seed data: known LLM game bug patterns with fixes.
+# Indexed by semantic similarity — pre-patcher queries this before calling LLM.
+_BUG_FIX_SEEDS = [
+    {
+        "id": "bug_loop_variable_b",
+        "document": "ReferenceError b is not defined bullets loop for loop variable missing declaration",
+        "category": "loop_variable_missing",
+        "symptom": "ReferenceError: b is not defined",
+        "buggy_pattern": "for (let i = bullets.length - 1; i >= 0; i--) { if (b.active) {",
+        "fix_pattern": "for (let i = bullets.length - 1; i >= 0; i--) { const b = bullets[i]; if (b.active) {",
+        "explanation": "Loop body uses 'b' without declaring it. Add 'const b = array[i];' as first line of loop body.",
+        "game_type": "both",
+    },
+    {
+        "id": "bug_loop_variable_e",
+        "document": "ReferenceError e is not defined enemies loop for loop variable missing declaration",
+        "category": "loop_variable_missing",
+        "symptom": "ReferenceError: e is not defined",
+        "buggy_pattern": "for (let i = enemies.length - 1; i >= 0; i--) { if (e.active) {",
+        "fix_pattern": "for (let i = enemies.length - 1; i >= 0; i--) { const e = enemies[i]; if (e.active) {",
+        "explanation": "Loop body uses 'e' without declaring it. Add 'const e = array[i];' as first line of loop body.",
+        "game_type": "both",
+    },
+    {
+        "id": "bug_loop_variable_p",
+        "document": "ReferenceError p is not defined particles powerUps loop for loop variable missing declaration",
+        "category": "loop_variable_missing",
+        "symptom": "ReferenceError: p is not defined",
+        "buggy_pattern": "for (let i = particles.length - 1; i >= 0; i--) { p.life -= dt;",
+        "fix_pattern": "for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; p.life -= dt;",
+        "explanation": "Loop body uses 'p' without declaring it. Add 'const p = array[i];' as first line.",
+        "game_type": "both",
+    },
+    {
+        "id": "bug_let_dot_notation",
+        "document": "SyntaxError Unexpected token . let const var dot notation namespace property assignment",
+        "category": "let_dot_notation",
+        "symptom": "SyntaxError: Unexpected token '.'",
+        "buggy_pattern": "let GameName.gameState = 'menu'; const GameName.score = 0;",
+        "fix_pattern": "GameName.gameState = 'menu'; GameName.score = 0;",
+        "explanation": "JavaScript does not allow let/const/var before dot-notation. Remove the keyword: 'let X.Y = v' → 'X.Y = v'",
+        "game_type": "3d",
+    },
+    {
+        "id": "bug_dt_parameter_nan",
+        "document": "canvas blue screen invisible nothing renders globalAlpha 0.08 drawBackground dt undefined NaN createRadialGradient",
+        "category": "dt_parameter_missing",
+        "symptom": "Canvas shows body background only (blue screen), globalAlpha stuck at 0.08",
+        "buggy_pattern": "function gameLoop(timestamp) { ... drawBackground(); drawMenu(); }",
+        "fix_pattern": "function gameLoop(timestamp) { ... drawBackground(dt); drawMenu(dt); }",
+        "explanation": "Drawing functions declare 'dt' as parameter but callers omit it. dt=undefined → _bgTimer=NaN → createRadialGradient(NaN) throws inside ctx.save() → ctx.restore() skipped → globalAlpha=0.08 forever.",
+        "game_type": "2d",
+    },
+    {
+        "id": "bug_ctx_before_init",
+        "document": "TypeError Cannot read properties of undefined reading createLinearGradient ctx undefined canvas before initialization DOMContentLoaded",
+        "category": "ctx_before_init",
+        "symptom": "TypeError: Cannot read properties of undefined (reading 'createLinearGradient')",
+        "buggy_pattern": "document.addEventListener('DOMContentLoaded', () => { var gradient = ctx.createLinearGradient(0,0,W,H); var canvas = ...; var ctx = canvas.getContext('2d');",
+        "fix_pattern": "Remove the ctx.createLinearGradient line — ctx is not yet defined at that point.",
+        "explanation": "ctx is used before canvas is initialized. Remove or move any ctx usage to after 'var ctx = canvas.getContext(\"2d\")'.",
+        "game_type": "2d",
+    },
+    {
+        "id": "bug_iife_module_3d",
+        "document": "ReferenceError init is not defined gameLoop is not defined IIFE module pattern functions not global three.js 3D",
+        "category": "iife_module_3d",
+        "symptom": "ReferenceError: init is not defined / gameLoop is not defined",
+        "buggy_pattern": "let core = (() => { function init() { ... } return { init }; })();",
+        "fix_pattern": "function init() { ... } // declared globally, NOT inside IIFE",
+        "explanation": "LLM wraps 3D modules as IIFE. Functions inside IIFE are not global. Use plain function declarations at top level.",
+        "game_type": "3d",
+    },
+    {
+        "id": "bug_ui_initui_before_setstate",
+        "document": "TypeError Cannot read properties of undefined reading style hudElement undefined ui.showMenu setState before initUI three.js 3D",
+        "category": "ui_init_order",
+        "symptom": "TypeError: Cannot read properties of undefined (reading 'style')",
+        "buggy_pattern": "function init() { setState('MENU'); } // ui.initUI() never called first",
+        "fix_pattern": "function init() { if (typeof ui !== 'undefined' && ui.initUI) ui.initUI(); setState('MENU'); }",
+        "explanation": "ui.initUI() must be called before any setState(). setState triggers ui.showMenu() which accesses DOM elements only created by ui.initUI().",
+        "game_type": "3d",
+    },
+    {
+        "id": "bug_undefined_hud_vars",
+        "document": "ReferenceError hpBarX hpBarY hpBarWidth hpFillWidth hpGradient undefined drawHUD function",
+        "category": "undefined_draw_vars",
+        "symptom": "ReferenceError: hpBarX is not defined (or similar HUD variable)",
+        "buggy_pattern": "function drawHUD() { ctx.fillRect(hpBarX, hpBarY, hpFillWidth, 20); }",
+        "fix_pattern": "function drawHUD() { var hpBarX = W/2-75; var hpBarY = 20; var hpBarWidth = 150; var hpRatio = Math.min(1, player.hp / player.maxHp); var hpFillWidth = hpBarWidth * hpRatio; ctx.fillRect(hpBarX, hpBarY, hpFillWidth, 20); }",
+        "explanation": "HUD drawing variables must be declared inside the function that uses them, not assumed to exist globally.",
+        "game_type": "2d",
+    },
+    {
+        "id": "bug_wrong_loop_alias",
+        "document": "ReferenceError e is not defined enemy declared but e used variable name mismatch drawEnemies",
+        "category": "loop_variable_alias_mismatch",
+        "symptom": "ReferenceError: e is not defined (despite 'enemy' being declared)",
+        "buggy_pattern": "for (let i = 0; i < enemies.length; i++) { const enemy = enemies[i]; ctx.fillRect(e.x, e.y);",
+        "fix_pattern": "for (let i = 0; i < enemies.length; i++) { const e = enemies[i]; ctx.fillRect(e.x, e.y);",
+        "explanation": "Declaration uses 'enemy' but code uses 'e'. Change declaration alias to match usage.",
+        "game_type": "both",
+    },
+]
+
+
+def _get_bug_fixes_collection():
+    global _bf_client, _bf_collection, _bf_available
+    if _bf_available is False:
+        return None
+    if _bf_collection is not None:
+        return _bf_collection
+    try:
+        import chromadb
+        os.makedirs(RAG_DIR, exist_ok=True)
+        _bf_client = chromadb.PersistentClient(path=RAG_DIR)
+        _bf_collection = _bf_client.get_or_create_collection(
+            name="bug_fixes",
+            metadata={"hnsw:space": "cosine"},
+        )
+        _bf_available = True
+        # Auto-seed on first creation
+        if _bf_collection.count() == 0:
+            seed_bug_fixes()
+        return _bf_collection
+    except Exception as e:
+        _bf_available = False
+        return None
+
+
+def seed_bug_fixes(force: bool = False) -> int:
+    """Seeds the bug_fixes collection with known LLM game bug patterns.
+    Returns number of patterns seeded. Skips if already seeded (unless force=True).
+    """
+    try:
+        import chromadb
+        os.makedirs(RAG_DIR, exist_ok=True)
+        client = chromadb.PersistentClient(path=RAG_DIR)
+        collection = client.get_or_create_collection(
+            name="bug_fixes",
+            metadata={"hnsw:space": "cosine"},
+        )
+        if collection.count() > 0 and not force:
+            return 0
+
+        ids, documents, metadatas = [], [], []
+        for seed in _BUG_FIX_SEEDS:
+            ids.append(seed["id"])
+            documents.append(seed["document"])
+            metadatas.append({
+                "category": seed["category"],
+                "symptom": seed["symptom"],
+                "buggy_pattern": seed["buggy_pattern"][:300],
+                "fix_pattern": seed["fix_pattern"][:500],
+                "explanation": seed["explanation"][:400],
+                "game_type": seed["game_type"],
+            })
+
+        collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
+        return len(ids)
+    except Exception as e:
+        print(f"  [BugFixes] Seed failed: {e}")
+        return 0
+
+
+def search_bug_fixes(error_message: str, n: int = 2) -> list[dict]:
+    """Query bug_fixes collection for relevant fix examples.
+    Returns list of dicts with category, symptom, buggy_pattern, fix_pattern, explanation.
+    """
+    collection = _get_bug_fixes_collection()
+    if collection is None:
+        return []
+    try:
+        count = collection.count()
+        if count == 0:
+            return []
+        results = collection.query(
+            query_texts=[error_message],
+            n_results=min(n, count),
+        )
+        fixes = []
+        if results and results.get("metadatas"):
+            for meta in results["metadatas"][0]:
+                fixes.append(dict(meta))
+        return fixes
+    except Exception:
+        return []
+
+
+def store_bug_fix(
+    category: str,
+    symptom: str,
+    buggy_pattern: str,
+    fix_pattern: str,
+    explanation: str,
+    game_type: str = "both",
+) -> bool:
+    """Store a new discovered bug fix pattern in the bug_fixes collection."""
+    collection = _get_bug_fixes_collection()
+    if collection is None:
+        return False
+    try:
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:17]
+        doc_id = f"bug_{category}_{ts}"
+        document = f"{symptom} {explanation} {category} {game_type}"
+        metadata = {
+            "category": category,
+            "symptom": symptom,
+            "buggy_pattern": buggy_pattern[:300],
+            "fix_pattern": fix_pattern[:500],
+            "explanation": explanation[:400],
+            "game_type": game_type,
+        }
+        collection.upsert(ids=[doc_id], documents=[document], metadatas=[metadata])
+        return True
+    except Exception:
+        return False

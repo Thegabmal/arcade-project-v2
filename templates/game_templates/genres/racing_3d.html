@@ -1,0 +1,531 @@
+<!--
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ARCADE PROJECT — RACING 3D TEMPLATE (Three.js r160)                        ║
+║  Read this entirely before writing a single line of code.                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ ROLE ──────────────────────────────────────────────────────────────────────┐
+│ You are a senior Three.js game developer.                                    │
+│ Fill EVERY [FILL: ...] section to create a complete 3D racing game.         │
+│ DO NOT touch the ENGINE block — it is already wired and tested.              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ THE TWO ZONES ─────────────────────────────────────────────────────────────┐
+│  1. ENGINE — DO NOT MODIFY  (Three.js setup, car physics, TPS cam, meta)    │
+│  2. [FILL: ...] sections — YOUR creative work                                │
+│     Replace EVERY placeholder. Any [FILL] left = broken game.               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SACRED CONTRACT — ENGINE GLOBALS (NEVER redeclare) ───────────────────────┐
+│  scene, camera, renderer, clock  → Three.js core (already initialised)      │
+│  keys{}     → { 'KeyW':bool, 'ArrowLeft':bool, … }  keyboard state         │
+│  gameState  → 'menu' | 'playing' | 'gameover' | 'shop'                     │
+│  meta       → { coins:0, upgrades:{} }                                      │
+│  car        → { grp:Group, pos:V3, dir:V3, speed:num, maxSpeed:num,        │
+│                 accel:num, brake:num, steerRate:num, nitro:num }             │
+│  trackPath  → THREE.CatmullRomCurve3 (closed loop, getPoint(0–1) = pos)    │
+│  checkpoints[] → { pos:V3, passed:bool }                                    │
+│  aiCars[]   → [{ grp, t:0–1, speed, color }]                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ENGINE HELPERS — USE, DON'T REWRITE ───────────────────────────────────────┐
+│  buildTrack()         → TubeGeometry road from trackPath, add to scene      │
+│  updateCamera()       → smooth TPS follow-cam behind car                    │
+│  getTrackProgress()   → returns 0–1 progress for player car on track        │
+│  updateHUD()          → syncs lap, position, speed, coins, nitro            │
+│  triggerGameOver()    → shows final overlay with score/lap count            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ YOUR CONTRACT — FILL THESE ─────────────────────────────────────────────────┐
+│  META_KEY          → unique localStorage key, e.g. 'meta_apex_circuit_2'   │
+│  UPGRADE_DEFS[]    → 4 upgrades with id, name, desc, cost, maxLv            │
+│  applyUpgrades()   → reads meta.upgrades, sets car.* vars                   │
+│  TRACK_POINTS[]    → array of Vector3 for CatmullRomCurve3 (≥8 points)     │
+│  buildEnvironment()→ sky, terrain, barriers, trackside decorations          │
+│  RACE_LAPS         → total laps in the race (int, e.g. 3)                  │
+│  AI_CAR_COUNT      → number of AI opponents (int, e.g. 3)                  │
+│  updatePlaying(dt) → full lap logic, nitro, position ranking, win/lose      │
+└─────────────────────────────────────────────────────────────────────────────┘
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>[FILL: GAME_TITLE]</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#000; overflow:hidden; font-family:system-ui,sans-serif; }
+  #c { display:block; width:100vw; height:100vh; }
+  #hud { position:fixed; inset:0; pointer-events:none; font-family:system-ui,sans-serif; }
+  #speed-disp { position:absolute; bottom:60px; right:28px; font-size:36px; font-weight:900; color:#fff; }
+  #speed-label{ position:absolute; bottom:50px; right:28px; font-size:11px; color:#888; letter-spacing:3px; margin-top:6px; }
+  #lap-disp   { position:absolute; top:18px; left:50%; transform:translateX(-50%); font-size:22px; font-weight:700; color:#ffd700; letter-spacing:2px; }
+  #pos-disp   { position:absolute; top:48px; left:50%; transform:translateX(-50%); font-size:14px; color:#aaa; letter-spacing:3px; }
+  #coins-disp { position:absolute; top:18px; right:24px; font-size:15px; color:#ffd700; }
+  #nitro-wrap { position:absolute; bottom:56px; left:24px; }
+  #nitro-label{ font-size:11px; color:#888; letter-spacing:2px; margin-bottom:4px; }
+  #nitro-bg   { width:150px; height:10px; background:#333; border-radius:5px; overflow:hidden; }
+  #nitro-fill { height:100%; background:linear-gradient(90deg,#0066ff,#00ccff); border-radius:5px; transition:width .1s; }
+  #status-msg { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:28px; font-weight:900; color:#ffd700; letter-spacing:4px; display:none; text-shadow:0 0 20px #ffa500; }
+  /* [FILL: CSS_ACCENT] — replace #ff6600 with your game's accent color */
+  #overlay {
+    position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.88); color:#fff;
+  }
+  #overlay h1 { font-size:52px; font-weight:900; letter-spacing:6px; font-family:'Impact',system-ui; margin-bottom:8px; color:#ff6600; }
+  #overlay .sub { font-size:13px; color:#666; letter-spacing:4px; margin-bottom:36px; }
+  .menu-btn { padding:13px 38px; margin:5px; font-size:14px; font-weight:700; letter-spacing:2px; border:2px solid #ff6600; background:transparent; cursor:pointer; text-transform:uppercase; transition:all .15s; font-family:system-ui; color:#ff6600; }
+  .menu-btn:hover { background:#ff6600; color:#000; }
+  #shop-overlay {
+    position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.92); color:#fff;
+  }
+  #shop-overlay h2 { font-size:28px; font-weight:700; margin-bottom:6px; letter-spacing:3px; font-family:system-ui; }
+  #shop-overlay .coins-info { font-size:14px; color:#ffd700; margin-bottom:24px; }
+  #shop-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; max-width:520px; width:90%; margin-bottom:24px; }
+  .shop-card { border:1px solid #333; padding:16px; text-align:center; background:#111; border-radius:8px; }
+  .shop-card h3 { font-size:13px; font-weight:700; letter-spacing:1px; margin-bottom:6px; font-family:system-ui; }
+  .shop-card p { font-size:11px; color:#777; margin-bottom:10px; font-family:system-ui; }
+  .shop-card .lv { font-size:11px; color:#ff6600; margin-bottom:8px; }
+  .buy-btn { padding:7px 18px; font-size:11px; font-weight:700; border:1px solid #ff6600; background:transparent; color:#ff6600; cursor:pointer; letter-spacing:1px; text-transform:uppercase; font-family:system-ui; }
+  .buy-btn:hover { background:#ff6600; color:#000; }
+  .buy-btn:disabled { border-color:#333; color:#333; cursor:default; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div id="lap-disp">LAP 1 / 3</div>
+  <div id="pos-disp">POS: 1 / 4</div>
+  <div id="coins-disp">🪙 0</div>
+  <div id="nitro-wrap">
+    <div id="nitro-label">NITRO</div>
+    <div id="nitro-bg"><div id="nitro-fill" style="width:100%"></div></div>
+  </div>
+  <div id="speed-disp">0</div>
+  <div id="speed-label">KM/H</div>
+  <div id="status-msg"></div>
+</div>
+
+<!-- MAIN OVERLAY -->
+<div id="overlay">
+  <h1>[FILL: GAME_TITLE]</h1>
+  <div class="sub">[FILL: GAME_SUBTITLE]</div>
+  <button class="menu-btn" id="btn-play">[FILL: START_LABEL]</button>
+</div>
+
+<!-- SHOP OVERLAY -->
+<div id="shop-overlay">
+  <h2>[FILL: SHOP_TITLE]</h2>
+  <div class="coins-info" id="shop-coins">🪙 0 coins</div>
+  <div id="shop-grid"></div>
+  <button class="menu-btn" id="btn-close-shop">[FILL: SHOP_LABEL]</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js"></script>
+<script>
+'use strict';
+// ═══ ENGINE — DO NOT MODIFY ═══
+
+// ── Meta-progression ──────────────────────────────────────────────────────────
+const META_KEY = '[FILL: META_KEY]';
+let meta = { coins:0, upgrades:{} };
+function loadMeta() {
+  try { const s=localStorage.getItem(META_KEY); if(s) meta=JSON.parse(s); } catch(e){}
+  UPGRADE_DEFS.forEach(u=>{ if(meta.upgrades[u.id]==null) meta.upgrades[u.id]=0; });
+}
+function saveMeta() { try { localStorage.setItem(META_KEY,JSON.stringify(meta)); } catch(e){} }
+function buyUpgrade(id) {
+  const u=UPGRADE_DEFS.find(x=>x.id===id); if(!u) return;
+  const lv=meta.upgrades[id]||0;
+  if(lv>=u.maxLv || meta.coins<u.cost) return;
+  meta.coins-=u.cost; meta.upgrades[id]=lv+1;
+  saveMeta(); applyUpgrades(); renderShop();
+}
+function renderShop() {
+  document.getElementById('shop-coins').textContent='🪙 '+meta.coins+' coins';
+  const g=document.getElementById('shop-grid'); g.innerHTML='';
+  UPGRADE_DEFS.forEach(u=>{
+    const lv=meta.upgrades[u.id]||0;
+    const maxed=lv>=u.maxLv;
+    const canBuy=!maxed&&meta.coins>=u.cost;
+    g.innerHTML+=`<div class="shop-card">
+      <h3>${u.name}</h3><p>${u.desc}</p>
+      <div class="lv">Lv ${lv} / ${u.maxLv}</div>
+      <button class="buy-btn" onclick="buyUpgrade('${u.id}')" ${!canBuy?'disabled':''}>
+        ${maxed?'MAX':'Buy — 🪙'+u.cost}
+      </button></div>`;
+  });
+}
+
+// ── Three.js core ──────────────────────────────────────────────────────────────
+const scene    = new THREE.Scene();
+const camera   = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.5, 600);
+const renderer = new THREE.WebGLRenderer({ canvas:document.getElementById('c'), antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+const clock = new THREE.Clock();
+
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+// ── Keyboard ─────────────────────────────────────────────────────────────────
+const keys={};
+window.addEventListener('keydown', e=>{ keys[e.code]=true; e.preventDefault(); });
+window.addEventListener('keyup',   e=>{ keys[e.code]=false; });
+
+// ── Game state ─────────────────────────────────────────────────────────────────
+let gameState='menu';
+let score=0;
+let raceTimer=0;
+let countdown=0;  // 3-2-1-GO
+
+// ── Car state ─────────────────────────────────────────────────────────────────
+const UP = new THREE.Vector3(0,1,0);
+const car = {
+  grp: new THREE.Group(),
+  pos: new THREE.Vector3(0,0.5,0),
+  dir: new THREE.Vector3(0,0,-1),
+  speed: 0,
+  maxSpeed: 28,
+  accel: 18,
+  brake: 24,
+  steerRate: 1.8,
+  nitro: 100,
+  maxNitro: 100,
+  nitroBoost: 14,
+  lapCount: 0,
+  checkIdx: 0,   // next checkpoint to pass
+  trackT: 0      // 0–1 progress on trackPath
+};
+scene.add(car.grp);
+
+// ── Track + AI ────────────────────────────────────────────────────────────────
+let trackPath;         // CatmullRomCurve3 — set in buildTrack()
+let checkpoints = [];  // { pos:Vector3, passed:bool }
+let aiCars      = [];
+let trackMesh;
+
+// ── TPS camera ────────────────────────────────────────────────────────────────
+function updateCamera() {
+  const back = car.dir.clone().negate().normalize();
+  const ideal = car.pos.clone()
+    .addScaledVector(back, 9)
+    .add(new THREE.Vector3(0, 4, 0));
+  camera.position.lerp(ideal, 0.1);
+  camera.lookAt(car.pos.clone().add(new THREE.Vector3(0, 1, 0)));
+}
+
+// ── Track builder ─────────────────────────────────────────────────────────────
+function buildTrack() {
+  trackPath = new THREE.CatmullRomCurve3(TRACK_POINTS, true);
+
+  // road tube
+  const tubeGeo = new THREE.TubeGeometry(trackPath, 200, 3.5, 8, true);
+  const tubeMat = new THREE.MeshLambertMaterial({ color:0x222222, side:THREE.BackSide });
+  trackMesh = new THREE.Mesh(tubeGeo, tubeMat);
+  trackMesh.receiveShadow=true; scene.add(trackMesh);
+
+  // lane markings (thin tube slightly inside)
+  const laneGeo = new THREE.TubeGeometry(trackPath, 200, 0.1, 4, true);
+  const laneMat = new THREE.MeshBasicMaterial({color:0xffffff});
+  scene.add(new THREE.Mesh(laneGeo, laneMat));
+
+  // checkpoints: evenly spaced along track
+  const cpCount = 12;
+  for(let i=0;i<cpCount;i++) {
+    const pos = trackPath.getPoint(i/cpCount);
+    checkpoints.push({ pos, passed:false });
+  }
+}
+
+// ── Track progress ────────────────────────────────────────────────────────────
+function getTrackProgress() {
+  // sample N points to find closest t
+  let bestT=0, bestDist=Infinity;
+  for(let i=0;i<200;i++){
+    const t=i/200;
+    const d=trackPath.getPoint(t).distanceTo(car.pos);
+    if(d<bestDist){ bestDist=d; bestT=t; }
+  }
+  return bestT;
+}
+
+// ── AI car helpers ────────────────────────────────────────────────────────────
+function buildAICar(color, startT) {
+  const grp = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.6,0.7,3.2), new THREE.MeshLambertMaterial({color}));
+  body.position.y=0.35; grp.add(body);
+  grp.castShadow=true;
+  const startPos = trackPath.getPoint(startT);
+  grp.position.copy(startPos);
+  scene.add(grp);
+  return { grp, t:startT, speed:(4+Math.random()*3), color, lapCount:0 };
+}
+
+function updateAICars(dt) {
+  for(const a of aiCars) {
+    a.t = (a.t + a.speed*dt/1000) % 1;
+    const pos  = trackPath.getPoint(a.t);
+    const tang = trackPath.getTangent(a.t);
+    a.grp.position.copy(pos).add(new THREE.Vector3(0,0.5,0));
+    a.grp.lookAt(pos.clone().add(tang));
+  }
+}
+
+// ── HUD ───────────────────────────────────────────────────────────────────────
+function updateHUD() {
+  document.getElementById('lap-disp').textContent = 'LAP '+(car.lapCount+1)+' / '+RACE_LAPS;
+  document.getElementById('coins-disp').textContent = '🪙 '+meta.coins;
+  document.getElementById('speed-disp').textContent = Math.round(Math.abs(car.speed)*3.6);
+  document.getElementById('nitro-fill').style.width = (car.nitro/car.maxNitro*100)+'%';
+  // compute position vs AI
+  const playerT = car.trackT + car.lapCount;
+  const ranks = aiCars.map(a=>a.t+a.lapCount).concat([playerT]).sort((x,y)=>y-x);
+  const pos = ranks.indexOf(playerT)+1;
+  document.getElementById('pos-disp').textContent = 'POS: '+pos+' / '+(aiCars.length+1);
+}
+
+function showStatus(msg, dur=2500) {
+  const el=document.getElementById('status-msg');
+  el.textContent=msg; el.style.display='block';
+  clearTimeout(el._t); el._t=setTimeout(()=>el.style.display='none',dur);
+}
+
+// ── Game state machine ────────────────────────────────────────────────────────
+function startGame() {
+  document.getElementById('overlay').style.display='none';
+  score=0; raceTimer=0;
+  car.pos.copy(trackPath.getPoint(0)).add(new THREE.Vector3(0,0.5,0));
+  car.dir.copy(trackPath.getTangent(0));
+  car.speed=0; car.nitro=car.maxNitro; car.lapCount=0; car.checkIdx=0;
+  checkpoints.forEach(cp=>cp.passed=false);
+  aiCars.forEach(a=>{scene.remove(a.grp);}); aiCars=[];
+  for(let i=0;i<AI_CAR_COUNT;i++) {
+    const cols=[0xff2222,0x22ff22,0x2222ff,0xffff22];
+    aiCars.push(buildAICar(cols[i%4], (i+1)*0.08));
+  }
+  applyUpgrades();
+  countdown=3;
+  showStatus('3', 1000);
+  setTimeout(()=>showStatus('2',1000),1000);
+  setTimeout(()=>showStatus('1',1000),2000);
+  setTimeout(()=>{ showStatus('GO!',1200); gameState='playing'; },3000);
+}
+
+function triggerGameOver(won) {
+  gameState='gameover';
+  if(won){ meta.coins+=50; saveMeta(); }
+  const ov=document.getElementById('overlay');
+  ov.innerHTML=`
+    <h1 style="color:${won?'#ffd700':'#e74c3c'}">${won?'[FILL: WIN_SUBTITLE]':'[FILL: GAMEOVER_SUBTITLE]'}</h1>
+    <div class="sub">TIME: ${Math.round(raceTimer)}s</div>
+    <button class="menu-btn" id="btn-shop">[FILL: SHOP_LABEL]</button>
+    <button class="menu-btn" id="btn-retry">[FILL: RETRY_LABEL]</button>`;
+  ov.style.display='flex';
+  document.getElementById('btn-shop').onclick = openShop;
+  document.getElementById('btn-retry').onclick = ()=>{ buildEnvironment(); startGame(); };
+}
+
+function openShop() {
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('shop-overlay').style.display='flex';
+  gameState='shop'; renderShop();
+}
+function closeShop() {
+  document.getElementById('shop-overlay').style.display='none';
+  triggerGameOver(false);
+}
+document.getElementById('btn-close-shop').onclick = closeShop;
+
+// ── Car physics update ────────────────────────────────────────────────────────
+function updateCar(dt) {
+  const accel = keys['KeyW']||keys['ArrowUp'];
+  const braking= keys['KeyS']||keys['ArrowDown'];
+  const left   = keys['KeyA']||keys['ArrowLeft'];
+  const right  = keys['KeyD']||keys['ArrowRight'];
+  const nitroKey= keys['ShiftLeft']||keys['ShiftRight'];
+
+  // throttle/brake
+  if(accel)  car.speed = Math.min(car.maxSpeed, car.speed + car.accel*dt);
+  if(braking)car.speed = Math.max(-car.maxSpeed*0.4, car.speed - car.brake*dt);
+  if(!accel&&!braking) car.speed *= (1-3.5*dt); // friction
+
+  // nitro
+  if(nitroKey && car.nitro>0) {
+    car.speed = Math.min(car.maxSpeed+car.nitroBoost, car.speed+car.nitroBoost*dt*3);
+    car.nitro = Math.max(0, car.nitro-dt*20);
+  } else {
+    car.nitro = Math.min(car.maxNitro, car.nitro+dt*4);
+  }
+
+  // steer (speed-dependent)
+  const steer = car.steerRate * (car.speed/car.maxSpeed);
+  if(left)  car.dir.applyAxisAngle(UP,  steer*dt);
+  if(right) car.dir.applyAxisAngle(UP, -steer*dt);
+  car.dir.y=0; car.dir.normalize();
+
+  // move
+  car.pos.addScaledVector(car.dir, car.speed*dt);
+  car.pos.y = 0.5; // flat track (add terrain height if needed)
+
+  // update mesh
+  car.grp.position.copy(car.pos);
+  car.grp.lookAt(car.pos.clone().add(car.dir));
+
+  // checkpoint detection
+  const cp = checkpoints[car.checkIdx];
+  if(cp && car.pos.distanceTo(cp.pos) < 6) {
+    cp.passed=true;
+    car.checkIdx = (car.checkIdx+1) % checkpoints.length;
+    if(car.checkIdx===0) {
+      // completed a lap
+      car.lapCount++;
+      meta.coins+=5; saveMeta();
+      if(car.lapCount>=RACE_LAPS) { triggerGameOver(true); return; }
+      showStatus('LAP '+car.lapCount+' / '+RACE_LAPS, 2000);
+    }
+  }
+  car.trackT = getTrackProgress();
+}
+
+// ── Main loop ──────────────────────────────────────────────────────────────────
+function update(dt) {
+  if(gameState!=='playing') return;
+  raceTimer+=dt;
+  updateCar(dt);
+  updateAICars(dt);
+  updateCamera();
+  updateHUD();
+  updatePlaying(dt);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  update(dt);
+  renderer.render(scene,camera);
+}
+
+// ═══ END ENGINE ═══
+
+
+// ── [FILL: UPGRADE_DEFS] ──────────────────────────────────────────────────────
+const UPGRADE_DEFS = [
+  { id:'engine', name:'Engine',   desc:'+3 max speed per level',       cost:30, maxLv:4 },
+  { id:'tires',  name:'Tires',    desc:'+0.15 steer rate per level',   cost:25, maxLv:3 },
+  { id:'nitro',  name:'Nitro',    desc:'+20 max nitro per level',      cost:35, maxLv:3 },
+  { id:'aero',   name:'Aero Kit', desc:'+2 acceleration per level',    cost:40, maxLv:3 }
+];
+
+// ── [FILL: APPLY_UPGRADES] ────────────────────────────────────────────────────
+function applyUpgrades() {
+  car.maxSpeed  = 28 + (meta.upgrades['engine']||0)*3;
+  car.steerRate = 1.8 + (meta.upgrades['tires']||0)*0.15;
+  car.maxNitro  = 100 + (meta.upgrades['nitro']||0)*20;
+  car.accel     = 18 + (meta.upgrades['aero']||0)*2;
+}
+
+// ── [FILL: RACE_LAPS / AI_CAR_COUNT] ─────────────────────────────────────────
+const RACE_LAPS    = 3;
+const AI_CAR_COUNT = 3;
+
+// ── [FILL: TRACK_POINTS] ─────────────────────────────────────────────────────
+// CatmullRomCurve3 control points (closed loop). Minimum 6 points.
+// Design a circuit that fits within roughly -80 to 80 on X and Z.
+// The car starts at TRACK_POINTS[0] facing TRACK_POINTS[1].
+const TRACK_POINTS = [
+  new THREE.Vector3( 0,  0,  50),
+  new THREE.Vector3( 40, 0,  40),
+  new THREE.Vector3( 60, 0,   0),
+  new THREE.Vector3( 50, 0, -40),
+  new THREE.Vector3( 20, 0, -60),
+  new THREE.Vector3(-20, 0, -60),
+  new THREE.Vector3(-50, 0, -40),
+  new THREE.Vector3(-60, 0,   0),
+  new THREE.Vector3(-40, 0,  40),
+  new THREE.Vector3( 0,  0,  60),
+];
+
+// ── [FILL: BUILD_ENVIRONMENT] ─────────────────────────────────────────────────
+// Clear scene and build: lights, sky/ground, trackside objects.
+// buildTrack() must be called inside here (or after it).
+// Do NOT re-declare trackPath, car.grp, scene, etc.
+function buildEnvironment() {
+  // clear all but car
+  const keep = [car.grp];
+  while(scene.children.length) scene.remove(scene.children[0]);
+  keep.forEach(o=>scene.add(o));
+  aiCars=[];
+
+  // sky and ground
+  scene.background = new THREE.Color(0x87ceeb);
+  scene.fog = new THREE.Fog(0x87ceeb, 60, 220);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const sun = new THREE.DirectionalLight(0xfff4cc, 1.2);
+  sun.position.set(30,60,20); sun.castShadow=true; scene.add(sun);
+
+  // ground
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(400,400),
+    new THREE.MeshLambertMaterial({color:0x3a7a3a})
+  );
+  ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+
+  // build road tube from TRACK_POINTS
+  buildTrack();
+
+  // car mesh (re-add after scene clear)
+  scene.add(car.grp);
+  car.grp.clear();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.8,0.7,3.6), new THREE.MeshLambertMaterial({color:0xff6600}));
+  body.position.y=0.35; car.grp.add(body);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(1.4,0.5,1.8), new THREE.MeshLambertMaterial({color:0xcc4400}));
+  roof.position.set(0,0.9,-0.2); car.grp.add(roof);
+  // wheels
+  [-0.9,0.9].forEach(sx=>[-1.2,1.2].forEach(sz=>{
+    const w=new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,0.25,12),new THREE.MeshLambertMaterial({color:0x111111}));
+    w.position.set(sx,0.35,sz); w.rotation.z=Math.PI/2; car.grp.add(w);
+  }));
+
+  // trackside decorations — barrier cones along track
+  for(let i=0;i<30;i++){
+    const t=i/30;
+    const p=trackPath.getPoint(t);
+    const tang=trackPath.getTangent(t);
+    const right=new THREE.Vector3(-tang.z,0,tang.x).normalize();
+    [-5,5].forEach(side=>{
+      const cone=new THREE.Mesh(
+        new THREE.ConeGeometry(0.3,0.9,6),
+        new THREE.MeshLambertMaterial({color:side<0?0xff8800:0xffffff})
+      );
+      cone.position.copy(p).addScaledVector(right,side);
+      cone.position.y=0.45; scene.add(cone);
+    });
+  }
+}
+
+// ── [FILL: UPDATE_PLAYING] ────────────────────────────────────────────────────
+// Extra race logic per frame: weather, lap events, etc.
+function updatePlaying(dt) {
+  // spin car wheels for visual effect
+  if(car.grp.children.length>2) {
+    const wheelSpin = car.speed*dt*2;
+    car.grp.children.slice(2).forEach(w=>w.rotation.x+=wheelSpin);
+  }
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+loadMeta();
+applyUpgrades();
+buildEnvironment(); // builds track + car mesh
+camera.position.set(0,8,70);
+gameState='menu';
+animate();
+document.getElementById('btn-play').onclick = ()=>{ startGame(); };
+</script>
+</body>
+</html>

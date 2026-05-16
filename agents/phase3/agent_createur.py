@@ -288,6 +288,35 @@ INTERDIT (cause ÉCRAN NOIR garanti) :
   });
 RÈGLE : les écouteurs clavier attachés à `document` fonctionnent partout et n'ont pas besoin de canvas.
 
+RÈGLE ABSOLUE N°19 — FOND NON-NOIR OBLIGATOIRE (Q1) :
+Le fond du jeu NE DOIT JAMAIS être du noir uni (#000 ou '#000000').
+OBLIGATOIRE : utilise un dégradé de fond ou une couleur riche sombre (ex: '#0a0a1e', '#1a0a2e', '#0d1b2a').
+CORRECT (dégradé) :
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, '#0a0a1e'); grad.addColorStop(1, '#1a0a2e');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+CORRECT (couleur riche sombre) :
+  ctx.fillStyle = '#0d1b2a'; ctx.fillRect(0, 0, W, H);
+INTERDIT : ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);  // noir uni → rendu mort
+INTERDIT : ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H);
+
+RÈGLE ABSOLUE N°20 — GAME FEEL OBLIGATOIRE (Q2) :
+Tout jeu avec impacts ou explosions DOIT implémenter :
+a) Screen shake (voir Pattern 13) — déclenché sur mort joueur, explosions, boss hits
+b) Flash d'impact — éclair blanc bref sur l'écran quand le joueur prend des dégâts :
+   let flashTimer = 0;
+   function triggerFlash(dur=0.1) { flashTimer = dur; }
+   // Dans draw(), APRÈS tous les dessins :
+   // if (flashTimer > 0) { ctx.fillStyle = 'rgba(255,255,255,' + (flashTimer*3) + ')'; ctx.fillRect(0,0,W,H); flashTimer -= 1/60; }
+   // Usage : triggerFlash(0.08); // sur hit joueur; triggerFlash(0.15); // sur explosion
+Ces deux effets coûtent 5 lignes chacun — aucune excuse de les omettre.
+
+RÈGLE ABSOLUE N°21 — WEB AUDIO OBLIGATOIRE (Q3) :
+L'objet `sfx` (Pattern 14) est OBLIGATOIRE dans tout jeu.
+NE PAS utiliser un stub vide `{ play(){} }` — implémenter la vraie version WebAudio.
+Appels obligatoires : sfx.play() sur tir, collecte, mort ennemi, game over, et powerup.
+Un jeu sans son est immédiatement pénalisé en évaluation.
+
 PATTERNS OBLIGATOIRES — reproduis-les exactement :
 
 0. STRUCTURE HTML COMPLÈTE [tags: always] (modèle à suivre) :
@@ -1874,9 +1903,60 @@ function drawFade(ctx, W, H) { // ctx = le vrai ctx (pas gctx) pour couvrir tout
 INTERDIT ABSOLU : N'utilise JAMAIS data:URI (data:font, data:image, etc.) — cela consomme tout le budget de tokens.
 Utilise uniquement des polices système (Arial, monospace) et des formes Canvas 2D.
 
+Q5 — SPRITES AVEC arc() ET bezierCurveTo() OBLIGATOIRES :
+Les entités (joueur, ennemis, boss) NE DOIVENT PAS être des fillRect() simples.
+Utilise TOUJOURS ctx.arc(), ctx.bezierCurveTo() ou ctx.quadraticCurveTo() pour leur donner des formes.
+Exemples par genre :
+- Shoot-em-up : vaisseau joueur = triangle avec ctx.beginPath()/lineTo() + glow (shadowBlur=15)
+  ctx.beginPath(); ctx.moveTo(x,y-r); ctx.lineTo(x+r,y+r); ctx.lineTo(x-r,y+r); ctx.closePath(); ctx.fill();
+- Platformer : personnage = corps arrondi
+  ctx.beginPath(); ctx.arc(x, y-h/4, r, 0, Math.PI*2); ctx.fill(); // tête
+  ctx.roundRect(x-w/2, y-h/2, w, h*0.75, 4); ctx.fill();            // corps
+- RPG/Dungeon : personnage = silhouette avec bras
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill(); // corps principal
+  ctx.beginPath(); ctx.arc(x, y-r*1.5, r*0.6, 0, Math.PI*2); ctx.fill(); // tête
+- Boss : formes complexes avec bezier
+  ctx.beginPath(); ctx.moveTo(x, y-r); ctx.bezierCurveTo(x+r,y-r, x+r,y+r, x,y+r); ctx.closePath(); ctx.fill();
+Règle : ctx.arc() pour les ennemis ronds, ctx.lineTo() pour les polygones, ctx.bezierCurveTo() pour les boss.
+Un jeu avec UNIQUEMENT des fillRect() sera pénalisé -2.0 pts en évaluation visuelle.
+Ajouter ctx.shadowBlur = 10; ctx.shadowColor = color; avant les arc() pour l'effet glow.
+
 Tu produis UNIQUEMENT le code HTML complet. Commence par <!DOCTYPE html>. Aucun texte avant ou après."""
 
-SYSTEM_3D = """Tu es un développeur senior spécialisé en jeux 3D web avec Three.js r128. Tu produis du code Three.js qui FONCTIONNE SANS ERREUR dès le premier chargement.
+SYSTEM_3D = """Tu es un développeur senior spécialisé en jeux 3D web avec Three.js r160. Tu produis du code Three.js qui FONCTIONNE SANS ERREUR dès le premier chargement.
+
+RÈGLE ABSOLUE — CLASSES INTERDITES (examples/jsm uniquement, absentes du bundle principal) :
+NE JAMAIS utiliser : THREE.Capsule, THREE.Octree, THREE.OctreeHelper, THREE.Convex*, THREE.CSG*
+Pour les collisions : utilise THREE.Sphere, THREE.Box3, THREE.Raycaster — tous disponibles dans le bundle principal.
+Pour les capsule-shapes : utilise new THREE.CapsuleGeometry(radius, length) pour le mesh visuel + THREE.Box3 pour les collisions.
+
+RÈGLE ABSOLUE — INITIALISATION UI AVANT CORE :
+Si le module 'ui' expose une fonction initUI(), elle DOIT être appelée dans init()
+AVANT tout setState() ou appel à ui.showMenu() / ui.updateHUD().
+CORRECT :
+function init() {
+  // 1. Three.js setup (renderer, scene, camera...)
+  // 2. UI init FIRST — crée les éléments DOM
+  if (typeof ui !== 'undefined' && ui.initUI) ui.initUI();
+  // 3. THEN state change
+  setState('MENU');
+}
+INTERDIT : setState('MENU') ou ui.showMenu() avant ui.initUI() → "Cannot read properties of undefined (reading 'style')"
+
+RÈGLE ABSOLUE — NULL GUARDS OBLIGATOIRES DANS LA GAME LOOP :
+Dans toute boucle sur un tableau d'entités (enemies, platforms, collectibles, etc.),
+TOUJOURS vérifier que l'entité ET son mesh existent avant d'accéder à leurs propriétés :
+CORRECT :
+for (const e of enemies) {
+  if (!e || !e.mesh) continue;  // ← OBLIGATOIRE — crash garanti si absent
+  e.mesh.position.set(x, y, z);
+}
+for (let i = enemies.length - 1; i >= 0; i--) {
+  const e = enemies[i];
+  if (!e || !e.mesh) { enemies.splice(i, 1); continue; }
+  // ...
+}
+INTERDIT : enemies.forEach(e => e.mesh.position.set(...)) sans vérification → "Cannot read properties of undefined"
 
 RÈGLE ABSOLUE — PAS DE DEV CONSOLE À GÉNÉRER :
 NE génère PAS de dev console / overlay de debug dans ton code.
@@ -1911,7 +1991,7 @@ body { background:#000; overflow:hidden; }
   <p>Meilleur : <span id="best-score-display">0</span></p>
   <button class="btn" id="btn-restart">REJOUER</button>
 </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -3226,7 +3306,7 @@ Courbe difficulté : {json.dumps(levels.get('courbe_difficulte', {}), ensure_asc
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SPÉCIFICATIONS TECHNIQUES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Technologie : {"Three.js (CDN r128)" if est_3d else f"Canvas 2D {canvas_w}x{canvas_h}"}
+Technologie : {"Three.js (CDN r160)" if est_3d else f"Canvas 2D {canvas_w}x{canvas_h}"}
 États : {', '.join(states)}
 Physique : gravité={physique.get('gravite', False)}, collisions={physique.get('collisions', 'AABB')}
 Inputs : clavier={json.dumps(inputs.get('clavier', {}))}, touch={inputs.get('touch', True)}
@@ -3620,7 +3700,7 @@ def _build_3d_requirements(tech_specs: dict = None) -> str:
     )
     return f"""STRUCTURE :
 1. Un seul fichier HTML complet et autonome (tout inline)
-2. Charger Three.js r128 via CDN : <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+2. Charger Three.js r160 via CDN : <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
 3. TOUT le code Three.js dans document.addEventListener('DOMContentLoaded', function() {{ ... }})
 4. WebGLRenderer plein écran responsive — document.body.appendChild(renderer.domElement)
 5. window.addEventListener('resize', ...) pour adapter camera.aspect et renderer.setSize
@@ -3691,7 +3771,7 @@ def _build_gdd_from_genre_profile(gp) -> dict:
 <html><head><title>Erreur</title></head>
 <body><p>Erreur lors de la génération du jeu.</p></body></html>""")
 def _call(prompt: str, system_instruction: str = SYSTEM_2D, max_tokens: int = 16000) -> str:
-    return call_gemini(prompt, temperature=0.6, system_instruction=system_instruction, max_tokens=max_tokens)
+    return call_gemini(prompt, temperature=0.3, system_instruction=system_instruction, max_tokens=max_tokens)
 
 
 # ─────────────────────────────────────────────
@@ -3711,9 +3791,50 @@ RÈGLES ABSOLUES pour ce module :
 
 Tu produis UNIQUEMENT du code JavaScript, sans balises HTML, sans explication, sans backticks."""
 
-SYSTEM_MODULE_3D = """Tu es un développeur expert en jeux 3D web avec Three.js. Tu génères du code
+SYSTEM_MODULE_3D = """Tu es un développeur expert en jeux 3D web avec Three.js r160. Tu génères du code
 JavaScript pour un module spécifique d'un jeu Three.js. Toutes les variables THREE.* sont
 disponibles globalement (Three.js chargé via CDN). Tu utilises les variables globales déclarées.
+
+RÈGLES ABSOLUES — STRUCTURE DU MODULE :
+1. NE JAMAIS wrapper le code dans une IIFE : INTERDIT let core = (() => { ... })()
+2. NE JAMAIS créer des namespace objects : INTERDIT const core = { init, gameLoop }
+3. Toutes les fonctions DOIVENT être déclarées au niveau global : function init() { ... }
+4. Les variables globales partagées (scene, camera, renderer, player, etc.) sont déjà déclarées dans les globals — NE PAS les redéclarer avec let/const/var au niveau module
+5. Module 'core' : function init() DOIT appeler ui.initUI() si le module 'ui' existe, AVANT tout setState()
+6. Si tu déclares une variable locale dans une fonction, utilise let/const — JAMAIS let au niveau global si déjà dans globals
+7. SYNTAXE INTERDITE — `let X.Y = value;` est une SyntaxError en JavaScript : INTERDIT let GameName.gameState = 'loading'; — CORRECT : gameState = 'loading'; (variable globale directe)
+
+STRUCTURE CORRECTE — EXEMPLE COMPLET (module 'core') :
+// ✅ Global variables — declared with var at top level (NOT let/const)
+var gameState = 'menu';
+var score = 0;
+
+// ✅ Functions declared globally — NOT inside IIFE or object
+function init() {
+  // 1. Three.js setup first
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  // 2. UI init BEFORE setState — prevents "Cannot read properties of undefined"
+  if (typeof ui !== 'undefined' && typeof ui.initUI === 'function') ui.initUI();
+  // 3. State change AFTER UI is ready
+  setState('menu');
+  requestAnimationFrame(gameLoop);
+}
+
+function gameLoop(timestamp) {
+  var dt = Math.min(clock.getDelta(), 0.05);
+  if (gameState === 'playing') {
+    if (typeof updateEntities === 'function') updateEntities(dt);
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(gameLoop);
+}
+
+function setState(s) { gameState = s; }
+
 Tu produis UNIQUEMENT du code JavaScript, sans balises HTML, sans explication, sans backticks."""
 
 
@@ -3845,8 +3966,28 @@ CONTRAINTES :
 - Expose bien toutes les fonctions listées dans FONCTIONS À EXPOSER
 - Code fonctionnel et complet pour ce module
 - Commentaires courts pour clarifier la logique
+- Dans chaque boucle for, déclare la variable d'élément en première ligne : `const e = enemies[i];`
 
 Génère uniquement le code JavaScript du module, rien d'autre."""
+
+    # Inject RAG anti-patterns as a "bugs to avoid" hint (3D modules only)
+    est_3d = architecture.technologie == "threejs"
+    if est_3d:
+        try:
+            query = f"3D module javascript common bugs {nom} three.js"
+            _hits = rag.search_bug_fixes(query, n=3)
+            if _hits:
+                _anti = "\n".join(
+                    f"  • {h.get('symptom','')}: {h.get('explanation','')} — "
+                    f"BUGGY: `{h.get('buggy_pattern','')[:80]}` → FIXED: `{h.get('fix_pattern','')[:80]}`"
+                    for h in _hits
+                )
+                prompt = prompt.replace(
+                    "Génère uniquement le code JavaScript du module, rien d'autre.",
+                    f"KNOWN BUG PATTERNS TO AVOID (from fix database):\n{_anti}\n\nGénère uniquement le code JavaScript du module, rien d'autre."
+                )
+        except Exception:
+            pass
 
     return _call_module(prompt, system)
 
@@ -3899,7 +4040,7 @@ def _minimal_module_fallback(nom: str, module_def: dict, est_3d: bool) -> str:
 
 @with_fallback("")
 def _call_module(prompt: str, system: str) -> str:
-    return call_gemini(prompt, temperature=0.5, system_instruction=system, max_tokens=24000)
+    return call_gemini(prompt, temperature=0.2, system_instruction=system, max_tokens=24000)
 
 
 # ─────────────────────────────────────────────

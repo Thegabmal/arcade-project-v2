@@ -219,6 +219,24 @@ COMMON_VARS: dict[str, str] = {
     'power': '0',
     'range': '0',
     'cost': '0',
+
+    # Canvas dimensions — injected if missing (W/H no longer assumed always declared)
+    'W': 'window.innerWidth',
+    'H': 'window.innerHeight',
+
+    # Fixed timestep game loop — CRITICAL: wrong defaults break the loop entirely
+    'MAX_DT':      '0.1',        # cap delta-time cap — NEVER 0 (infinite loop)
+    'FIXED_DT':    '1/60',       # fixed physics timestep
+    'accumulator': '0',          # timestep accumulator
+
+    # Spatial constants
+    'TILE':   '32',              # tile size default
+    'cam':    '{x:0,y:0}',      # camera default
+    'center': 'null',
+
+    # Common gameplay intermediates missing from COMMON_VARS
+    'damage': '0',
+    'room':   'null',
 }
 
 # Fichier de variables apprises dynamiquement par auto_learner
@@ -453,6 +471,75 @@ def _fix_empty_playsound_stub(script: str) -> tuple[str, list[str]]:
 
 
 # ─────────────────────────────────────────────────────────────
+# ENGINE GUARD — remove null-overrides of sacred ENGINE globals
+# ─────────────────────────────────────────────────────────────
+
+# Variables declared by the ENGINE header — redeclaring them as null/0 kills the game
+_ENGINE_SACRED = frozenset({
+    'canvas', 'ctx', 'W', 'H', 'DPR', 'gameState', 'lastTime',
+    'accumulator', 'Keys', 'Touch', 'Mouse',
+})
+
+_NULL_VALUES = r'(?:null|0|undefined|false|\'\'|"")'
+
+# Build a single pattern that matches  var/let/const {name} = null/0/etc;
+_SACRED_NULL_PAT = re.compile(
+    r'(?m)^[ \t]*(?:var|let|const)\s+(?P<name>'
+    + '|'.join(re.escape(n) for n in sorted(_ENGINE_SACRED))
+    + r')\s*=\s*' + _NULL_VALUES + r'\s*;[ \t]*(?://[^\n]*)?\n',
+)
+
+
+def _sanitize_engine_globals(html: str) -> tuple[str, list[str]]:
+    """
+    Remove any `var/let/const {sacred_name} = null/0/undefined` declarations
+    that appear AFTER the ENGINE section.
+
+    Layered generation's L1 often adds these as "clean-slate" initializations
+    (var canvas = null; var ctx = null;) which silently overwrite the ENGINE setup
+    and crash the game on the first draw call (ctx.save() → TypeError: null).
+
+    Only removes lines that:
+      - Declare a known ENGINE-sacred variable name
+      - Assign it to null, 0, undefined, false, '', or ""
+      - Use `var` (ENGINE uses const/let, so a later `var` is always a rogue duplicate)
+      - OR use let/const when the value is null/0 (equally wrong)
+    """
+    # Works for both template-adapted games (have ENGINE section) and layered games
+    # (use _HTML_TEMPLATE header). In both cases these globals are set in the HTML header
+    # — any later `var X = null/0` is always a rogue duplicate that kills the game.
+    fixes: list[str] = []
+
+    # Only sanitize if the HTML header already declares canvas/ctx (not an empty template stub)
+    if (
+        "document.getElementById('gameCanvas')" not in html
+        and 'getContext' not in html
+    ):
+        return html, []
+
+    def _replace(m):
+        name = m.group('name')
+        fixes.append(f'[ENGINE GUARD] var {name} = null/0 removed — already declared in HTML header')
+        return ''
+
+    new_html = _SACRED_NULL_PAT.sub(_replace, html)
+    return new_html, fixes
+
+
+# ─────────────────────────────────────────────────────────────
+
+def check_fill_placeholders(html: str) -> list[str]:
+    """
+    Detects remaining [FILL: ...] placeholders in the JS section of the generated game.
+    Returns a list of placeholder labels found, or [] if the output is clean.
+    A non-empty list means the LLM did not finish filling the template.
+    """
+    scripts = re.findall(r'<script(?:\s[^>]*)?>(.+?)</script>', html, re.DOTALL | re.IGNORECASE)
+    if not scripts:
+        return []
+    js = max(scripts, key=len)
+    return re.findall(r'\[FILL:\s*([^\]]+)\]', js)
+
 
 def validate_and_fix(html: str) -> tuple[str, list[str], bool]:
     """
@@ -468,21 +555,44 @@ def validate_and_fix(html: str) -> tuple[str, list[str], bool]:
 
     issues: list[str] = []
 
+    # ── [FILL:] PLACEHOLDER CHECK — must run before Playwright ──────────────
+    _remaining_fills = check_fill_placeholders(html)
+    if _remaining_fills:
+        labels = ', '.join(f'[FILL: {f}]' for f in _remaining_fills[:6])
+        issues.append(
+            f'CRITIQUE: {len(_remaining_fills)} [FILL:] placeholder(s) not replaced by LLM — '
+            f'game will crash or be incomplete. Unfilled: {labels}'
+        )
+
+    # ── ENGINE GUARD: remove null-overrides of sacred globals (first, before anything else) ──
+    html, engine_fixes = _sanitize_engine_globals(html)
+    issues.extend(engine_fixes)
+
     # ── Vérification : présence d'un bloc <script> ──
     if '<script' not in html.lower():
         issues.append('CRITIQUE: Aucun bloc <script> trouvé dans le HTML généré')
         _log_results(issues)
         return html, issues, True
 
-    # ── Extraction du script principal ──
-    script_match = re.search(
-        r'(<script(?:\s[^>]*)?>)(.+?)(</script>)',
+    # ── Extraction du script principal (le plus long, hors CDN src= et polyfills) ──
+    # For 3D games: CDN <script src=>, polyfill <script>, then game <script>.
+    # Picking the first block would target the polyfill, causing false positives
+    # ("boucle de jeu manquante") and injecting RAF into the wrong block.
+    _all_sm = list(re.finditer(
+        r'(<script(?:\s[^>]*)?>)(.*?)(</script>)',
         html, re.DOTALL | re.IGNORECASE
-    )
-    if not script_match:
+    ))
+    _valid_sm = [
+        m for m in _all_sm
+        if not re.search(r'\bsrc\s*=', m.group(1), re.IGNORECASE)
+        and len(m.group(2).strip()) > 50
+        and '// Polyfill' not in m.group(2)[:200]
+    ]
+    if not _valid_sm:
         issues.append('CRITIQUE: Aucun bloc <script> valide trouvé dans le HTML')
         _log_results(issues)
         return html, issues, True
+    script_match = max(_valid_sm, key=lambda m: len(m.group(2)))
 
     prefix = html[:script_match.start(2)]
     script = script_match.group(2)
@@ -496,6 +606,10 @@ def validate_and_fix(html: str) -> tuple[str, list[str], bool]:
     # ── Applications des correctifs dans l'ordre ──
     original_script = script
 
+    # Gradient safety patch — prepended once, before any other transformation
+    script, grad_fixes = _inject_gradient_safety(script)
+    issues.extend(grad_fixes)
+
     script, for_const_fixes = _fix_for_const_loop(script)
     issues.extend(for_const_fixes)
 
@@ -508,17 +622,41 @@ def validate_and_fix(html: str) -> tuple[str, list[str], bool]:
     script, draw_local_fixes = _fix_undeclared_draw_locals(script)
     issues.extend(draw_local_fixes)
 
-    script, var_fixes = _fix_undeclared_common_vars(script)
-    issues.extend(var_fixes)
+    # ── Injection checkpoint: two independent groups so stubs survive var-injection failure ──
+    try:
+        from js_syntax_checker import check_and_report as _chk_inject
+    except Exception:
+        _chk_inject = lambda h: ([], False)  # noqa: E731
 
-    script, gamestate_fixes = _fix_gamestateflow(script)
-    issues.extend(gamestate_fixes)
+    # Group A: variable declarations (W/H/common vars) — may fail on template route
+    _script_pre_vars = script
+    _var_fixes_tentative, _gs_fixes_tentative = [], []
+    _script_with_vars, _var_fixes_tentative = _fix_undeclared_common_vars(script)
+    _script_with_vars, _gs_fixes_tentative = _fix_gamestateflow(_script_with_vars)
+    _, _vars_broken = _chk_inject(prefix + _script_with_vars + suffix)
+    if _vars_broken:
+        issues.append('[SKIPPED var-injection] broke syntax — reverted (W/H not injected)')
+    else:
+        script = _script_with_vars
+        issues.extend(_var_fixes_tentative)
+        issues.extend(_gs_fixes_tentative)
 
-    script, stub_fixes = _inject_missing_stubs(script)
-    issues.extend(stub_fixes)
+    # Group B: stub functions — runs independently even if Group A failed
+    _script_pre_stubs = script
+    _script_with_stubs, stub_fixes = _inject_missing_stubs(script)
+    _, _stubs_broken = _chk_inject(prefix + _script_with_stubs + suffix)
+    if _stubs_broken:
+        issues.append('[SKIPPED stub-injection] broke syntax — reverted')
+    else:
+        script = _script_with_stubs
+        issues.extend(stub_fixes)
 
     script, handler_fixes = _fix_no_args_handlers_in_gameloop(script)
     issues.extend(handler_fixes)
+
+    # B4b: inject missing calls for update*/draw* functions not called from game loop
+    script, gameloop_call_fixes = _fix_missing_gameloop_calls(script)
+    issues.extend(gameloop_call_fixes)
 
     script, type_name_fixes = _fix_type_vs_name_property(script)
     issues.extend(type_name_fixes)
@@ -919,6 +1057,13 @@ def _fix_draw_loop_missing_element_var(script: str) -> tuple[str, list[str]]:
     return result, fixes
 
 
+def _strip_js_comments(code: str) -> str:
+    """Strip // and /* */ comments so variable detection doesn't match inside them."""
+    code = re.sub(r'//[^\n]*', '', code)
+    code = re.sub(r'/\*[\s\S]*?\*/', '', code)
+    return code
+
+
 def _fix_undeclared_common_vars(script: str) -> tuple[str, list[str]]:
     """
     Détecte les variables de COMMON_VARS utilisées mais non déclarées.
@@ -938,10 +1083,14 @@ def _fix_undeclared_common_vars(script: str) -> tuple[str, list[str]]:
     # Collecte COMPLÈTE des déclarations existantes
     declared = _collect_declarations(script)
 
+    # Strip comments for usage detection — prevents false positives from
+    # // collision comments, 'state' string literals, CSS text, etc.
+    script_no_comments = _strip_js_comments(script)
+
     to_inject: list[tuple[str, str]] = []
 
     # Variables déclarées dans le template HTML — JAMAIS réinjecter
-    _TEMPLATE_GLOBALS = frozenset({'canvas', 'ctx', 'W', 'H', 'dt', 'lastTime', 'gameState'})
+    _TEMPLATE_GLOBALS = frozenset({'canvas', 'ctx', 'dt', 'lastTime', 'gameState'})
     for tg in _TEMPLATE_GLOBALS:
         declared.add(tg)
 
@@ -962,7 +1111,8 @@ def _fix_undeclared_common_vars(script: str) -> tuple[str, list[str]]:
         if varname in _ctx_props:
             continue
         # Vérifier que la variable est réellement utilisée comme standalone
-        if not _is_used_standalone(varname, script):
+        # (use comment-stripped script to avoid false positives)
+        if not _is_used_standalone(varname, script_no_comments):
             continue
         to_inject.append((varname, initval))
 
@@ -1809,6 +1959,32 @@ def _dedup_declarations(script: str) -> tuple[str, int]:
 
 
 # ─────────────────────────────────────────────────────────────
+# FIX — createRadialGradient NaN/non-finite guard
+# ─────────────────────────────────────────────────────────────
+
+def _inject_gradient_safety(script: str) -> tuple[str, list[str]]:
+    """
+    Inject a one-time prototype patch that prevents createRadialGradient crashes
+    when coordinates or radii are NaN/Infinity (common in procedural draw code).
+    """
+    if 'createRadialGradient' not in script:
+        return script, []
+    _sig = 'createRadialGradient=function('
+    if _sig in script:
+        return script, []
+    _patch = (
+        '(function(){'
+        'var _rg=CanvasRenderingContext2D.prototype.createRadialGradient;'
+        'CanvasRenderingContext2D.prototype.createRadialGradient=function(x1,y1,r1,x2,y2,r2){'
+        'if(!isFinite(x1)||!isFinite(y1)||!isFinite(r1)'
+        '||!isFinite(x2)||!isFinite(y2)||!isFinite(r2))'
+        'return _rg.call(this,0,0,0,0,0,1);'
+        'return _rg.call(this,x1,y1,Math.max(0,r1),x2,y2,Math.max(0,r2));};})();\n'
+    )
+    return _patch + script, ['[AUTO-FIX] createRadialGradient safety wrapper injected']
+
+
+# ─────────────────────────────────────────────────────────────
 # FIX 6 — eval/debug en production
 # ─────────────────────────────────────────────────────────────
 
@@ -1917,14 +2093,32 @@ def _fix_spawnplayer_missing_dimensions(script: str) -> tuple[str, list[str]]:
         r'(function\s+spawnPlayer\s*\([^)]*\)\s*\{)(.*?)(\n\})',
         re.DOTALL
     )
+    def _find_player_obj(body):
+        """Find player = { ... } with balanced braces to avoid matching nested sub-objects."""
+        start_pat = re.compile(r'player\s*=\s*\{')
+        m_start = start_pat.search(body)
+        if not m_start:
+            return None
+        depth = 0
+        start = m_start.end() - 1  # position of '{'
+        i = start
+        while i < len(body):
+            if body[i] == '{':
+                depth += 1
+            elif body[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    return (m_start.start(), start, i)  # (match_start, content_start, content_end_incl)
+            i += 1
+        return None
+
     def _patch(m):
         body = m.group(2)
-        # Cherche l'objet littéral player = { ... }
-        obj_pat = re.compile(r'(player\s*=\s*\{)(.*?)(\})', re.DOTALL)
-        m_obj = obj_pat.search(body)
-        if not m_obj:
+        result = _find_player_obj(body)
+        if not result:
             return m.group(0)
-        obj_content = m_obj.group(2)
+        match_start, content_start, closing_brace = result
+        obj_content = body[content_start + 1:closing_brace]  # between { and }
         changed = False
         if not re.search(r'\bw\s*:', obj_content):
             obj_content += '\n        w: 24,'
@@ -1936,7 +2130,7 @@ def _fix_spawnplayer_missing_dimensions(script: str) -> tuple[str, list[str]]:
             obj_content += '\n        r: 12,'
             changed = True
         if changed:
-            new_body = body[:m_obj.start(2)] + obj_content + body[m_obj.end(2):]
+            new_body = body[:content_start + 1] + obj_content + body[closing_brace:]
             fixes.append('[AUTO-FIX] spawnPlayer(): w/h/r ajoutés à player (évite balles NaN + collisions cassées)')
             return m.group(1) + new_body + m.group(3)
         return m.group(0)
@@ -2178,12 +2372,14 @@ def _check_empty_stubs(script: str) -> list[str]:
             continue
 
         # Corps significatif = au moins 3 lignes non vides non commentaires
+        # OU corps minifié sur 1 ligne mais substantiel (> 120 chars) — fonctions ENGINE
         meaningful_lines = [
             ln.strip() for ln in body.split('\n')
             if ln.strip() and not ln.strip().startswith('//')
             and ln.strip() not in ('{', '}', 'return;', 'return')
         ]
-        if len(meaningful_lines) < 3:
+        body_chars = len(body.strip())
+        if len(meaningful_lines) < 3 and body_chars < 120:
             issues.append(
                 f'CRITIQUE: fonction {fn_name}() quasi-vide ({len(meaningful_lines)} ligne(s) — stub) '
                 f'— le jeu ne peut pas fonctionner'
@@ -2330,6 +2526,59 @@ def _count_braces_precise(script: str) -> int:
         i += 1
 
     return depth
+
+
+def _fix_missing_gameloop_calls(script: str) -> tuple[str, list[str]]:
+    """
+    Detects zero-arg update*/draw* functions defined but never called from the game loop.
+    Injects the missing calls at the top of gameLoop()/update() body.
+    Conservative: only touches zero-param functions, verifies syntax after injection.
+    """
+    fixes: list[str] = []
+    # Only inject if there is a clear game loop entry point
+    gameloop_m = re.search(r'function\s+(gameLoop|update)\s*\(\s*\)\s*\{', script)
+    if not gameloop_m:
+        return script, fixes
+
+    # Collect zero-param update*/draw* definitions (not draw() itself — too generic)
+    defined = re.findall(r'\bfunction\s+((?:update|draw)[A-Z]\w*)\s*\(\s*\)', script)
+    if not defined:
+        return script, fixes
+
+    missing = []
+    for fn in defined:
+        # Check if the function is called (an occurrence NOT preceded by 'function' on same line)
+        _call_found = False
+        for _m in re.finditer(r'\b' + re.escape(fn) + r'\s*\(', script):
+            _line_start = script.rfind('\n', 0, _m.start()) + 1
+            _before = script[_line_start:_m.start()]
+            if not re.search(r'\bfunction\s*$', _before):
+                _call_found = True
+                break
+        if not _call_found:
+            missing.append(fn)
+
+    if not missing:
+        return script, fixes
+
+    # Inject calls at the start of the game loop body (limit to 4 injections max)
+    missing = missing[:4]
+    inject_pos = gameloop_m.end()  # right after the opening {
+    injection = '\n    ' + '\n    '.join(f'{fn}();  // B4b: auto-injected' for fn in missing)
+    new_script = script[:inject_pos] + injection + script[inject_pos:]
+
+    # Validate the injection doesn't break syntax
+    try:
+        from js_syntax_checker import check_syntax as _chk_b4b
+        _tmp_html = f'<script>{new_script}</script>'
+        if _chk_b4b(_tmp_html):
+            return script, fixes  # injection broke syntax — skip
+    except Exception:
+        return script, fixes  # can't validate — skip
+
+    for fn in missing:
+        fixes.append(f'[AUTO-FIX B4b] {fn}() missing from game loop — injected call')
+    return new_script, fixes
 
 
 def _log_results(issues: list[str]) -> None:

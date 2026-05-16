@@ -1,0 +1,592 @@
+<!--
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ARCADE PROJECT — SPACE SHOOTER 3D TEMPLATE (Three.js r160)                 ║
+║  Covers: space shooters, flight shooters, aerial dogfight games.            ║
+║  Read this entirely before writing a single line of code.                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ ROLE ──────────────────────────────────────────────────────────────────────┐
+│ You are a senior Three.js game developer.                                    │
+│ Fill EVERY [FILL: ...] section to create a complete space/flight shooter.   │
+│ DO NOT touch the ENGINE block — it is already wired and tested.              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ THE TWO ZONES ─────────────────────────────────────────────────────────────┐
+│  1. ENGINE — DO NOT MODIFY  (Three.js setup, ship control, meta, loop)      │
+│  2. [FILL: ...] sections — YOUR creative work                                │
+│     Replace EVERY placeholder. Any [FILL] left = broken game.               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SACRED CONTRACT — ENGINE GLOBALS (NEVER redeclare) ───────────────────────┐
+│  scene, camera, renderer, clock  → Three.js core (already initialised)      │
+│  keys{}     → { 'KeyW':bool, 'KeyA':bool, … }  keyboard state              │
+│  mouseX,mouseY → normalised [-1,1] mouse position (updated every mousemove) │
+│  gameState  → 'menu' | 'playing' | 'gameover' | 'shop'                     │
+│  meta       → { coins:0, upgrades:{} }                                      │
+│  ship       → { mesh/grp, pos:V3, vel:V3, hp:int, maxHp:int, shield:int }  │
+│  bullets[]  → player projectile array (pooled)                               │
+│  enemies[]  → active enemy objects                                           │
+│  eBullets[] → enemy projectile array                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ENGINE HELPERS — USE, DON'T REWRITE ───────────────────────────────────────┐
+│  fireBullet(offsetX?)  → spawns player bullet from ship position            │
+│  fireEBullet(pos, dir) → spawns enemy bullet heading toward player          │
+│  updateHUD()           → syncs score, hp, shield, coins, wave display       │
+│  flashHit()            → red screen flash on shield/hp damage               │
+│  spawnExplosion(pos,col,scale) → particle burst at world position           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ YOUR CONTRACT — FILL THESE ─────────────────────────────────────────────────┐
+│  META_KEY          → unique localStorage key, e.g. 'meta_nebula_breach_2'  │
+│  UPGRADE_DEFS[]    → 4 upgrades with id, name, desc, cost, maxLv            │
+│  applyUpgrades()   → reads meta.upgrades, sets ship.* vars                  │
+│  buildBackground() → star field, nebula, environment meshes                 │
+│  ENEMY_TYPES{}     → { type: { hp, speed, reward, color, size, shootInt } } │
+│  spawnWave(n)      → spawn enemies for wave n                               │
+│  updateEnemies(dt) → enemy movement, shooting, removal                      │
+│  updatePlaying(dt) → orchestrate: wave logic, scroll, extra gameplay        │
+└─────────────────────────────────────────────────────────────────────────────┘
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>[FILL: GAME_TITLE]</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#000; overflow:hidden; font-family:system-ui,sans-serif; }
+  #c { display:block; width:100vw; height:100vh; cursor:crosshair; }
+  #hud { position:fixed; inset:0; pointer-events:none; font-family:system-ui,sans-serif; }
+  #score-disp { position:absolute; top:18px; left:50%; transform:translateX(-50%); font-size:22px; font-weight:700; color:#ffd700; letter-spacing:2px; }
+  #wave-disp  { position:absolute; top:48px; left:50%; transform:translateX(-50%); font-size:13px; color:#aaa; letter-spacing:3px; }
+  #coins-disp { position:absolute; top:18px; right:24px; font-size:15px; color:#ffd700; }
+  #hp-wrap { position:absolute; bottom:56px; left:24px; }
+  #hp-label { font-size:11px; color:#888; letter-spacing:2px; margin-bottom:4px; }
+  #hp-bg { width:180px; height:13px; background:#333; border-radius:6px; overflow:hidden; }
+  #hp-fill { height:100%; background:linear-gradient(90deg,#c0392b,#e74c3c); border-radius:6px; transition:width .2s; }
+  #shield-wrap { position:absolute; bottom:80px; left:24px; }
+  #shield-label { font-size:11px; color:#888; letter-spacing:2px; margin-bottom:4px; }
+  #shield-bg { width:180px; height:8px; background:#333; border-radius:4px; overflow:hidden; }
+  #shield-fill { height:100%; background:linear-gradient(90deg,#1a4a8a,#3498db); border-radius:4px; transition:width .15s; }
+  #status-msg { position:absolute; bottom:104px; left:50%; transform:translateX(-50%); font-size:14px; color:#ffd700; letter-spacing:3px; display:none; }
+  #hit-flash  { position:absolute; inset:0; background:rgba(231,76,60,0); pointer-events:none; transition:background .07s; }
+  /* [FILL: CSS_ACCENT] — replace #00d4ff with your game's accent color */
+  #overlay {
+    position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.88); color:#fff;
+  }
+  #overlay h1 { font-size:52px; font-weight:900; letter-spacing:6px; font-family:'Impact',system-ui; margin-bottom:8px; color:#00d4ff; }
+  #overlay .sub { font-size:13px; color:#666; letter-spacing:4px; margin-bottom:36px; }
+  .menu-btn { padding:13px 38px; margin:5px; font-size:14px; font-weight:700; letter-spacing:2px; border:2px solid #00d4ff; background:transparent; cursor:pointer; text-transform:uppercase; transition:all .15s; font-family:system-ui; color:#00d4ff; }
+  .menu-btn:hover { background:#00d4ff; color:#000; }
+  #shop-overlay {
+    position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.92); color:#fff;
+  }
+  #shop-overlay h2 { font-size:28px; font-weight:700; margin-bottom:6px; letter-spacing:3px; font-family:system-ui; }
+  #shop-overlay .coins-info { font-size:14px; color:#ffd700; margin-bottom:24px; }
+  #shop-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; max-width:520px; width:90%; margin-bottom:24px; }
+  .shop-card { border:1px solid #333; padding:16px; text-align:center; background:#111; border-radius:8px; }
+  .shop-card h3 { font-size:13px; font-weight:700; letter-spacing:1px; margin-bottom:6px; font-family:system-ui; }
+  .shop-card p { font-size:11px; color:#777; margin-bottom:10px; font-family:system-ui; }
+  .shop-card .lv { font-size:11px; color:#00d4ff; margin-bottom:8px; }
+  .buy-btn { padding:7px 18px; font-size:11px; font-weight:700; border:1px solid #00d4ff; background:transparent; color:#00d4ff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; font-family:system-ui; }
+  .buy-btn:hover { background:#00d4ff; color:#000; }
+  .buy-btn:disabled { border-color:#333; color:#333; cursor:default; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div id="score-disp">SCORE: 0</div>
+  <div id="wave-disp">WAVE 1</div>
+  <div id="coins-disp">🪙 0</div>
+  <div id="shield-wrap">
+    <div id="shield-label">SHIELD</div>
+    <div id="shield-bg"><div id="shield-fill" style="width:100%"></div></div>
+  </div>
+  <div id="hp-wrap">
+    <div id="hp-label">HULL</div>
+    <div id="hp-bg"><div id="hp-fill" style="width:100%"></div></div>
+  </div>
+  <div id="status-msg"></div>
+  <div id="hit-flash"></div>
+</div>
+
+<!-- MAIN OVERLAY -->
+<div id="overlay">
+  <h1>[FILL: GAME_TITLE]</h1>
+  <div class="sub">[FILL: GAME_SUBTITLE]</div>
+  <button class="menu-btn" id="btn-play">[FILL: START_LABEL]</button>
+</div>
+
+<!-- SHOP OVERLAY -->
+<div id="shop-overlay">
+  <h2>[FILL: SHOP_TITLE]</h2>
+  <div class="coins-info" id="shop-coins">🪙 0 coins</div>
+  <div id="shop-grid"></div>
+  <button class="menu-btn" id="btn-close-shop">[FILL: SHOP_LABEL]</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js"></script>
+<script>
+'use strict';
+// ═══ ENGINE — DO NOT MODIFY ═══
+
+// ── Meta-progression ──────────────────────────────────────────────────────────
+const META_KEY = '[FILL: META_KEY]';
+let meta = { coins:0, upgrades:{} };
+function loadMeta() {
+  try { const s=localStorage.getItem(META_KEY); if(s) meta=JSON.parse(s); } catch(e){}
+  UPGRADE_DEFS.forEach(u=>{ if(meta.upgrades[u.id]==null) meta.upgrades[u.id]=0; });
+}
+function saveMeta() { try { localStorage.setItem(META_KEY,JSON.stringify(meta)); } catch(e){} }
+function buyUpgrade(id) {
+  const u=UPGRADE_DEFS.find(x=>x.id===id); if(!u) return;
+  const lv=meta.upgrades[id]||0;
+  if(lv>=u.maxLv || meta.coins<u.cost) return;
+  meta.coins-=u.cost; meta.upgrades[id]=lv+1;
+  saveMeta(); applyUpgrades(); renderShop();
+}
+function renderShop() {
+  document.getElementById('shop-coins').textContent='🪙 '+meta.coins+' coins';
+  const g=document.getElementById('shop-grid'); g.innerHTML='';
+  UPGRADE_DEFS.forEach(u=>{
+    const lv=meta.upgrades[u.id]||0;
+    const maxed=lv>=u.maxLv;
+    const canBuy=!maxed&&meta.coins>=u.cost;
+    g.innerHTML+=`<div class="shop-card">
+      <h3>${u.name}</h3><p>${u.desc}</p>
+      <div class="lv">Lv ${lv} / ${u.maxLv}</div>
+      <button class="buy-btn" onclick="buyUpgrade('${u.id}')" ${!canBuy?'disabled':''}>
+        ${maxed?'MAX':'Buy — 🪙'+u.cost}
+      </button></div>`;
+  });
+}
+
+// ── Three.js core ──────────────────────────────────────────────────────────────
+const scene    = new THREE.Scene();
+const camera   = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 800);
+const renderer = new THREE.WebGLRenderer({ canvas:document.getElementById('c'), antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+const clock = new THREE.Clock();
+camera.position.set(0, 0, 16); // fixed behind-ship camera
+
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+// ── Mouse aim ────────────────────────────────────────────────────────────────
+let mouseX=0, mouseY=0;
+let shooting=false;
+window.addEventListener('mousemove', e=>{
+  mouseX = (e.clientX/innerWidth  - 0.5) * 2;
+  mouseY = -(e.clientY/innerHeight - 0.5) * 2;
+});
+window.addEventListener('mousedown', e=>{ if(e.button===0) shooting=true;  });
+window.addEventListener('mouseup',   e=>{ if(e.button===0) shooting=false; });
+
+// ── Keyboard ─────────────────────────────────────────────────────────────────
+const keys={};
+window.addEventListener('keydown', e=>keys[e.code]=true);
+window.addEventListener('keyup',   e=>keys[e.code]=false);
+
+// ── Game state ─────────────────────────────────────────────────────────────────
+let gameState='menu';
+let score=0;
+let wave=1;
+let waveActive=false;
+let waveTimer=0;
+
+// ── Ship state ────────────────────────────────────────────────────────────────
+const BOUNDS = { x:8, y:5 }; // playfield half-extents
+const ship = {
+  grp: new THREE.Group(),
+  pos: new THREE.Vector3(0,0,0),
+  vel: new THREE.Vector3(0,0,0),
+  hp: 3, maxHp: 3,
+  shield: 100, maxShield: 100,
+  fireRate: 0.18,    // seconds between shots
+  _fireTimer: 0,
+  bulletSpeed: 28,
+  damage: 1,
+  shieldRegenDelay: 3,
+  _shieldTimer: 0,
+  _prevX: 0
+};
+scene.add(ship.grp);
+
+// ── Bullet / enemy arrays ─────────────────────────────────────────────────────
+let bullets  = [];
+let enemies  = [];
+let eBullets = [];
+let particles = [];
+
+// ── Fire player bullet ────────────────────────────────────────────────────────
+function fireBullet(offsetX=0) {
+  const geo = new THREE.CylinderGeometry(0.07,0.07,0.8,6);
+  const mat = new THREE.MeshBasicMaterial({color:0x00ffaa});
+  const mesh = new THREE.Mesh(geo,mat);
+  mesh.rotation.x = Math.PI/2;
+  mesh.position.set(ship.pos.x+offsetX, ship.pos.y, ship.pos.z-1);
+  scene.add(mesh);
+  bullets.push({ mesh, vel:new THREE.Vector3(0,0,-ship.bulletSpeed), life:2.5 });
+}
+
+// ── Fire enemy bullet ─────────────────────────────────────────────────────────
+function fireEBullet(pos, dir) {
+  const geo = new THREE.SphereGeometry(0.15,6,6);
+  const mat = new THREE.MeshBasicMaterial({color:0xff4422});
+  const mesh = new THREE.Mesh(geo,mat); mesh.position.copy(pos); scene.add(mesh);
+  eBullets.push({ mesh, vel:dir.clone().multiplyScalar(10), life:3 });
+}
+
+// ── Explosion particles ───────────────────────────────────────────────────────
+function spawnExplosion(pos, col=0xff6600, scale=1) {
+  for(let i=0;i<12;i++){
+    const g=new THREE.SphereGeometry(0.1*scale,4,4);
+    const m=new THREE.MeshBasicMaterial({color:col, transparent:true});
+    const mesh=new THREE.Mesh(g,m); mesh.position.copy(pos); scene.add(mesh);
+    const sp = (Math.random()+0.3)*5*scale;
+    const v=new THREE.Vector3((Math.random()-.5),(Math.random()-.5),(Math.random()-.5)).normalize().multiplyScalar(sp);
+    particles.push({ mesh, vel:v, life:0.6*scale, maxLife:0.6*scale });
+  }
+}
+
+function updateParticles(dt) {
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i]; p.life-=dt;
+    p.mesh.position.addScaledVector(p.vel,dt);
+    p.mesh.material.opacity = p.life/p.maxLife;
+    if(p.life<=0){ scene.remove(p.mesh); particles.splice(i,1); }
+  }
+}
+
+// ── HUD ───────────────────────────────────────────────────────────────────────
+function updateHUD() {
+  document.getElementById('score-disp').textContent = 'SCORE: '+score;
+  document.getElementById('wave-disp').textContent  = 'WAVE '+wave;
+  document.getElementById('coins-disp').textContent = '🪙 '+meta.coins;
+  document.getElementById('hp-fill').style.width    = Math.max(0,ship.hp/ship.maxHp*100)+'%';
+  document.getElementById('shield-fill').style.width= Math.max(0,ship.shield/ship.maxShield*100)+'%';
+}
+
+function flashHit() {
+  const f=document.getElementById('hit-flash');
+  f.style.background='rgba(231,76,60,0.4)';
+  setTimeout(()=>f.style.background='rgba(231,76,60,0)',100);
+}
+
+function showStatus(msg, dur=2000) {
+  const el=document.getElementById('status-msg');
+  el.textContent=msg; el.style.display='block';
+  clearTimeout(el._t); el._t=setTimeout(()=>el.style.display='none',dur);
+}
+
+// ── Game state machine ────────────────────────────────────────────────────────
+function startGame() {
+  document.getElementById('overlay').style.display='none';
+  score=0; wave=1; waveActive=false; waveTimer=0;
+  ship.hp=ship.maxHp; ship.shield=ship.maxShield;
+  ship.pos.set(0,0,0); ship.vel.set(0,0,0);
+  enemies.forEach(e=>scene.remove(e.mesh)); enemies=[];
+  bullets.forEach(b=>scene.remove(b.mesh)); bullets=[];
+  eBullets.forEach(b=>scene.remove(b.mesh)); eBullets=[];
+  applyUpgrades(); buildBackground();
+  gameState='playing';
+  waveTimer=2; // 2s before first wave
+  updateHUD();
+}
+
+function triggerGameOver() {
+  gameState='gameover';
+  const ov=document.getElementById('overlay');
+  ov.innerHTML=`
+    <h1 style="color:#e74c3c">[FILL: GAMEOVER_SUBTITLE]</h1>
+    <div class="sub">SCORE: ${score}</div>
+    <button class="menu-btn" id="btn-shop">[FILL: SHOP_LABEL]</button>
+    <button class="menu-btn" id="btn-retry">[FILL: RETRY_LABEL]</button>`;
+  ov.style.display='flex';
+  document.getElementById('btn-shop').onclick = openShop;
+  document.getElementById('btn-retry').onclick = startGame;
+}
+
+function openShop() {
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('shop-overlay').style.display='flex';
+  gameState='shop'; renderShop();
+}
+function closeShop() {
+  document.getElementById('shop-overlay').style.display='none';
+  triggerGameOver();
+}
+document.getElementById('btn-close-shop').onclick = closeShop;
+
+// ── Ship update (ENGINE — mouse tracking + WASD drift + banking) ─────────────
+function updateShip(dt) {
+  // target position follows mouse
+  const tx = mouseX * BOUNDS.x;
+  const ty = mouseY * BOUNDS.y;
+  ship.vel.x = (tx - ship.pos.x) * 6;
+  ship.vel.y = (ty - ship.pos.y) * 6;
+
+  // WASD strafe override
+  if(keys['KeyA']||keys['ArrowLeft'])  ship.vel.x -= ship.speed;
+  if(keys['KeyD']||keys['ArrowRight']) ship.vel.x += ship.speed;
+  if(keys['KeyW']||keys['ArrowUp'])    ship.vel.y += ship.speed;
+  if(keys['KeyS']||keys['ArrowDown'])  ship.vel.y -= ship.speed;
+
+  ship.pos.addScaledVector(ship.vel, dt);
+  ship.pos.x = Math.max(-BOUNDS.x, Math.min(BOUNDS.x, ship.pos.x));
+  ship.pos.y = Math.max(-BOUNDS.y, Math.min(BOUNDS.y, ship.pos.y));
+  ship.grp.position.copy(ship.pos);
+
+  // banking roll
+  const dx = ship.pos.x - ship._prevX;
+  ship.grp.rotation.z = -dx * 0.18;
+  ship._prevX = ship.pos.x;
+
+  // auto-fire
+  ship._fireTimer -= dt;
+  if(shooting && ship._fireTimer<=0) {
+    ship._fireTimer = ship.fireRate;
+    fireBullet(-0.35); fireBullet(0.35); // dual cannons
+  }
+
+  // shield regen
+  if(ship.shield < ship.maxShield) {
+    ship._shieldTimer -= dt;
+    if(ship._shieldTimer<=0) ship.shield = Math.min(ship.maxShield, ship.shield+10*dt);
+  }
+}
+
+// ── Bullet update ─────────────────────────────────────────────────────────────
+function updateBullets(dt) {
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i]; b.life-=dt;
+    b.mesh.position.addScaledVector(b.vel,dt);
+    if(b.life<=0||b.mesh.position.z<-60){ scene.remove(b.mesh); bullets.splice(i,1); continue; }
+    // hit check vs enemies
+    for(let j=enemies.length-1;j>=0;j--){
+      const e=enemies[j];
+      if(b.mesh.position.distanceTo(e.mesh.position)<e.radius){
+        e.hp-=ship.damage; scene.remove(b.mesh); bullets.splice(i,1);
+        if(e.hp<=0){
+          spawnExplosion(e.mesh.position.clone(), e.color, e.scale||1);
+          score+=e.reward; meta.coins+=Math.ceil(e.reward/10); saveMeta();
+          scene.remove(e.mesh); enemies.splice(j,1);
+        }
+        updateHUD(); break;
+      }
+    }
+  }
+  // enemy bullets vs player
+  for(let i=eBullets.length-1;i>=0;i--){
+    const b=eBullets[i]; b.life-=dt;
+    b.mesh.position.addScaledVector(b.vel,dt);
+    if(b.life<=0||b.mesh.position.z>20){ scene.remove(b.mesh); eBullets.splice(i,1); continue; }
+    if(b.mesh.position.distanceTo(ship.pos)<0.8){
+      scene.remove(b.mesh); eBullets.splice(i,1);
+      if(ship.shield>0) {
+        ship.shield=Math.max(0,ship.shield-20);
+        ship._shieldTimer=ship.shieldRegenDelay;
+      } else {
+        ship.hp--; flashHit();
+        if(ship.hp<=0){ triggerGameOver(); return; }
+      }
+      updateHUD();
+    }
+  }
+}
+
+// ── Main loop ──────────────────────────────────────────────────────────────────
+function update(dt) {
+  if(gameState!=='playing') return;
+  updateShip(dt);
+  updateBullets(dt);
+  updateParticles(dt);
+  updateEnemies(dt);
+  updatePlaying(dt);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  update(dt);
+  renderer.render(scene,camera);
+}
+
+// ═══ END ENGINE ═══
+
+
+// ── [FILL: UPGRADE_DEFS] ──────────────────────────────────────────────────────
+const UPGRADE_DEFS = [
+  { id:'plasma_core', name:'Plasma Core',  desc:'+1 bullet damage per level',          cost:30, maxLv:3 },
+  { id:'shield_cell', name:'Shield Cell',  desc:'+25 max shield per level',            cost:25, maxLv:4 },
+  { id:'ion_drive',   name:'Ion Drive',    desc:'-0.02s fire rate (faster shooting)',  cost:35, maxLv:3 },
+  { id:'auto_repair', name:'Auto Repair',  desc:'Shield regens 1s sooner per level',  cost:40, maxLv:3 }
+];
+
+// ── [FILL: APPLY_UPGRADES] ────────────────────────────────────────────────────
+function applyUpgrades() {
+  ship.damage        = 1  + (meta.upgrades['plasma_core']||0);
+  ship.maxShield     = 100 + (meta.upgrades['shield_cell']||0) * 25;
+  ship.shield        = Math.min(ship.shield, ship.maxShield);
+  ship.fireRate      = 0.18 - (meta.upgrades['ion_drive']||0) * 0.02;
+  ship.shieldRegenDelay = 3  - (meta.upgrades['auto_repair']||0);
+  ship.speed         = 5;
+}
+
+// ── [FILL: BUILD_BACKGROUND] ─────────────────────────────────────────────────
+// Create the space/sky environment: star field, nebula colours, obstacles, etc.
+// Also build the ship mesh and any persistent scene objects.
+// Called once per game start.
+function buildBackground() {
+  // clear dynamic objects
+  while(scene.children.length) scene.remove(scene.children[0]);
+  enemies=[]; bullets=[]; eBullets=[]; particles=[];
+  scene.add(ship.grp);
+
+  scene.background = new THREE.Color(0x02020e);
+  scene.add(new THREE.AmbientLight(0x334466, 1.2));
+  const sun = new THREE.DirectionalLight(0x8899ff, 1.2);
+  sun.position.set(0,10,-20); scene.add(sun);
+
+  // star field
+  const starGeo = new THREE.BufferGeometry();
+  const starPos = new Float32Array(3000);
+  for(let i=0;i<3000;i+=3){
+    starPos[i]   = (Math.random()-0.5)*200;
+    starPos[i+1] = (Math.random()-0.5)*200;
+    starPos[i+2] = (Math.random())*(-200) - 10;
+  }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos,3));
+  scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({color:0xffffff,size:0.18})));
+
+  // ship mesh — replace geometry with your own ship shape
+  ship.grp.clear();
+  const body = new THREE.Mesh(
+    new THREE.ConeGeometry(0.5,2,6),
+    new THREE.MeshLambertMaterial({color:0x3399ff})
+  );
+  body.rotation.x=Math.PI/2; ship.grp.add(body);
+  const wing = new THREE.Mesh(
+    new THREE.BoxGeometry(2.4,0.1,0.8),
+    new THREE.MeshLambertMaterial({color:0x225588})
+  );
+  ship.grp.add(wing);
+  ship.grp.position.set(0,0,0);
+}
+
+// ── [FILL: ENEMY_TYPES] ───────────────────────────────────────────────────────
+// Define enemy types. Keys are type names.
+// radius: collision sphere. shootInt: seconds between shots (0 = no shooting).
+const ENEMY_TYPES = {
+  scout:   { hp:1, speed:4,   reward:10, color:0xff4444, scale:0.7, radius:0.6, shootInt:0   },
+  fighter: { hp:3, speed:3,   reward:25, color:0xff8800, scale:1.0, radius:0.9, shootInt:2.5 },
+  heavy:   { hp:6, speed:1.5, reward:50, color:0xcc22aa, scale:1.5, radius:1.3, shootInt:1.5 },
+  boss:    { hp:20,speed:1.0, reward:200,color:0xff2200, scale:2.5, radius:2.2, shootInt:0.8 }
+};
+
+function spawnEnemy(type, x, z) {
+  const def = ENEMY_TYPES[type];
+  const geo = new THREE.OctahedronGeometry(def.scale);
+  const mat = new THREE.MeshLambertMaterial({color:def.color, emissive:def.color, emissiveIntensity:0.15});
+  const mesh = new THREE.Mesh(geo,mat); mesh.position.set(x, (Math.random()-.5)*3, z||(-40));
+  scene.add(mesh);
+  enemies.push({ mesh, type, hp:def.hp, speed:def.speed, reward:def.reward,
+                 color:def.color, scale:def.scale, radius:def.radius,
+                 shootTimer:Math.random()*def.shootInt, shootInt:def.shootInt });
+}
+
+// ── [FILL: SPAWN_WAVE] ────────────────────────────────────────────────────────
+// Spawn enemies for wave n. Use spawnEnemy(type, x, z).
+// z should be negative (enemies come from ahead, z=-40 is far). x in [-BOUNDS.x, BOUNDS.x].
+function spawnWave(n) {
+  const count = 4 + n*2;
+  for(let i=0;i<count;i++) {
+    const x = (Math.random()-0.5)*(BOUNDS.x*1.8);
+    const z = -40 - i*4;
+    const typeRoll = Math.random();
+    let type = 'scout';
+    if(n>=2 && typeRoll<0.3) type='fighter';
+    if(n>=3 && typeRoll<0.15) type='heavy';
+    setTimeout(()=>spawnEnemy(type,x,z), i*300);
+  }
+  if(n>0 && n%5===0) {
+    setTimeout(()=>spawnEnemy('boss',0,-50), 2000); // boss every 5 waves
+  }
+  waveActive=true;
+}
+
+// ── [FILL: UPDATE_ENEMIES] ────────────────────────────────────────────────────
+// Move enemies, fire back, remove off-screen.
+function updateEnemies(dt) {
+  for(let i=enemies.length-1;i>=0;i--){
+    const e=enemies[i];
+    // advance toward player
+    const toPlayer=ship.pos.clone().sub(e.mesh.position).normalize();
+    e.mesh.position.addScaledVector(toPlayer, e.speed*dt*0.4);
+    e.mesh.position.z += e.speed*dt; // drift toward player on z
+    e.mesh.rotation.y += dt;
+
+    // shoot
+    if(e.shootInt>0){
+      e.shootTimer-=dt;
+      if(e.shootTimer<=0){
+        e.shootTimer=e.shootInt*(0.8+Math.random()*0.4);
+        fireEBullet(e.mesh.position.clone(), ship.pos.clone().sub(e.mesh.position).normalize());
+      }
+    }
+
+    // ram player
+    if(e.mesh.position.distanceTo(ship.pos)<1.2){
+      ship.hp--; flashHit();
+      spawnExplosion(e.mesh.position.clone(), e.color);
+      scene.remove(e.mesh); enemies.splice(i,1);
+      if(ship.hp<=0){ triggerGameOver(); return; }
+      updateHUD(); continue;
+    }
+
+    // off-screen behind player
+    if(e.mesh.position.z>14){ scene.remove(e.mesh); enemies.splice(i,1); }
+  }
+}
+
+// ── [FILL: UPDATE_PLAYING] ────────────────────────────────────────────────────
+// Wave orchestration, background scrolling, extra gameplay logic.
+function updatePlaying(dt) {
+  // scroll star field background
+  scene.children.forEach(obj=>{
+    if(obj.isPoints){ obj.position.z+=dt*8; if(obj.position.z>10) obj.position.z=-80; }
+  });
+
+  // wave timing
+  if(!waveActive) {
+    waveTimer-=dt;
+    if(waveTimer<=0) { spawnWave(wave); }
+  } else {
+    if(enemies.length===0) {
+      waveActive=false;
+      wave++;
+      waveTimer=4;
+      ship.shield=Math.min(ship.maxShield, ship.shield+30); // between-wave regen
+      showStatus('WAVE '+wave+' INCOMING', 2500);
+      updateHUD();
+    }
+  }
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+loadMeta();
+applyUpgrades();
+buildBackground();
+gameState='menu';
+animate();
+document.getElementById('btn-play').onclick = startGame;
+</script>
+</body>
+</html>

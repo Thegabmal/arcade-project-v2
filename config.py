@@ -350,7 +350,10 @@ def call_gemini_paid(
                 print(f"  [Paid 429] Attente {wait:.0f}s avant retry", flush=True)
                 time.sleep(wait)
             elif "503" in error_str or "unavailable" in error_str:
-                time.sleep(min((2 ** attempt) * 2, 30))
+                # 503 is transient overload — needs 60-120s to recover, not 2-30s
+                wait_503 = min(15 * (2 ** attempt), 120)
+                print(f"  [Paid 503] Service unavailable — waiting {wait_503}s before retry", flush=True)
+                time.sleep(wait_503)
             else:
                 if attempt >= MAX_RETRIES * 2 - 1:
                     raise

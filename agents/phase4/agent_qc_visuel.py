@@ -187,7 +187,7 @@ Réponds en JSON :
     ev = _parse(result, "QC Visuel")
 
     # Checks programmatiques — plafonnent le score LLM si réalité du code dit autre chose
-    ev = _apply_visual_code_checks(code, ev)
+    ev = _apply_visual_code_checks(code, ev, est_3d=est_3d)
     return ev
 
 
@@ -204,67 +204,91 @@ def _parse(result: dict, agent_name: str) -> EvaluationResult:
     return ev
 
 
-def _apply_visual_code_checks(code: str, ev: EvaluationResult) -> EvaluationResult:
+def _apply_visual_code_checks(code: str, ev: EvaluationResult, est_3d: bool = False) -> EvaluationResult:
     """
     Checks programmatiques sur le code source — pénalités ET bonus.
     Le LLM peut être trop généreux ou trop sévère — le code ne ment pas.
+    2D and 3D checks are separated — 3D games are not penalized for missing
+    Canvas2D primitives (fillStyle, arc, shadowBlur, draw* functions).
     """
     import re
     penalties = []
     bonuses = []
+    _hard_cap_visual = False  # only set for 2D critical failures
 
     # ── PÉNALITÉS ──────────────────────────────────────────────────────────────
 
-    # 1. Fond noir : pas de couleur de fond définie autre que noir/transparent
-    has_bg_color = bool(re.search(
-        r'fillStyle\s*=\s*[\'"](?!(?:#000(?:000)?|black|rgb\(0,\s*0,\s*0\))[\'"])',
-        code, re.IGNORECASE
-    ))
-    has_clearrect = 'clearRect' in code
-    if not has_bg_color and not has_clearrect:
-        penalties.append(("fond potentiellement noir — aucun fillStyle de fond non-noir détecté", 2.0))
-    elif not has_bg_color and has_clearrect:
-        penalties.append(("fond effacé mais sans couleur de fond définie → fond noir probable", 1.0))
+    if not est_3d:
+        # 1. Fond noir : pas de couleur de fond définie autre que noir/transparent
+        has_bg_color = bool(re.search(
+            r'fillStyle\s*=\s*[\'"](?!(?:#000(?:000)?|black|rgb\(0,\s*0,\s*0\))[\'"])',
+            code, re.IGNORECASE
+        ))
+        has_clearrect = 'clearRect' in code
+        if not has_bg_color and not has_clearrect:
+            penalties.append(("fond potentiellement noir — aucun fillStyle de fond non-noir détecté", 2.0))
+        elif not has_bg_color and has_clearrect:
+            penalties.append(("fond effacé mais sans couleur de fond définie → fond noir probable", 1.0))
 
-    # 2. Palette trop réduite
-    hex_colors = set(re.findall(r'#[0-9A-Fa-f]{3,6}\b', code))
-    rgba_colors = set(re.findall(r'rgba?\([^)]+\)', code))
-    total_colors = len(hex_colors) + len(rgba_colors)
-    if total_colors < 4:
-        penalties.append((f"palette très réduite ({total_colors} couleur(s)) — visuel pauvre", 2.0))
-    elif total_colors < 8:
-        penalties.append((f"palette limitée ({total_colors} couleurs) — manque de richesse visuelle", 0.8))
+        # 2. Palette trop réduite
+        hex_colors = set(re.findall(r'#[0-9A-Fa-f]{3,6}\b', code))
+        rgba_colors = set(re.findall(r'rgba?\([^)]+\)', code))
+        total_colors = len(hex_colors) + len(rgba_colors)
+        if total_colors < 4:
+            penalties.append((f"palette très réduite ({total_colors} couleur(s)) — visuel pauvre", 2.0))
+        elif total_colors < 8:
+            penalties.append((f"palette limitée ({total_colors} couleurs) — manque de richesse visuelle", 0.8))
 
-    # 3. HUD absent
-    has_hud = bool(re.search(
-        r'drawHUD|fillText.*(?:score|Score|vie|HP|hp|wave|Wave|combo|Combo)',
-        code, re.IGNORECASE
-    ))
-    if not has_hud:
-        penalties.append(("aucun HUD détecté — score/vies non affichés", 1.5))
+        # 3. HUD absent
+        has_hud = bool(re.search(
+            r'drawHUD|fillText.*(?:score|Score|vie|HP|hp|wave|Wave|combo|Combo)',
+            code, re.IGNORECASE
+        ))
+        if not has_hud:
+            penalties.append(("aucun HUD détecté — score/vies non affichés", 1.5))
 
-    # 4. requestAnimationFrame absent
+        # 5. Aucune fonction draw* → le jeu ne dessine rien
+        draw_fn_count = len(re.findall(r'function\s+draw\w+\s*\(', code))
+        if draw_fn_count < 2:
+            penalties.append((f"très peu de fonctions draw* ({draw_fn_count}) — rendu probablement minimal", 1.5))
+
+        # 6. Zero shadowBlur — no glow on any entity
+        _has_shadow_blur = 'shadowBlur' in code
+        if not _has_shadow_blur:
+            penalties.append(("no shadowBlur anywhere in the code — zero glow on any entity", 2.0))
+
+        # 7. No arc/bezier shapes — all entities likely plain fillRect
+        _has_arc_shape = bool(re.search(r'ctx\.arc\s*\(', code))
+        _has_bezier_shape = bool(re.search(r'ctx\.bezierCurveTo|ctx\.quadraticCurveTo', code))
+        if not _has_arc_shape and not _has_bezier_shape:
+            penalties.append(("no arc/bezier shapes detected — all entities are likely plain fillRect rectangles", 2.0))
+
+        # Hard cap applies only when critical 2D visual systems are absent
+        _hard_cap_visual = not _has_shadow_blur or (not _has_arc_shape and not _has_bezier_shape)
+
+    else:
+        # 3D-specific checks (Three.js)
+        # Background: scene.background or setClearColor
+        _has_3d_bg = bool(re.search(r'scene\.background|setClearColor', code, re.IGNORECASE))
+        if not _has_3d_bg:
+            penalties.append(("no scene.background or setClearColor — 3D scene may render on black", 1.5))
+
+        # Lighting — scene needs at least one light source
+        _has_lighting = bool(re.search(r'AmbientLight|DirectionalLight|PointLight|HemisphereLight|SpotLight', code))
+        if not _has_lighting:
+            penalties.append(("no Three.js lights detected (AmbientLight/DirectionalLight) — scene will be black", 2.0))
+
+        # HUD via DOM overlay
+        _has_3d_hud = bool(re.search(
+            r'getElementById|querySelector|innerHTML|textContent',
+            code, re.IGNORECASE
+        ))
+        if not _has_3d_hud:
+            penalties.append(("no DOM HUD elements — score/health not displayed in 3D game", 1.0))
+
+    # 4. requestAnimationFrame absent (both 2D and 3D need it)
     if 'requestAnimationFrame' not in code:
         penalties.append(("requestAnimationFrame absent — pas d'animation", 2.0))
-
-    # 5. Aucune fonction draw* → le jeu ne dessine rien
-    draw_fn_count = len(re.findall(r'function\s+draw\w+\s*\(', code))
-    if draw_fn_count < 2:
-        penalties.append((f"très peu de fonctions draw* ({draw_fn_count}) — rendu probablement minimal", 1.5))
-
-    # 6. Zero shadowBlur — no glow on any entity
-    _has_shadow_blur = 'shadowBlur' in code
-    if not _has_shadow_blur:
-        penalties.append(("no shadowBlur anywhere in the code — zero glow on any entity", 2.0))
-
-    # 7. No arc/bezier shapes — all entities likely plain fillRect
-    _has_arc_shape = bool(re.search(r'ctx\.arc\s*\(', code))
-    _has_bezier_shape = bool(re.search(r'ctx\.bezierCurveTo|ctx\.quadraticCurveTo', code))
-    if not _has_arc_shape and not _has_bezier_shape:
-        penalties.append(("no arc/bezier shapes detected — all entities are likely plain fillRect rectangles", 2.0))
-
-    # Track whether hard cap should apply (critical visual failures)
-    _hard_cap_visual = not _has_shadow_blur or (not _has_arc_shape and not _has_bezier_shape)
 
     # ── BONUS (effets de juice — valident que le LLM n'a pas surestimé) ────────
 

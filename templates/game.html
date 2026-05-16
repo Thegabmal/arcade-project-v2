@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -126,15 +126,15 @@
     .reeval-btn {
       display: none; align-items: center; gap: 5px;
       padding: 5px 12px;
-      background: rgba(80,140,255,0.1);
-      border: 1px solid rgba(80,140,255,0.25);
+      background: rgba(124,92,252,0.1);
+      border: 1px solid rgba(124,92,252,0.25);
       border-radius: 100px;
-      color: rgba(120,170,255,0.8);
+      color: rgba(185,168,255,0.85);
       font-size: 11px; font-weight: 500;
       cursor: pointer;
       transition: background 0.15s;
     }
-    .reeval-btn:hover { background: rgba(80,140,255,0.2); color: #fff; }
+    .reeval-btn:hover { background: rgba(124,92,252,0.2); color: #fff; }
     .reeval-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
     .reeval-overlay {
@@ -144,7 +144,7 @@
     }
     .reeval-overlay.open { display: flex; }
     .reeval-card {
-      background: #0d0d14; border: 1px solid rgba(80,140,255,0.2);
+      background: #0d0d14; border: 1px solid rgba(124,92,252,0.25);
       border-radius: 14px; padding: 28px 32px; min-width: 300px;
       text-align: center; font-family: 'Inter', sans-serif;
     }
@@ -155,7 +155,7 @@
       border-radius: 2px; overflow: hidden; margin-bottom: 16px;
     }
     .reeval-progress-bar {
-      height: 100%; background: rgba(80,140,255,0.7);
+      height: 100%; background: rgba(124,92,252,0.7);
       border-radius: 2px;
       animation: reeval-slide 1.4s ease-in-out infinite;
     }
@@ -226,21 +226,21 @@
     </a>
     <span class="game-title-bar" id="game-title-bar">Loading...</span>
     <button class="log-btn" id="log-btn" onclick="openLogModal()" style="display:none">Log</button>
-    <button class="reeval-btn" id="reeval-btn" onclick="startReevaluation()" style="display:flex">Réévaluer</button>
+    <button class="reeval-btn" id="reeval-btn" onclick="startReevaluation()" style="display:flex">Re-evaluate</button>
   </div>
 
   <!-- Overlay réévaluation -->
   <div id="reeval-overlay" class="reeval-overlay">
     <div class="reeval-card">
-      <h3>Réévaluation en cours</h3>
-      <p>Les agents analysent le code actuel du jeu…</p>
+      <h3>Re-evaluating...</h3>
+      <p>Agents are analyzing the current game code…</p>
       <div class="reeval-progress"><div class="reeval-progress-bar"></div></div>
-      <div class="reeval-status" id="reeval-status">Initialisation…</div>
+      <div class="reeval-status" id="reeval-status">Initializing…</div>
       <div class="reeval-result" id="reeval-result">
         <div class="reeval-score" id="reeval-score-val">—</div>
-        <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:4px">Score global / 10</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:4px">Global score / 10</div>
       </div>
-      <button class="reeval-close" id="reeval-close" onclick="closeReevalOverlay()" style="display:none">Fermer & actualiser</button>
+      <button class="reeval-close" id="reeval-close" onclick="closeReevalOverlay()" style="display:none">Close & refresh</button>
     </div>
   </div>
 
@@ -330,7 +330,7 @@
       document.getElementById('reeval-overlay').classList.add('open');
       document.getElementById('reeval-result').style.display = 'none';
       document.getElementById('reeval-close').style.display = 'none';
-      document.getElementById('reeval-status').textContent = 'Lancement des agents…';
+      document.getElementById('reeval-status').textContent = 'Launching agents…';
 
       try {
         const res = await fetch('/api/reevaluate', {
@@ -355,13 +355,13 @@
             scoreEl.textContent = `${score.toFixed(1)}/10`;
             scoreEl.style.color = score >= 8 ? 'rgba(100,220,100,0.9)' : score >= 6 ? 'rgba(220,180,50,0.9)' : 'rgba(220,80,80,0.9)';
             document.getElementById('reeval-result').style.display = 'block';
-            document.getElementById('reeval-status').textContent = 'Terminé — metadata mis à jour.';
+            document.getElementById('reeval-status').textContent = 'Done — metadata updated.';
             document.getElementById('reeval-close').style.display = 'inline-block';
             document.querySelector('.reeval-progress-bar').style.animation = 'none';
             document.querySelector('.reeval-progress-bar').style.width = '100%';
           } else if (event.type === 'error') {
             evtSource.close();
-            document.getElementById('reeval-status').textContent = `Erreur : ${event.data.message}`;
+            document.getElementById('reeval-status').textContent = `Error: ${event.data.message}`;
             document.getElementById('reeval-close').style.display = 'inline-block';
           } else if (event.type === 'end') {
             evtSource.close();
@@ -369,11 +369,11 @@
         };
         evtSource.onerror = () => {
           evtSource.close();
-          document.getElementById('reeval-status').textContent = 'Connexion perdue.';
+          document.getElementById('reeval-status').textContent = 'Connection lost.';
           document.getElementById('reeval-close').style.display = 'inline-block';
         };
       } catch(err) {
-        document.getElementById('reeval-status').textContent = `Erreur : ${err.message}`;
+        document.getElementById('reeval-status').textContent = `Error: ${err.message}`;
         document.getElementById('reeval-close').style.display = 'inline-block';
         btn.disabled = false;
       }
@@ -392,7 +392,7 @@
       document.getElementById('log-modal-overlay').classList.add('open');
       try {
         const res = await fetch(`/api/game-log/${filename}`);
-        if (!res.ok) { document.getElementById('log-modal-body').textContent = 'Log non disponible.'; return; }
+        if (!res.ok) { document.getElementById('log-modal-body').textContent = 'No log available.'; return; }
         const text = await res.text();
         const body = document.getElementById('log-modal-body');
         const lines = text.split('\n').map(line => {
@@ -405,7 +405,7 @@
         });
         body.innerHTML = lines.join('\n');
       } catch(e) {
-        document.getElementById('log-modal-body').textContent = `Erreur : ${e.message}`;
+        document.getElementById('log-modal-body').textContent = `Error: ${e.message}`;
       }
     }
 

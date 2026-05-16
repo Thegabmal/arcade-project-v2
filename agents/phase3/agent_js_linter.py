@@ -292,18 +292,22 @@ def _quick_checks(js: str, extra_declared: set | None = None) -> list[str]:
             )
             break  # Signaler une seule fois
 
-    # I8 : THREE.js — classes hallucinées absentes de Three.js r128
+    # I8 : THREE.js — classes hallucinées absentes de Three.js r160
     _THREE_FAKE = [
         'THREE.FogExp3D', 'THREE.LineCurve3D', 'THREE.CatmullRomCurve2',
         'THREE.PlaneHelper3D', 'THREE.ObjectHelper', 'THREE.GridHelper3D',
         'THREE.AxisHelper', 'THREE.BoundingBoxHelper',
         'THREE.MeshFaceMaterial', 'THREE.MultiMaterial',
         'THREE.BoxHelper2', 'THREE.TransformGizmo',
+        'THREE.Geometry',   # removed in r133, use BufferGeometry
+        'THREE.Capsule',    # examples/jsm only — use THREE.Sphere or THREE.Box3 for collisions
+        'THREE.Octree',     # examples/jsm only — use THREE.Box3 for spatial queries
+        'THREE.OctreeHelper',  # examples/jsm only
     ]
     for _fake in _THREE_FAKE:
         if _fake in js:
             issues.append(
-                f"THREE.js halluciné : '{_fake}' n'existe pas dans Three.js r128 — "
+                f"THREE.js halluciné : '{_fake}' n'existe pas dans Three.js r160 — "
                 f"supprimer ou remplacer par l'API correcte."
             )
             break  # Signaler une seule fois

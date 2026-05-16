@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GLADIATOR PRIME — Arena Fighter 3D</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+  #c { display: block; width: 100vw; height: 100vh; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; font-family: system-ui, sans-serif; }
+  #player-bar { position: absolute; bottom: 60px; left: 24px; }
+  #player-label { font-size: 12px; color: #aaa; letter-spacing: 2px; margin-bottom: 4px; }
+  #player-hp-bg { width: 200px; height: 16px; background: #222; border-radius: 8px; overflow: hidden; }
+  #player-hp-fill { height: 100%; background: linear-gradient(90deg,#c0392b,#e74c3c); border-radius: 8px; transition: width 0.2s; }
+  #player-stamina-bg { width: 200px; height: 8px; background: #222; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+  #player-stamina-fill { height: 100%; background: linear-gradient(90deg,#f39c12,#ffd700); border-radius: 4px; }
+  #enemy-bar { position: absolute; bottom: 60px; right: 24px; text-align: right; }
+  #enemy-label { font-size: 12px; color: #aaa; letter-spacing: 2px; margin-bottom: 4px; }
+  #enemy-hp-bg { width: 200px; height: 16px; background: #222; border-radius: 8px; overflow: hidden; }
+  #enemy-hp-fill { height: 100%; background: linear-gradient(90deg,#8e44ad,#9b59b6); border-radius: 8px; transition: width 0.2s; }
+  #score-disp {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    font-size: 24px; font-weight: 700; color: #ffd700; letter-spacing: 3px; text-shadow: 0 0 12px #ffd70055;
+  }
+  #round-disp {
+    position: absolute; top: 54px; left: 50%; transform: translateX(-50%);
+    font-size: 14px; color: #888; letter-spacing: 4px; text-transform: uppercase;
+  }
+  #combo-disp {
+    position: absolute; top: 90px; left: 50%; transform: translateX(-50%);
+    font-size: 20px; font-weight: 700; color: #ff8800; letter-spacing: 2px;
+    opacity: 0; transition: opacity 0.3s; text-shadow: 0 0 10px #ff880088;
+  }
+  #coins-disp { position: absolute; top: 20px; right: 24px; font-size: 15px; color: #ffd700; }
+  #hit-flash { position: absolute; inset: 0; background: rgba(192,57,43,0); pointer-events: none; transition: background 0.07s; }
+  #round-banner {
+    position: absolute; top: 38%; left: 50%; transform: translateX(-50%);
+    font-size: 38px; font-weight: 900; color: #fff;
+    opacity: 0; transition: opacity 0.4s; letter-spacing: 6px;
+    text-shadow: 0 0 20px #fff; pointer-events: none;
+  }
+  #controls-hint { position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
+    font-size: 11px; color: #555; letter-spacing: 2px; text-align: center; }
+
+  #overlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.9); color: #fff;
+  }
+  #overlay h1 {
+    font-size: 50px; font-weight: 900; letter-spacing: 7px;
+    color: #ffd700; text-shadow: 0 0 30px #ffd70088;
+    font-family: 'Impact', system-ui; margin-bottom: 6px;
+  }
+  #overlay .sub { font-size: 13px; color: #555; letter-spacing: 4px; margin-bottom: 40px; }
+  .menu-btn {
+    padding: 13px 36px; margin: 5px;
+    font-size: 14px; font-weight: 700; letter-spacing: 2px;
+    border: 2px solid #ffd700; background: transparent; color: #ffd700;
+    cursor: pointer; text-transform: uppercase; transition: all 0.15s; font-family: system-ui;
+  }
+  .menu-btn:hover { background: #ffd700; color: #000; }
+  #gameover-score { font-size: 28px; color: #ffd700; margin: 16px 0; }
+
+  #shop-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.93);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; font-family: system-ui;
+  }
+  #shop-overlay h2 { font-size: 30px; color: #ffd700; letter-spacing: 4px; margin-bottom: 6px; }
+  #shop-coins-disp { font-size: 15px; color: #ffd700; margin-bottom: 24px; }
+  #shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 540px; width: 100%; }
+  .shop-card { border: 2px solid #333; padding: 16px; cursor: pointer; transition: all 0.15s; background: #080600; }
+  .shop-card:hover { border-color: #ffd700; background: #140e00; }
+  .shop-card h3 { font-size: 13px; color: #ffd700; margin-bottom: 6px; }
+  .shop-card p  { font-size: 11px; color: #666; margin-bottom: 10px; line-height: 1.4; }
+  .shop-card .cost { font-size: 12px; color: #ffd700; font-weight: 700; }
+  .shop-card .lvl  { font-size: 11px; color: #444; float: right; }
+  #shop-skip { margin-top: 18px; font-size: 13px; color: #444; cursor: pointer; letter-spacing: 2px; }
+  #shop-skip:hover { color: #aaa; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" style="display:none;">
+  <div id="hit-flash"></div>
+  <div id="score-disp">0</div>
+  <div id="round-disp">ROUND 1</div>
+  <div id="combo-disp">COMBO x1</div>
+  <div id="coins-disp">🪙 0</div>
+  <div id="player-bar">
+    <div id="player-label">YOU</div>
+    <div id="player-hp-bg"><div id="player-hp-fill" style="width:100%"></div></div>
+    <div id="player-stamina-bg"><div id="player-stamina-fill" style="width:100%"></div></div>
+  </div>
+  <div id="enemy-bar">
+    <div id="enemy-label">ENEMY</div>
+    <div id="enemy-hp-bg"><div id="enemy-hp-fill" style="width:100%"></div></div>
+  </div>
+  <div id="round-banner">FIGHT!</div>
+  <div id="controls-hint">WASD — MOVE &nbsp;|&nbsp; LMB — ATTACK &nbsp;|&nbsp; RMB — BLOCK &nbsp;|&nbsp; SPACE — DODGE &nbsp;|&nbsp; F — HEAVY</div>
+</div>
+
+<div id="overlay">
+  <h1>GLADIATOR PRIME</h1>
+  <div class="sub">ARENA FIGHTER 3D</div>
+  <button class="menu-btn" id="btn-play">ENTER ARENA</button>
+</div>
+
+<div id="shop-overlay">
+  <h2>ARENA SHOP</h2>
+  <div id="shop-coins-disp">🪙 0</div>
+  <div id="shop-grid"></div>
+  <div id="shop-skip">[ SKIP → ]</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js"></script>
+<script>
+// ─── META ─────────────────────────────────────────────────────────────────────
+const META_KEY='meta_gladiator_prime';
+const UPGRADES=[
+  {id:'blade',   name:'Sharpened Blade', desc:'+20% attack damage per level',    cost:35,maxLv:3,effect:'atk'},
+  {id:'shield2', name:'Shield Mastery',  desc:'+30% block effectiveness',        cost:40,maxLv:3,effect:'block'},
+  {id:'health',  name:'Iron Will',       desc:'+30 max HP per level',            cost:45,maxLv:3,effect:'hp'},
+  {id:'dodge',   name:'Agility',         desc:'-0.3s dodge cooldown per level',  cost:30,maxLv:3,effect:'dodge'},
+];
+let meta={coins:0,upgrades:{}};
+function loadMeta(){try{const s=localStorage.getItem(META_KEY);if(s)meta=JSON.parse(s);}catch(e){}
+  UPGRADES.forEach(u=>{if(!meta.upgrades[u.id])meta.upgrades[u.id]=0;});}
+function saveMeta(){try{localStorage.setItem(META_KEY,JSON.stringify(meta));}catch(e){}}
+function buyUpgrade(id){
+  const u=UPGRADES.find(u=>u.id===id);if(!u)return;
+  const lv=meta.upgrades[id];if(lv>=u.maxLv)return;
+  const cost=u.cost*(lv+1);if(meta.coins<cost)return;
+  meta.coins-=cost;meta.upgrades[id]++;saveMeta();
+}
+function applyUpgrades(){
+  const lv=id=>meta.upgrades[id]||0;
+  fighter.atkMult=1+lv('blade')*0.2;
+  fighter.blockMult=1+lv('shield2')*0.3;
+  fighter.maxHp=120+lv('health')*30;
+  fighter.dodgeCooldownMax=1.2-lv('dodge')*0.3;
+}
+loadMeta();
+
+// ─── THREE.JS ─────────────────────────────────────────────────────────────────
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+renderer.setSize(window.innerWidth,window.innerHeight);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x1a0d0d);
+scene.fog=new THREE.FogExp2(0x1a0d0d,0.04);
+
+const camera=new THREE.PerspectiveCamera(65,window.innerWidth/window.innerHeight,0.1,100);
+const clock=new THREE.Clock();
+
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+// ─── LIGHTING ─────────────────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x331111,0.8));
+const sun=new THREE.DirectionalLight(0xff9944,1.2); sun.position.set(10,20,10); sun.castShadow=true; scene.add(sun);
+[0,Math.PI/2,Math.PI,Math.PI*3/2].forEach(a=>{
+  const pl=new THREE.PointLight(0xff4400,2,18);
+  pl.position.set(Math.cos(a)*7,4,Math.sin(a)*7); scene.add(pl);
+});
+
+// ─── ARENA ────────────────────────────────────────────────────────────────────
+function buildArena(){
+  const floorMat=new THREE.MeshLambertMaterial({color:0x2a1a08});
+  const wallMat=new THREE.MeshLambertMaterial({color:0x3a2010});
+  const colMat=new THREE.MeshLambertMaterial({color:0x4a3020});
+
+  // Sand floor
+  const floor=new THREE.Mesh(new THREE.CylinderGeometry(12,12,0.3,24),floorMat);
+  floor.position.y=-0.15; floor.receiveShadow=true; scene.add(floor);
+
+  // Arena wall
+  const wall=new THREE.Mesh(new THREE.CylinderGeometry(12.5,12.5,3,24,1,true),wallMat);
+  wall.position.y=1.2; scene.add(wall);
+
+  // Pillars
+  for(let i=0;i<8;i++){
+    const a=i/8*Math.PI*2;
+    const col=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.5,4,8),colMat);
+    col.position.set(Math.cos(a)*11,2,Math.sin(a)*11); col.castShadow=true; scene.add(col);
+    // Torch
+    const torch=new THREE.PointLight(0xff6600,1.5,8);
+    torch.position.set(Math.cos(a)*10.5,4.5,Math.sin(a)*10.5); scene.add(torch);
+  }
+
+  // Obstacles
+  [0,Math.PI/2,Math.PI,Math.PI*3/2].forEach(a=>{
+    const rock=new THREE.Mesh(new THREE.BoxGeometry(1.5,1.2,1.5),colMat);
+    rock.position.set(Math.cos(a)*5,0.6,Math.sin(a)*5); rock.rotation.y=a;
+    rock.castShadow=true; scene.add(rock);
+  });
+
+  // Crowd (simple boxes in stadium)
+  for(let i=0;i<60;i++){
+    const a=Math.random()*Math.PI*2, r=11.5+Math.random()*2;
+    const crowd=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.8,0.2),
+      new THREE.MeshLambertMaterial({color:[0xaa2222,0x2222aa,0x22aa22][Math.floor(Math.random()*3)]}));
+    crowd.position.set(Math.cos(a)*r,1.8+Math.random()*0.6,Math.sin(a)*r); scene.add(crowd);
+  }
+}
+
+// ─── FIGHTER ENTITIES ─────────────────────────────────────────────────────────
+const fighter={
+  pos:new THREE.Vector3(-3,0,0),
+  mesh:null,
+  hp:120,maxHp:120,
+  stamina:100,maxStamina:100,
+  atkMult:1,blockMult:1,dodgeCooldownMax:1.2,
+  attackCd:0, dodgeCd:0, blocking:false,
+  comboCount:0, comboTimer:0,
+  score:0, round:1,
+  dead:false,
+};
+
+const enemy={
+  pos:new THREE.Vector3(3,0,0),
+  mesh:null,
+  hp:100,maxHp:100,
+  attackCd:0, blockTimer:0,
+  dead:false,
+};
+
+function buildFighterMesh(color){
+  const grp=new THREE.Group();
+  const mat=new THREE.MeshLambertMaterial({color});
+  const matDark=new THREE.MeshLambertMaterial({color:0x333333});
+  // Legs
+  const legL=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.7,0.3),matDark);
+  legL.position.set(-0.2,0.35,-0.05); grp.add(legL);
+  const legR=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.7,0.3),matDark);
+  legR.position.set(0.2,0.35,-0.05); grp.add(legR);
+  // Torso
+  const torso=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.8,0.5),mat);
+  torso.position.y=1.1; grp.add(torso);
+  // Head
+  const head=new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55),mat);
+  head.position.y=1.75; grp.add(head);
+  // Weapon (sword)
+  const sword=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.9,0.08),new THREE.MeshLambertMaterial({color:0xaaaacc}));
+  sword.position.set(0.55,1.2,0); grp.add(sword);
+  // Shield
+  const shield=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.7,0.5),new THREE.MeshLambertMaterial({color:0x885522}));
+  shield.position.set(-0.55,1.1,0); grp.add(shield);
+  scene.add(grp);
+  return grp;
+}
+
+fighter.mesh=buildFighterMesh(0x4488cc);
+enemy.mesh=buildFighterMesh(0xaa2244);
+
+// ─── INPUT ────────────────────────────────────────────────────────────────────
+const keys={};
+window.addEventListener('keydown',e=>keys[e.code]=true);
+window.addEventListener('keyup',  e=>keys[e.code]=false);
+let lmb=false,rmb=false;
+window.addEventListener('mousedown',e=>{ if(e.button===0)lmb=true; if(e.button===2)rmb=true; });
+window.addEventListener('mouseup',  e=>{ if(e.button===0)lmb=false; if(e.button===2)rmb=false; });
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+
+// ─── CAMERA (orbiting TPS) ────────────────────────────────────────────────────
+let camYaw=0;
+window.addEventListener('mousemove',e=>{
+  if(gameState!=='playing') return;
+  camYaw-=e.movementX*0.003;
+});
+
+// ─── COMBAT ───────────────────────────────────────────────────────────────────
+let comboTimer=0,comboCount=0;
+let roundBannerTimer=0;
+
+function doPlayerAttack(heavy=false){
+  if(fighter.attackCd>0) return;
+  const distToEnemy=fighter.pos.distanceTo(enemy.pos);
+  if(distToEnemy>2.8) return;
+  fighter.attackCd=heavy?0.9:0.5;
+  const baseDmg=heavy?20:8;
+  const dmg=Math.round(baseDmg*fighter.atkMult);
+  const blocked=enemy.blockTimer>0;
+  const actualDmg=blocked?Math.round(dmg*0.2):dmg;
+  enemy.hp=Math.max(0,enemy.hp-actualDmg);
+  comboCount++; comboTimer=1.5;
+  if(!blocked){ fighter.score+=actualDmg*comboCount; meta.coins+=1; saveMeta(); }
+  if(enemy.hp<=0){ enemy.dead=true; winRound(); }
+}
+
+function doPlayerDodge(){
+  if(fighter.dodgeCd>0||fighter.stamina<20) return;
+  fighter.dodgeCd=fighter.dodgeCooldownMax;
+  fighter.stamina-=20;
+  // Dodge backward
+  const dodge=new THREE.Vector3(-Math.sin(camYaw),0,-Math.cos(camYaw)).multiplyScalar(-3);
+  fighter.pos.add(dodge);
+  clampToArena(fighter.pos);
+}
+
+function clampToArena(pos){
+  const r=pos.length();
+  if(r>10){ pos.multiplyScalar(10/r); }
+}
+
+function enemyAI(dt){
+  if(enemy.dead) return;
+  const toFighter=new THREE.Vector3().subVectors(fighter.pos,enemy.pos);
+  const dist=toFighter.length();
+
+  // Move toward player
+  if(dist>1.8){
+    toFighter.normalize().multiplyScalar(2.2*dt);
+    enemy.pos.add(toFighter);
+    clampToArena(enemy.pos);
+  }
+
+  // Occasionally block
+  enemy.blockTimer=Math.max(0,enemy.blockTimer-dt);
+  if(Math.random()<0.008) enemy.blockTimer=0.8;
+
+  // Attack player
+  enemy.attackCd=Math.max(0,enemy.attackCd-dt);
+  if(dist<2.4&&enemy.attackCd<=0){
+    enemy.attackCd=1.8+Math.random()*0.6;
+    const dmg=8+Math.floor(fighter.round*1.5);
+    const blocked=fighter.blocking;
+    const actual=blocked?Math.round(dmg*(1-0.7*fighter.blockMult)):dmg;
+    fighter.hp=Math.max(0,fighter.hp-actual);
+    flashHit();
+    if(fighter.hp<=0){ fighter.hp=0; triggerGameOver(); }
+  }
+
+  // Face player
+  enemy.mesh.lookAt(fighter.pos.x,enemy.pos.y,fighter.pos.z);
+}
+
+function winRound(){
+  const coins=10*fighter.round;
+  meta.coins+=coins; saveMeta();
+  fighter.score+=200*fighter.round;
+  showBanner(`ROUND ${fighter.round} — WIN!`);
+  setTimeout(()=>nextRound(),2500);
+}
+
+function nextRound(){
+  fighter.round++;
+  const scale=1+fighter.round*0.12;
+  enemy.hp=Math.floor(100*scale); enemy.maxHp=enemy.hp; enemy.dead=false;
+  fighter.hp=Math.min(fighter.maxHp,fighter.hp+30);
+  fighter.pos.set(-3,0,0); enemy.pos.set(3,0,0);
+  updateHUD();
+  setTimeout(()=>showBanner('FIGHT!'),500);
+}
+
+function showBanner(txt){
+  const el=document.getElementById('round-banner');
+  el.textContent=txt; el.style.opacity='1';
+  roundBannerTimer=1.8;
+}
+
+// ─── HUD ──────────────────────────────────────────────────────────────────────
+function flashHit(){
+  const el=document.getElementById('hit-flash');
+  el.style.background='rgba(192,57,43,0.4)';
+  setTimeout(()=>el.style.background='rgba(192,57,43,0)',100);
+}
+function updateHUD(){
+  document.getElementById('score-disp').textContent=fighter.score.toLocaleString();
+  document.getElementById('round-disp').textContent=`ROUND ${fighter.round}`;
+  document.getElementById('coins-disp').textContent=`🪙 ${meta.coins}`;
+  document.getElementById('player-hp-fill').style.width=(fighter.hp/fighter.maxHp*100)+'%';
+  document.getElementById('player-stamina-fill').style.width=(fighter.stamina/fighter.maxStamina*100)+'%';
+  document.getElementById('enemy-hp-fill').style.width=(enemy.hp/enemy.maxHp*100)+'%';
+  const comboEl=document.getElementById('combo-disp');
+  if(comboCount>1){ comboEl.textContent=`COMBO x${comboCount}`; comboEl.style.opacity='1'; }
+  else comboEl.style.opacity='0';
+}
+
+// ─── GAME STATE ───────────────────────────────────────────────────────────────
+let gameState='menu';
+
+function startGame(){
+  applyUpgrades();
+  fighter.hp=fighter.maxHp; fighter.stamina=fighter.maxStamina;
+  fighter.score=0; fighter.round=1; fighter.dead=false;
+  fighter.attackCd=0; fighter.dodgeCd=0;
+  enemy.hp=100; enemy.maxHp=100; enemy.dead=false;
+  enemy.attackCd=0; enemy.blockTimer=0;
+  fighter.pos.set(-3,0,0); enemy.pos.set(3,0,0);
+  comboCount=0; comboTimer=0;
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('hud').style.display='block';
+  gameState='playing';
+  updateHUD();
+  setTimeout(()=>showBanner('FIGHT!'),600);
+}
+
+function triggerGameOver(){
+  fighter.dead=true; gameState='gameover';
+  const coins=Math.floor(fighter.score/15);
+  meta.coins+=coins; saveMeta();
+  document.getElementById('hud').style.display='none';
+  const ov=document.getElementById('overlay');
+  ov.innerHTML=`<h1>GLADIATOR PRIME</h1><div class="sub">DEFEATED</div>
+    <div id="gameover-score">${fighter.score.toLocaleString()}</div>
+    <div style="font-size:13px;color:#555;margin-bottom:22px;">ROUND ${fighter.round} — +${coins} 🪙</div>
+    <button class="menu-btn" id="btn-shop">ARENA SHOP</button>
+    <button class="menu-btn" id="btn-retry">FIGHT AGAIN</button>`;
+  ov.style.display='flex';
+  document.getElementById('btn-shop').onclick=()=>{ov.style.display='none';openShop();};
+  document.getElementById('btn-retry').onclick=startGame;
+}
+
+function openShop(){ gameState='shop'; renderShop(); document.getElementById('shop-overlay').style.display='flex'; }
+function closeShop(){ document.getElementById('shop-overlay').style.display='none'; startGame(); }
+function renderShop(){
+  document.getElementById('shop-coins-disp').textContent=`🪙 ${meta.coins}`;
+  const grid=document.getElementById('shop-grid'); grid.innerHTML='';
+  UPGRADES.forEach(u=>{
+    const lv=meta.upgrades[u.id]||0,cost=u.cost*(lv+1),maxed=lv>=u.maxLv;
+    const card=document.createElement('div'); card.className='shop-card';
+    card.innerHTML=`<h3>${u.name}<span class="lvl">LV${lv}/${u.maxLv}</span></h3><p>${u.desc}</p><span class="cost">${maxed?'MAXED':'🪙 '+cost}</span>`;
+    if(!maxed&&meta.coins>=cost) card.onclick=()=>{buyUpgrade(u.id);renderShop();};
+    else card.style.opacity=maxed?'0.4':'0.6';
+    grid.appendChild(card);
+  });
+  document.getElementById('shop-skip').onclick=closeShop;
+}
+
+// ─── UPDATE ───────────────────────────────────────────────────────────────────
+function update(dt){
+  if(gameState!=='playing') return;
+  if(fighter.dead||enemy.dead) return;
+
+  // Input
+  fighter.attackCd=Math.max(0,fighter.attackCd-dt);
+  fighter.dodgeCd=Math.max(0,fighter.dodgeCd-dt);
+  fighter.blocking=rmb;
+
+  if(lmb) doPlayerAttack(false);
+  if(keys['KeyF']) doPlayerAttack(true);
+  if(keys['Space']){ doPlayerDodge(); keys['Space']=false; }
+
+  // Stamina regen
+  if(!keys['Space']&&!lmb) fighter.stamina=Math.min(fighter.maxStamina,fighter.stamina+20*dt);
+
+  // Movement
+  const speed=4.5;
+  const fwd=new THREE.Vector3(-Math.sin(camYaw),0,-Math.cos(camYaw));
+  const rgt=new THREE.Vector3(Math.cos(camYaw),0,-Math.sin(camYaw));
+  const move=new THREE.Vector3();
+  if(keys['KeyW']||keys['ArrowUp'])   move.add(fwd);
+  if(keys['KeyS']||keys['ArrowDown']) move.sub(fwd);
+  if(keys['KeyA']||keys['ArrowLeft']) move.sub(rgt);
+  if(keys['KeyD']||keys['ArrowRight'])move.add(rgt);
+  if(move.lengthSq()>0){
+    move.normalize().multiplyScalar(speed*dt);
+    fighter.pos.add(move);
+    clampToArena(fighter.pos);
+  }
+
+  // Face enemy
+  fighter.mesh.lookAt(enemy.pos.x,fighter.pos.y,enemy.pos.z);
+
+  // Sync meshes
+  fighter.mesh.position.set(fighter.pos.x,0,fighter.pos.z);
+  enemy.mesh.position.set(enemy.pos.x,0,enemy.pos.z);
+
+  // Enemy AI
+  enemyAI(dt);
+
+  // Combo timer
+  if(comboTimer>0){ comboTimer-=dt; if(comboTimer<=0){ comboCount=0; } }
+
+  // Camera — orbiting around midpoint
+  const mid=new THREE.Vector3().addVectors(fighter.pos,enemy.pos).multiplyScalar(0.5);
+  const camDist=9, camH=5;
+  const camPos=new THREE.Vector3(
+    mid.x+Math.sin(camYaw)*camDist, mid.y+camH, mid.z+Math.cos(camYaw)*camDist);
+  camera.position.lerp(camPos,0.1);
+  camera.lookAt(mid.x,mid.y+0.5,mid.z);
+
+  // Banner timer
+  if(roundBannerTimer>0){ roundBannerTimer-=dt;
+    if(roundBannerTimer<=0) document.getElementById('round-banner').style.opacity='0'; }
+
+  updateHUD();
+}
+
+buildArena();
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  update(dt);
+  renderer.render(scene,camera);
+}
+camera.position.set(0,8,12);
+animate();
+document.getElementById('btn-play').onclick=startGame;
+</script>
+</body>
+</html>

@@ -40,15 +40,20 @@ _BROWSER_AND_TEMPLATE_GLOBALS = frozenset({
 
 
 def extract_js_from_html(html: str) -> str:
-    """Extrait et concatène tous les blocs <script> du HTML (hors type module/json)."""
-    matches = re.findall(r'<script(?:\s[^>]*)?>(.+?)</script>', html, re.DOTALL | re.IGNORECASE)
+    """Extract and concatenate all inline <script> blocks (skips external src= scripts)."""
+    matches = []
+    for m in re.finditer(r'(<script(?:\s[^>]*)?>)(.*?)(</script>)', html, re.DOTALL | re.IGNORECASE):
+        open_tag = m.group(1)
+        content = m.group(2)
+        # Skip external/CDN scripts — browsers ignore inline content when src= is present
+        if re.search(r'\bsrc\s*=', open_tag, re.IGNORECASE):
+            continue
+        matches.append(content)
     if not matches:
         return ""
-    # Filtrer les blocs trop courts (inline one-liners, tracking snippets)
     blocks = [m for m in matches if len(m.strip()) > 50]
     if not blocks:
         return max(matches, key=len)
-    # Concaténer tous les blocs pour que check_syntax détecte les erreurs dans chacun
     return "\n;\n".join(blocks)
 
 
@@ -267,6 +272,40 @@ def fix_const_syntax_errors(html: str) -> tuple[str, bool, list[str]]:
             os.unlink(tmp)
 
 
+def _remove_single_var_from_line(line: str, ident: str) -> str:
+    """
+    Remove one variable declarator from a multi-declaration JS line, keeping the rest.
+    Handles semicolon-separated statements and comma-separated declarators.
+    Example:
+      'const FIXED_DT=1/60,MAX_DT=0.1;let lastTime=0,accumulator=0;'
+      remove 'lastTime' → 'const FIXED_DT=1/60,MAX_DT=0.1;let accumulator=0;'
+    Returns empty string if the declarator was the only one on the line.
+    """
+    import re as _re
+    statements = line.split(';')
+    new_statements = []
+    for stmt in statements:
+        s = stmt.strip()
+        if not s:
+            new_statements.append('')
+            continue
+        kw_m = _re.match(r'^(\s*)(let|const|var)\s+(.*)', s, _re.DOTALL)
+        if not kw_m:
+            new_statements.append(stmt)
+            continue
+        indent, kw, rest = kw_m.group(1), kw_m.group(2), kw_m.group(3)
+        declarators = [d.strip() for d in rest.split(',') if d.strip()]
+        kept = [d for d in declarators
+                if not _re.match(_re.escape(ident) + r'\s*=', d) and d != ident]
+        if not kept:
+            new_statements.append('')
+        else:
+            new_statements.append(indent + kw + ' ' + ', '.join(kept))
+    result = ';'.join(new_statements)
+    result = _re.sub(r';{2,}', ';', result).strip()
+    return result
+
+
 def fix_identifier_already_declared(html: str) -> tuple[str, bool, list[str]]:
     """
     Correction automatique de 'SyntaxError: Identifier X has already been declared'.
@@ -314,10 +353,23 @@ def fix_identifier_already_declared(html: str) -> tuple[str, bool, list[str]]:
 
             original = lines[line_num]
 
-            # Variables du template HTML — toujours supprimer (jamais convertir en var)
-            _TEMPLATE_GLOBALS = frozenset({'canvas', 'ctx', 'W', 'H', 'dt', 'lastTime', 'gameState'})
+            # Variables du template HTML — retirer seulement la variable en conflit
+            # (jamais convertir en var, jamais effacer toute la ligne si multi-déclaration)
+            _TEMPLATE_GLOBALS = frozenset({
+                'canvas', 'ctx', 'W', 'H', 'dt', 'lastTime', 'gameState',
+                # Timing ENGINE
+                'FIXED_DT', 'MAX_DT', 'accumulator',
+                # Dimensions
+                'DPR', 'GAME_W', 'GAME_H',
+                # Constantes template
+                'TILE', 'GAME_TITLE',
+            })
             if ident in _TEMPLATE_GLOBALS:
-                lines.pop(line_num)
+                new_line = _remove_single_var_from_line(lines[line_num], ident)
+                if not new_line.strip():
+                    lines.pop(line_num)
+                else:
+                    lines[line_num] = new_line
                 js = '\n'.join(lines)
                 fixes.append(f'[AUTO-FIX] Suppression redéclaration variable template : {ident} ligne {line_num + 1}')
                 continue
@@ -325,9 +377,10 @@ def fix_identifier_already_declared(html: str) -> tuple[str, bool, list[str]]:
             # Convertir const X = ... ou let X = ... en var X = ... sur cette ligne
             new_line = re.sub(r'\b(const|let)\s+' + re.escape(ident) + r'\b', f'var {ident}', original, count=1)
             if new_line == original:
-                # Déjà un var — supprimer la ligne dupliquée
+                # Déjà un var — convertir en assignation (supprimer 'var') pour préserver le RHS multi-ligne
                 if re.match(r'^\s*var\s+' + re.escape(ident) + r'\b', original):
-                    lines.pop(line_num)
+                    new_line = re.sub(r'^(\s*)var\s+', r'\1', original)
+                    lines[line_num] = new_line
                     js = '\n'.join(lines)
                     fixes.append(f'[AUTO-FIX] Suppression var dupliqué : {ident} ligne {line_num + 1}')
                 else:
@@ -816,7 +869,13 @@ def check_undefined_vars_eslint(html: str) -> list[str]:
     Option B — Détection PRÉVENTIVE des variables non déclarées via ESLint no-undef.
     Retourne la liste des noms de variables undefined (filtrés des globals connus).
     Retourne [] si eslint indisponible ou aucune erreur.
+    Three.js files are skipped — ESLint times out on them and THREE.* globals
+    produce noise that obscures real errors.
     """
+    # Fix 3D-D: skip ESLint for Three.js games (timeouts + THREE.* global noise)
+    if re.search(r'three(?:\.min)?\.js|cdn.*three|three.*cdn', html, re.IGNORECASE):
+        return []
+
     js = extract_js_from_html(html)
     if not js or len(js) < 200:
         return []
@@ -864,8 +923,41 @@ def check_undefined_vars_eslint(html: str) -> list[str]:
         coordinateur_log.warning("eslint/npx non trouvé — check no-undef ignoré")
         return []
     except subprocess.TimeoutExpired:
-        coordinateur_log.warning("eslint timeout (>30s) — check no-undef ignoré")
-        return []
+        coordinateur_log.warning("eslint timeout on full file — retrying on first 60K chars")
+        # Truncate to 60K and retry with shorter timeout
+        tmp2 = None
+        try:
+            truncated = preamble + js[:60000]
+            with tempfile.NamedTemporaryFile(
+                mode='w', suffix='.js', encoding='utf-8', delete=False
+            ) as f2:
+                f2.write(truncated)
+                tmp2 = f2.name
+            _cmd2 = f'npx --yes eslint --no-eslintrc --rule \'{{"no-undef":["error"]}}\' --env browser --format json "{tmp2}"'
+            result2 = subprocess.run(_cmd2, shell=True, capture_output=True, text=True, timeout=15)
+            if result2.returncode == 0:
+                return []
+            try:
+                data2 = _json.loads(result2.stdout or '[]')
+            except Exception:
+                return []
+            undef2 = []
+            for fr in data2:
+                for msg in fr.get('messages', []):
+                    if msg.get('ruleId') == 'no-undef':
+                        m2 = re.search(r"'(\w+)' is not defined", msg.get('message', ''))
+                        if m2 and m2.group(1) not in _BROWSER_AND_TEMPLATE_GLOBALS:
+                            undef2.append(m2.group(1))
+            return list(dict.fromkeys(undef2))
+        except subprocess.TimeoutExpired:
+            coordinateur_log.warning("eslint timeout on truncated file too — check no-undef ignoré")
+            return []
+        except Exception as e2:
+            coordinateur_log.warning(f"eslint truncated retry failed: {e2}")
+            return []
+        finally:
+            if tmp2 and os.path.exists(tmp2):
+                os.unlink(tmp2)
     except Exception as e:
         coordinateur_log.warning(f"eslint check échoué : {e}")
         return []
@@ -917,6 +1009,379 @@ def fix_undefined_runtime_vars(html: str, var_names: set) -> tuple[str, bool, li
     return new_html, True, descs
 
 
+def fix_let_dot_notation(html: str) -> tuple[str, bool, list[str]]:
+    """Fix `let/const/var X.Y = value;` — dot-notation with a declaration keyword is a SyntaxError.
+
+    LLMs sometimes generate `let GameName.property = value;` trying to use a namespace pattern.
+    JavaScript does not allow `let` with dot-notation. The fix: remove the `let/const/var` keyword.
+    """
+    fixes: list[str] = []
+
+    def fix_block(m: re.Match) -> str:
+        open_tag, content, close_tag = m.group(1), m.group(2), m.group(3)
+        if re.search(r'\bsrc\s*=', open_tag, re.IGNORECASE):
+            return m.group(0)
+        fixed, count = re.subn(
+            r'\b(let|const|var)\s+(\w+\.\w[\w.]*)\s*=',
+            r'\2 =',
+            content,
+        )
+        if count:
+            fixes.append(f"fix_let_dot_notation: {count} `let/const/var X.Y=` → `X.Y=` (SyntaxError removed)")
+        return f"{open_tag}{fixed}{close_tag}"
+
+    new_html = re.sub(
+        r'(<script(?:\s[^>]*)?>)(.*?)(</script>)',
+        fix_block,
+        html,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    return new_html, bool(fixes), fixes
+
+
+def fix_markdown_code_fences(html: str) -> tuple[str, bool, list[str]]:
+    """Remove Markdown code fence lines (```javascript, ```) from inside <script> blocks.
+
+    LLMs sometimes wrap generated code in Markdown fences. Inside a <script> tag
+    these triple-backtick lines are parsed as template literals, breaking all
+    syntax after them.
+    """
+    fixes: list[str] = []
+
+    def clean_block(m: re.Match) -> str:
+        open_tag = m.group(1)
+        content = m.group(2)
+        # Skip CDN/external scripts
+        if re.search(r'\bsrc\s*=', open_tag, re.IGNORECASE):
+            return m.group(0)
+        cleaned_lines = []
+        removed = 0
+        for line in content.split('\n'):
+            if re.match(r'^\s*```', line):
+                removed += 1
+            else:
+                cleaned_lines.append(line)
+        if removed:
+            fixes.append(f'[AUTO-FIX] {removed} Markdown code fence line(s) removed from script block')
+            return f'{open_tag}{chr(10).join(cleaned_lines)}</script>'
+        return m.group(0)
+
+    new_html = re.sub(
+        r'(<script(?:\s[^>]*)?>)(.*?)(</script>)',
+        clean_block,
+        html,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    if fixes:
+        for f in fixes:
+            coordinateur_log.info(f)
+    return new_html, bool(fixes), fixes
+
+
+def fix_cdn_script_content(html: str) -> tuple[str, bool, list[str]]:
+    """Move inline content out of <script src="..."> tags into a separate <script> block.
+
+    Browsers ignore inline content when src is present, so game code placed
+    inside CDN script tags (e.g. three.js) never executes.
+
+    For Three.js CDN tags specifically: if a clean Three.js CDN tag already exists
+    elsewhere in the HTML, the duplicate LLM-injected CDN tag is dropped entirely
+    (keeping only its content) to avoid loading an older Three.js version that would
+    overwrite the correct one.
+    """
+    fixes: list[str] = []
+
+    # Count existing clean Three.js CDN tags (src= present, no substantial inline content)
+    _clean_threejs = re.findall(
+        r'<script\b[^>]*\bsrc\s*=[^>]*three(?:\.min)?\.js[^>]*>\s*</script>',
+        html, re.IGNORECASE
+    )
+    has_clean_threejs_cdn = len(_clean_threejs) > 0
+
+    def replacer(m: re.Match) -> str:
+        open_tag: str = m.group(1)
+        content: str = m.group(2)
+        stripped = content.strip()
+        if not re.search(r'\bsrc\s*=', open_tag, re.IGNORECASE):
+            return m.group(0)
+        if len(stripped) < 50:
+            return m.group(0)
+        is_threejs = bool(re.search(r'three(?:\.min)?\.js', open_tag, re.IGNORECASE))
+        if is_threejs and has_clean_threejs_cdn:
+            # Assembler template already has the correct CDN tag — drop this duplicate
+            fixes.append(
+                f"[AUTO-FIX] {len(stripped)} chars of game code extracted; duplicate Three.js CDN tag dropped"
+            )
+            return f'<script>\n{content}\n</script>'
+        fixes.append(
+            f"[AUTO-FIX] {len(stripped)} chars of game code moved out of CDN script tag"
+        )
+        return f'{open_tag}</script>\n<script>\n{content}\n</script>'
+
+    new_html = re.sub(
+        r'(<script(?:\s[^>]*)?>)(.*?)(</script>)',
+        replacer,
+        html,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    if fixes:
+        for f in fixes:
+            coordinateur_log.info(f)
+    return new_html, bool(fixes), fixes
+
+
+def fix_stray_script_close(html: str) -> tuple[str, bool, list[str]]:
+    """
+    Removes accidental </script> occurrences inside the game <script> block.
+    Caused by LLM generating strings/comments containing '</script>', which
+    prematurely closes the HTML script tag and makes the entire JS invalid.
+    Strategy: find the last </script> (real end), find the last <script> before
+    it (real open), then escape any </script> found inside that range.
+    """
+    html_lower = html.lower()
+    # Find the real closing tag: the LAST </script> in the document
+    last_close = html_lower.rfind('</script>')
+    if last_close == -1:
+        return html, False, []
+
+    # Find the last <script> opening tag before that closing tag
+    prefix = html[:last_close]
+    open_tags = list(re.finditer(r'<script(?:\s[^>]*)?>', prefix, re.IGNORECASE))
+    if not open_tags:
+        return html, False, []
+    last_open = open_tags[-1]
+    open_end = last_open.end()  # position right after the opening <script> tag
+
+    # The "inner" is everything between the opening tag and the last </script>
+    inner = html[open_end:last_close]
+
+    # Escape any </script> found inside (these are the strays)
+    cleaned = re.sub(r'<\s*/\s*script\s*>', r'<\\/script>', inner, flags=re.IGNORECASE)
+    if cleaned == inner:
+        return html, False, []
+
+    count = inner.lower().count('</script>') + inner.lower().count('</ script>')
+    new_html = html[:open_end] + cleaned + html[last_close:]
+    desc = f"[AUTO-FIX] {count} stray </script> inside game script block — escaped to <\\/script>"
+    coordinateur_log.info(desc)
+    return new_html, True, [desc]
+
+
+def fix_unexpected_identifier(html: str) -> tuple[str, bool, list[str]]:
+    """
+    Fix 'SyntaxError: Unexpected identifier X' — caused by a missing semicolon
+    between two consecutive statements (ASI failure). Node.js reports the LINE
+    of the unexpected identifier; we insert a semicolon at the end of the
+    PREVIOUS non-blank line.
+    Retourne (html_corrigé, was_fixed, fix_descriptions).
+    """
+    js = extract_js_from_html(html)
+    if not js or len(js) < 200:
+        return html, False, []
+
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.js', encoding='utf-8', delete=False
+        ) as f:
+            f.write(js)
+            tmp = f.name
+
+        result = subprocess.run(
+            ['node', '--check', tmp],
+            capture_output=True, text=True, timeout=20
+        )
+        if result.returncode == 0:
+            return html, False, []
+
+        stderr = result.stderr or result.stdout
+        # Match "Unexpected identifier 'SOMETHING'"
+        m_err = re.search(r"Unexpected identifier '?(\w+)'?", stderr)
+        if not m_err:
+            return html, False, []
+
+        identifier = m_err.group(1)
+
+        # Extract line number from Node output
+        m_line = re.search(r'\.js:(\d+)', stderr)
+        if not m_line:
+            return html, False, []
+
+        line_num = int(m_line.group(1)) - 1  # 0-indexed
+        lines = js.split('\n')
+        if line_num <= 0 or line_num >= len(lines):
+            return html, False, []
+
+        # Find the previous non-blank line
+        prev_idx = line_num - 1
+        while prev_idx >= 0 and not lines[prev_idx].strip():
+            prev_idx -= 1
+        if prev_idx < 0:
+            return html, False, []
+
+        prev_line = lines[prev_idx]
+        # Only add semicolon if the line doesn't already end with one
+        stripped = prev_line.rstrip()
+        if stripped.endswith((';', '{', '}', ',')):
+            return html, False, []
+
+        lines[prev_idx] = stripped + ';'
+        new_js = '\n'.join(lines)
+
+        # Verify the fix didn't break things further
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.js', encoding='utf-8', delete=False
+        ) as f2:
+            f2.write(new_js)
+            tmp2 = f2.name
+        try:
+            r2 = subprocess.run(['node', '--check', tmp2],
+                                capture_output=True, text=True, timeout=20)
+            # Only accept if errors reduced or gone
+            if r2.returncode != 0:
+                stderr2 = r2.stderr or r2.stdout
+                # If same error still present, not worth applying
+                if m_err.group(0) in stderr2:
+                    return html, False, []
+        finally:
+            if os.path.exists(tmp2):
+                os.unlink(tmp2)
+
+        # Replace JS in HTML
+        if js in html:
+            new_html = html.replace(js, new_js, 1)
+        else:
+            return html, False, []
+
+        fix_desc = f"[AUTO-FIX] Unexpected identifier '{identifier}' — semicolon inserted line {prev_idx + 1}"
+        coordinateur_log.info(fix_desc)
+        return new_html, True, [fix_desc]
+
+    except Exception:
+        return html, False, []
+    finally:
+        if tmp and os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+_THREEJS_POLYFILL_MARKER = 'THREE.Capsule=function'
+
+_THREEJS_POLYFILL_BLOCK = """\
+<script>
+// Polyfill: classes from Three.js examples/jsm — not included in the main bundle
+if(typeof THREE!=='undefined'){
+  if(!THREE.Capsule){THREE.Capsule=function(s,e,r){this.start=s?s.clone():new THREE.Vector3(0,0,0);this.end=e?e.clone():new THREE.Vector3(0,1,0);this.radius=r!==undefined?r:0.5;this.getCenter=function(t){return t.addVectors(this.start,this.end).multiplyScalar(0.5);};this.translate=function(v){this.start.add(v);this.end.add(v);return this;};this.copy=function(c){this.start.copy(c.start);this.end.copy(c.end);this.radius=c.radius;return this;};this.set=function(a,b,r){this.start.copy(a);this.end.copy(b);this.radius=r;return this;};this.clone=function(){return new THREE.Capsule(this.start,this.end,this.radius);};};};
+  if(!THREE.Octree){THREE.Octree=function(){this.fromGraphNode=function(){};this.capsuleIntersect=function(){return false;};this.rayIntersect=function(){return false;};};};
+  if(!THREE.OctreeHelper){THREE.OctreeHelper=function(){THREE.Object3D.call(this);};THREE.OctreeHelper.prototype=Object.create(THREE.Object3D.prototype);THREE.OctreeHelper.prototype.update=function(){};};
+}
+</script>"""
+
+
+def inject_threejs_polyfills(html: str) -> tuple[str, bool, list[str]]:
+    """
+    If the HTML loads Three.js from CDN and uses THREE.Capsule/Octree (jsm-only classes),
+    inject a polyfill <script> block right after the Three.js CDN tag so those constructors exist.
+    """
+    threejs_cdn = re.search(
+        r'<script\b[^>]*\bsrc\s*=[^>]*three(?:\.min)?\.js[^>]*>\s*</script>',
+        html, re.IGNORECASE
+    )
+    if not threejs_cdn:
+        return html, False, []
+    if _THREEJS_POLYFILL_MARKER in html:
+        return html, False, []
+    uses_jsm = bool(re.search(r'\bTHREE\.(Capsule|Octree|OctreeHelper)\b', html))
+    if not uses_jsm:
+        return html, False, []
+    insert_pos = threejs_cdn.end()
+    new_html = html[:insert_pos] + '\n  ' + _THREEJS_POLYFILL_BLOCK + html[insert_pos:]
+    msg = '[AUTO-FIX] THREE.js polyfill injected (Capsule/Octree used but not in main bundle)'
+    coordinateur_log.info(msg)
+    return new_html, True, [msg]
+
+
+def fix_threejs_duplicate_renderer(html: str) -> tuple[str, bool, list[str]]:
+    """
+    In modular Three.js code, multiple modules may each declare `new THREE.WebGLRenderer()`.
+    The second+ renderer fails to get a WebGL context (already used), making domElement invalid
+    → 'Failed to execute appendChild on Node: parameter 1 is not of type Node'.
+    Fix: keep only the first WebGLRenderer instantiation per script block.
+    """
+    if html.count('THREE.WebGLRenderer') < 2:
+        return html, False, []
+    fixes: list[str] = []
+
+    def fix_in_script(js: str) -> str:
+        occurrences = list(re.finditer(r'[^\n]*\bnew\s+THREE\.WebGLRenderer\s*\([^\n]*\n', js))
+        if len(occurrences) < 2:
+            return js
+        changed = js
+        for m in reversed(occurrences[1:]):
+            changed = changed[:m.start()] + changed[m.end():]
+            fixes.append('[AUTO-FIX] Duplicate THREE.WebGLRenderer instantiation removed (only first kept)')
+        return changed
+
+    def process_script(m):
+        open_tag = m.group(1)
+        content = m.group(2)
+        if re.search(r'\bsrc\s*=', open_tag, re.IGNORECASE):
+            return m.group(0)
+        new_content = fix_in_script(content)
+        if new_content != content:
+            return f'{open_tag}{new_content}</script>'
+        return m.group(0)
+
+    new_html = re.sub(r'(<script(?:\s[^>]*)?>)(.*?)(</script>)', process_script, html, flags=re.DOTALL | re.IGNORECASE)
+    if fixes:
+        for f in fixes:
+            coordinateur_log.info(f)
+    return new_html, bool(fixes), fixes
+
+
+def fix_threejs_canvas_context_conflict(html: str) -> tuple[str, bool, list[str]]:
+    """
+    In Three.js games, the renderer creates its own WebGL canvas.
+    If the game code also calls canvas.getContext('2d') on the same canvas,
+    WebGL and 2D contexts conflict → 'Canvas has an existing context of a different type'.
+    Fix: remove any .getContext('2d') calls inside <script> blocks that also use THREE.WebGLRenderer.
+    """
+    if 'THREE.WebGLRenderer' not in html:
+        return html, False, []
+    fixes: list[str] = []
+
+    def fix_in_script(js: str) -> str:
+        if 'THREE.WebGLRenderer' not in js:
+            return js
+        changed = js
+        # Pattern 1: canvas.getContext('2d') or .getContext("2d") — line with assignment
+        # e.g.: const ctx = canvas.getContext('2d');
+        pattern = re.compile(
+            r"[^\n]*\.getContext\s*\(\s*['\"]2d['\"]\s*\)[^\n]*\n",
+            re.IGNORECASE
+        )
+        new_js = pattern.sub('', changed)
+        if new_js != changed:
+            fixes.append("[AUTO-FIX] Removed canvas.getContext('2d') conflicting with THREE.WebGLRenderer WebGL context")
+            changed = new_js
+        return changed
+
+    def process_script(m):
+        open_tag = m.group(1)
+        content = m.group(2)
+        if re.search(r'\bsrc\s*=', open_tag, re.IGNORECASE):
+            return m.group(0)
+        new_content = fix_in_script(content)
+        if new_content != content:
+            return f'{open_tag}{new_content}</script>'
+        return m.group(0)
+
+    new_html = re.sub(r'(<script(?:\s[^>]*)?>)(.*?)(</script>)', process_script, html, flags=re.DOTALL | re.IGNORECASE)
+    if fixes:
+        for f in fixes:
+            coordinateur_log.info(f)
+    return new_html, bool(fixes), fixes
+
+
 def fix_all_auto(html: str) -> tuple[str, bool, list[str]]:
     """
     Applique toutes les corrections automatiques disponibles en cascade :
@@ -924,6 +1389,7 @@ def fix_all_auto(html: str) -> tuple[str, bool, list[str]]:
     0. fix_illegal_return_statements (return hors fonction — invisible à Node.js CJS)
     1. fix_missing_comma_before_brace (virgule manquante entre éléments tableau)
     2. fix_const_syntax_errors (const/let en switch/for) — boucle jusqu'à 10×
+    2b. fix_unexpected_identifier (missing semicolon between statements)
     3. fix_identifier_already_declared (redéclarations) — boucle jusqu'à 5×
     4. fix_palette_missing_keys (clés PALETTE manquantes)
     5. check_undefined_vars_eslint + fix_undefined_runtime_vars
@@ -931,6 +1397,48 @@ def fix_all_auto(html: str) -> tuple[str, bool, list[str]]:
     """
     all_fixes = []
     any_fixed = False
+
+    # Étape -6 : `let/const/var X.Y = value;` — dot-notation with declaration keyword is SyntaxError
+    html, fixed_ldn, descs_ldn = fix_let_dot_notation(html)
+    if fixed_ldn:
+        any_fixed = True
+        all_fixes.extend(descs_ldn)
+
+    # Étape -5 : Markdown code fences inside <script> blocks (``` or ```javascript)
+    html, fixed_md, descs_md = fix_markdown_code_fences(html)
+    if fixed_md:
+        any_fixed = True
+        all_fixes.extend(descs_md)
+
+    # Étape -4 : game code inside CDN <script src="..."> tag — browsers ignore inline content
+    html, fixed_cdn, descs_cdn = fix_cdn_script_content(html)
+    if fixed_cdn:
+        any_fixed = True
+        all_fixes.extend(descs_cdn)
+
+    # Étape -3.5 : inject Three.js polyfills (Capsule/Octree not in main bundle) when needed
+    html, fixed_poly, descs_poly = inject_threejs_polyfills(html)
+    if fixed_poly:
+        any_fixed = True
+        all_fixes.extend(descs_poly)
+
+    # Étape -3.4 : remove duplicate THREE.WebGLRenderer instantiations (second fails to get context)
+    html, fixed_dup, descs_dup = fix_threejs_duplicate_renderer(html)
+    if fixed_dup:
+        any_fixed = True
+        all_fixes.extend(descs_dup)
+
+    # Étape -3.3 : remove canvas.getContext('2d') that conflicts with THREE.WebGLRenderer WebGL context
+    html, fixed_ctx, descs_ctx = fix_threejs_canvas_context_conflict(html)
+    if fixed_ctx:
+        any_fixed = True
+        all_fixes.extend(descs_ctx)
+
+    # Étape -3 : stray </script> inside game script block (highest priority — unblocks all 3D fixes)
+    html, fixed_sc, descs_sc = fix_stray_script_close(html)
+    if fixed_sc:
+        any_fixed = True
+        all_fixes.extend(descs_sc)
 
     # Étape -2 : PALETTE redéclaré (var PALETTE = {...} en double → écrase les clés)
     html, fixed_dp, descs_dp = fix_duplicate_palette(html)
@@ -965,6 +1473,14 @@ def fix_all_auto(html: str) -> tuple[str, bool, list[str]]:
             break
         any_fixed = True
         all_fixes.extend(descs1)
+
+    # Boucle sur fix_unexpected_identifier (missing semicolons) — boucle jusqu'à 10×
+    for _ in range(10):
+        html, fixed_ui, descs_ui = fix_unexpected_identifier(html)
+        if not fixed_ui:
+            break
+        any_fixed = True
+        all_fixes.extend(descs_ui)
 
     html, fixed2, descs2 = fix_identifier_already_declared(html)
     if fixed2:

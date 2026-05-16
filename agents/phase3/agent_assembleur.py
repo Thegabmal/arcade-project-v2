@@ -13,6 +13,33 @@ MODULE_START = "// ═══ MODULE: {nom} ═══"
 MODULE_END = "// ═══ END MODULE: {nom} ═══"
 
 
+def _extract_js_from_module(code: str, is_3d: bool) -> str:
+    """
+    Strip any HTML wrapper from a module's code, keeping only pure JavaScript.
+    LLMs sometimes generate full HTML pages (with <script src="...">game_code</script>)
+    instead of raw JS. This causes nested script tags after assembly → exec=2.6.
+    """
+    import re
+    stripped = code.strip()
+    # Fast path: if no HTML indicators, return as-is
+    if not is_3d:
+        return stripped
+    if '<script' not in stripped.lower() and '<!doctype' not in stripped.lower():
+        return stripped
+    # Extract content from inline script blocks (skip src= tags)
+    matches = []
+    for m in re.finditer(r'<script(?:\s[^>]*)?>(.+?)</script>', stripped, re.DOTALL | re.IGNORECASE):
+        open_tag = m.group(0)[:m.group(0).index('>') + 1]
+        if re.search(r'\bsrc\s*=', open_tag, re.IGNORECASE):
+            continue
+        content = m.group(1).strip()
+        if len(content) > 50:
+            matches.append(content)
+    if matches:
+        return '\n\n'.join(matches)
+    return stripped
+
+
 def run(
     generated: GeneratedModules,
     context: ConceptionContext,
@@ -37,17 +64,18 @@ def run(
     # Modules dans l'ordre
     for nom in ordre:
         if nom in generated.modules:
-            code = generated.modules[nom]
+            code = _extract_js_from_module(generated.modules[nom], est_3d)
             js_parts.append(f"{MODULE_START.format(nom=nom)}")
-            js_parts.append(code.strip())
+            js_parts.append(code)
             js_parts.append(f"{MODULE_END.format(nom=nom)}")
             js_parts.append("")
 
     # Modules hors ordre (si oubliés)
     for nom, code in generated.modules.items():
         if nom not in ordre:
+            code = _extract_js_from_module(code, est_3d)
             js_parts.append(f"{MODULE_START.format(nom=nom)}")
-            js_parts.append(code.strip())
+            js_parts.append(code)
             js_parts.append(f"{MODULE_END.format(nom=nom)}")
             js_parts.append("")
 
@@ -134,6 +162,16 @@ def _build_2d_html(
 </html>"""
 
 
+_THREEJS_POLYFILL_HTML = """  <script>
+// Polyfill: Three.js examples/jsm classes — not in the main bundle
+if(typeof THREE!=='undefined'){
+  if(!THREE.Capsule){THREE.Capsule=function(s,e,r){this.start=s?s.clone():new THREE.Vector3(0,0,0);this.end=e?e.clone():new THREE.Vector3(0,1,0);this.radius=r!==undefined?r:0.5;this.getCenter=function(t){return t.addVectors(this.start,this.end).multiplyScalar(0.5);};this.translate=function(v){this.start.add(v);this.end.add(v);return this;};this.copy=function(c){this.start.copy(c.start);this.end.copy(c.end);this.radius=c.radius;return this;};this.set=function(a,b,r){this.start.copy(a);this.end.copy(b);this.radius=r;return this;};this.clone=function(){return new THREE.Capsule(this.start,this.end,this.radius);};};};
+  if(!THREE.Octree){THREE.Octree=function(){this.fromGraphNode=function(){};this.capsuleIntersect=function(){return false;};this.rayIntersect=function(){return false;};};};
+  if(!THREE.OctreeHelper){THREE.OctreeHelper=function(){THREE.Object3D.call(this);};THREE.OctreeHelper.prototype=Object.create(THREE.Object3D.prototype);THREE.OctreeHelper.prototype.update=function(){};};
+}
+  </script>"""
+
+
 def _build_3d_html(
     titre: str,
     bg_color: str,
@@ -201,7 +239,8 @@ def _build_3d_html(
     <p>Appuie sur DÉMARRER pour jouer</p>
     <button onclick="startGame()">DÉMARRER</button>
   </div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+{_THREEJS_POLYFILL_HTML}
   <script>
     // ═══ NOTE: pas de "use strict" — les modules partagent des globaux cross-script ═══
 
@@ -211,7 +250,23 @@ def _build_3d_html(
 
     // ═══ STARTUP ═══
     window.addEventListener('load', function() {{
+      // Pre-initialize UI module before core setup to avoid undefined DOM refs
+      if (typeof ui !== 'undefined' && typeof ui.initUI === 'function') {{ ui.initUI(); }}
+      // Bridge: expose core.init / core.gameLoop as globals in case startup_code uses plain init()
+      if (typeof init === 'undefined' && typeof core !== 'undefined') {{
+        if (typeof core.init === 'function') window.init = function() {{ return core.init(); }};
+        if (typeof core.gameLoop === 'function') window.gameLoop = function(ts) {{ return core.gameLoop(ts); }};
+      }}
       {startup}
+      // Ensure startGame() is defined — generated code may use core.setState() instead
+      if (typeof startGame !== 'function') {{
+        window.startGame = function() {{
+          var _ovl = document.getElementById('overlay');
+          if (_ovl) _ovl.style.display = 'none';
+          if (typeof core !== 'undefined' && typeof core.setState === 'function') {{ core.setState('PLAYING'); }}
+          else if (typeof setState === 'function') {{ setState('PLAYING'); }}
+        }};
+      }}
     }});
     // ═══ END STARTUP ═══
   </script>
@@ -247,7 +302,8 @@ def _inject_trycatch_animate_3d(js_code: str) -> str:
         "\n  } catch(e) {"
         "\n    var hud = document.getElementById('hud');"
         "\n    if (hud) hud.innerHTML = '<span style=\"color:#f55;font-size:12px\">ERR: ' + e.message + '</span>';"
-        "\n    console.error('3D game error:', e);"
+        "\n    window.__ARCADE_ERROR__ = e.message + (e.stack ? ' | ' + e.stack.split('\\n').slice(1,3).join(' ') : '');"
+        "\n    console.error('3D game error:', e.message, e.stack);"
         "\n  }"
     )
     return js_code[:insert_pos] + trycatch_open + js_code[insert_pos:raf_end] + trycatch_close + js_code[raf_end:]

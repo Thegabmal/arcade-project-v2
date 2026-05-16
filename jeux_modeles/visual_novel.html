@@ -1,1270 +1,494 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Echoes of Tomorrow — Visual Novel</title>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { background:#0a0a1a; display:flex; justify-content:center; align-items:center; height:100vh; overflow:hidden; font-family:'Courier New', monospace; }
-    #wrap { position:relative; width:800px; height:520px; }
-    canvas { display:block; box-shadow:0 0 50px rgba(100,60,200,0.3); }
-    #history-panel {
-      display:none; position:absolute; top:0; left:0; width:100%; height:100%;
-      background:rgba(0,0,10,0.92); overflow-y:auto; padding:20px;
-      color:#aaa; font-size:12px; line-height:1.7; z-index:10;
-    }
-    #history-panel h3 { color:#8060ff; margin-bottom:10px; }
-    #history-panel .hentry { border-left:2px solid #333; padding-left:10px; margin-bottom:6px; }
-    #history-panel .hentry span { color:#6090ff; }
-    #history-close { position:absolute; top:12px; right:16px; color:#888; cursor:pointer; font-size:14px; }
-    #history-close:hover { color:#fff; }
-  </style>
-</head>
-<body>
-<div id="wrap">
-  <canvas id="c" width="800" height="520"></canvas>
-  <div id="history-panel">
-    <button id="history-close" onclick="document.getElementById('history-panel').style.display='none'">✕ CLOSE</button>
-    <h3>[ DIALOGUE LOG ]</h3>
-    <div id="history-list"></div>
-  </div>
-</div>
+<html><head><title>Last Transmission</title><style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;}
+canvas{display:block;}
+#ui{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;display:flex;align-items:center;justify-content:center;}
+</style></head><body>
+<canvas id="gameCanvas"></canvas>
 <script>
-'use strict';
+// ══════════════════════════════════════════════════════════════════
+// ENGINE — DO NOT MODIFY
+window.__devPatch=function(code){return eval(code);};
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+const DPR=Math.min(window.devicePixelRatio||1,2);
+const GAME_W=800,GAME_H=600;
+let W=GAME_W,H=GAME_H;
+function resizeCanvas(){const s=Math.min(window.innerWidth/W,window.innerHeight/H);canvas.style.width=Math.round(W*s)+'px';canvas.style.height=Math.round(H*s)+'px';canvas.width=Math.round(W*DPR);canvas.height=Math.round(H*DPR);ctx.scale(DPR,DPR);}
+resizeCanvas();window.addEventListener('resize',()=>{resizeCanvas();ctx.scale(DPR,DPR);});
 
-const canvas = document.getElementById('c');
-const ctx    = canvas.getContext('2d');
-const W = 800, H = 520;
+let gameState='title';
+function setState(s){prevState=gameState;gameState=s;}
+let prevState='title';
 
-// ─── Audio ─────────────────────────────────────────────────────────────────────
-const AC = new (window.AudioContext || window.webkitAudioContext)();
-function tone(f, type, dur, vol, delay=0) {
-  const o=AC.createOscillator(), g=AC.createGain();
-  o.connect(g); g.connect(AC.destination);
-  o.type=type; o.frequency.setValueAtTime(f, AC.currentTime+delay);
-  g.gain.setValueAtTime(0.001,AC.currentTime+delay);
-  g.gain.linearRampToValueAtTime(vol,AC.currentTime+delay+0.01);
-  g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+delay+dur);
-  o.start(AC.currentTime+delay); o.stop(AC.currentTime+delay+dur+0.01);
-}
-function sfxClick()   { tone(600,'sine',0.04,0.12); }
-function sfxChoice()  { tone(440,'sine',0.06,0.18); tone(550,'sine',0.05,0.12,0.05); }
-function sfxChapter() { [200,300,400,500,700].forEach((f,i)=>tone(f,'square',0.1,0.2,i*0.06)); }
-function sfxEnd(good) { const freqs=good?[400,500,640,800,1000]:[300,260,220,180,150]; freqs.forEach((f,i)=>tone(f,'triangle',0.2,0.25,i*0.1)); }
+const Keys={down:{},pressed:{}};
+window.addEventListener('keydown',e=>{if(!Keys.down[e.code])Keys.pressed[e.code]=true;Keys.down[e.code]=true;if(['Space','Enter','ArrowUp','ArrowDown','Escape'].includes(e.code))e.preventDefault();});
+window.addEventListener('keyup',e=>{Keys.down[e.code]=false;});
+const Pointer={x:0,y:0,justDown:false};
+canvas.addEventListener('mousedown',e=>{const r=canvas.getBoundingClientRect();Pointer.x=(e.clientX-r.left)*(W/r.width);Pointer.y=(e.clientY-r.top)*(H/r.height);Pointer.justDown=true;});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();Pointer.x=(e.touches[0].clientX-r.left)*(W/r.width);Pointer.y=(e.touches[0].clientY-r.top)*(H/r.height);Pointer.justDown=true;},{passive:false});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
 
-// ─── Characters ────────────────────────────────────────────────────────────────
-const CHARACTERS = {
-  player: { name:'Alex',    col:'#80BBFF', textCol:'#c8e4ff', portrait: drawPortraitAlex },
-  lyra:   { name:'Lyra',    col:'#FF80CC', textCol:'#ffc8e8', portrait: drawPortraitLyra },
-  zero:   { name:'ZERO',    col:'#FF6644', textCol:'#ffb08c', portrait: drawPortraitZero },
-  narrator:{ name:'',       col:'#888888', textCol:'#bbbbbb', portrait: null },
+function keyPressed(c){return!!Keys.pressed[c];}
+function anyAdvance(){return keyPressed('Space')||keyPressed('Enter')||Pointer.justDown;}
+function flushInput(){Keys.pressed={};Pointer.justDown=false;}
+
+const sfx={_ctx:null,init(){try{if(!this._ctx)this._ctx=new(window.AudioContext||window.webkitAudioContext)();if(this._ctx.state==='suspended')this._ctx.resume();}catch(e){}},
+play(f,d,t,v){try{this.init();if(!this._ctx)return;const o=this._ctx.createOscillator(),g=this._ctx.createGain();o.type=t||'sine';o.frequency.value=f||440;g.gain.setValueAtTime(v||0.08,this._ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,this._ctx.currentTime+(d||0.15));o.connect(g);g.connect(this._ctx.destination);o.start();o.stop(this._ctx.currentTime+(d||0.15));}catch(e){}}};
+
+const bgm={_ctx:null,_osc:null,_gain:null,
+  start(freq,vol){try{this.stop();this.init();const o=this._ctx.createOscillator(),g=this._ctx.createGain();o.type='sine';o.frequency.value=freq||220;g.gain.value=vol||0.04;o.connect(g);g.connect(this._ctx.destination);o.start();this._osc=o;this._gain=g;}catch(e){}},
+  stop(){try{if(this._osc)this._osc.stop();}catch(e){}this._osc=null;},
+  init(){try{if(!this._ctx)this._ctx=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}}
 };
 
-function drawPortraitAlex(ctx, x, y, w, h, emotion) {
-  // Alex: short hair, round face, warm colors
-  const cx=x+w/2, cy=y+h/2;
-  // Body
-  ctx.fillStyle='#3060A0'; ctx.fillRect(x+10,y+h*0.65,w-20,h*0.4);
-  // Face
-  ctx.fillStyle=emotion==='happy'?'#FFB888':emotion==='sad'?'#CC9966':'#E8A878';
-  ctx.beginPath(); ctx.arc(cx,cy-5,h*0.28,0,Math.PI*2); ctx.fill();
+function lerp(a,b,t){return a+(b-a)*t;}
+function clamp(v,mn,mx){return v<mn?mn:v>mx?mx:v;}
+function randInt(a,b){return a+Math.floor(Math.random()*(b-a+1));}
+function randFloat(a,b){return a+Math.random()*(b-a);}
+function randChoice(arr){return arr[Math.floor(Math.random()*arr.length)];}
+
+const FIXED_DT=1/60;
+const MAX_DT=0.1;
+let lastTime=0;
+let accumulator=0;
+function loop(ts){const rd=Math.min((ts-lastTime)/1000,MAX_DT);lastTime=ts;accumulator+=rd;while(accumulator>=FIXED_DT){update(FIXED_DT);accumulator-=FIXED_DT;}renderFrame();requestAnimationFrame(loop);}
+function anyAction(){return keyPressed('Space')||keyPressed('Enter')||Pointer.justDown;}
+function update(dt){
+  bgAnim+=dt;
+  switch(gameState){
+    case'title':   updateTitle(dt);   break;
+    case'scene':   updateScene(dt);   break;
+    case'choices': updateChoices(dt); break;
+    case'history': if(keyPressed('Escape')||keyPressed('KeyH')||Pointer.justDown){setState(prevState);}break;
+    case'credits': updateGameover(dt);break;
+    case'shop':    updateShop(dt);    break;
+  }
+  flushInput();
+}
+function renderFrame(){
+  switch(gameState){
+    case'title':   renderTitle();   break;
+    case'scene':   renderScene();   break;
+    case'choices': renderScene();renderChoicesOverlay(); break;
+    case'history': renderScene();renderHistoryOverlay(); break;
+    case'credits': renderCredits(); break;
+    case'shop':    renderShop();    break;
+  }
+}
+// ══════════════════════════════════════════════════════════════════
+
+// GAME CONSTANTS
+const GAME_TITLE   ='LAST TRANSMISSION';
+const GAME_SUBTITLE='A xenolinguist. An impossible signal. A choice that will define humanity.';
+const GAME_AUTHOR  ='Arcade Project';
+
+const PALETTE={
+  bg:'#040810',textbox:'rgba(2,5,18,0.92)',boxBorder:'rgba(0,180,220,0.5)',
+  nameBg:'rgba(0,30,60,0.95)',nameBorder:'rgba(0,200,255,0.7)',
+  nameText:'#88eeff',text:'#d8e8f0',textShadow:'rgba(0,0,0,0.8)',
+  choiceBg:'rgba(5,15,35,0.94)',choiceSel:'rgba(0,80,120,0.94)',
+  choiceBorder:'rgba(0,160,200,0.6)',ui:'#88aacc',accent:'#00ffcc',
+  shopBg:'#020a10',shopCard:'#041828',shopSel:'#083848',
+};
+
+const TYPE_SPEED=40,TYPE_SPEED_SKIP=320,AUTO_DELAY=2.2;
+
+// CHARACTERS
+const CHARACTERS={
+  mira:    {name:'Dr. Mira',   color:'#66bbff',hairColor:'#111122',eyeColor:'#44aaff',skinColor:'#ecc8a0',clothing:'#1a3a5a',pos:'left'},
+  holden:  {name:'Dr. Holden', color:'#88bb88',hairColor:'#553300',eyeColor:'#886644',skinColor:'#d4a87a',clothing:'#2a3a1a',pos:'right'},
+  signal:  {name:'THE SIGNAL', color:'#00ffcc',hairColor:null,     eyeColor:'#00ffcc',skinColor:null,     clothing:null,     pos:'right'},
+  narrator:{name:'',           color:'#aaaaaa',hairColor:null,     eyeColor:null,      skinColor:null,     clothing:null,     pos:'center'},
+};
+
+// STORY SCRIPT — First Contact narrative, 3 endings
+const SCRIPT=[
+  {id:'start',bg:'observatory',bgm:160,
+   chars:[{id:'narrator',pos:'center',expression:'neutral'}],
+   speaker:null,text:'3:14 AM. Kepler Deep-Space Observatory. Dr. Mira Chen has not slept in thirty-one hours.',next:'anomaly'},
+
+  {id:'anomaly',bg:'observatory',
+   chars:[{id:'mira',pos:'left',expression:'surprised'}],
+   speaker:'mira',text:"This pattern... it's non-random. The interval structure — it's prime numbers. Fibonacci sequences woven into carrier waves. This is not noise.",next:'choice1'},
+
+  {id:'choice1',bg:'observatory',
+   chars:[{id:'mira',pos:'left',expression:'neutral'}],
+   speaker:null,text:'How do you proceed?',
+   choices:[
+     {text:"Wake Dr. Holden — you need a second opinion",      goto:'wake_holden'},
+     {text:"Analyze it alone — you need more data first",     goto:'alone_path'},
+     {text:"File it as equipment interference and go to sleep",goto:'leave_early'},
+   ]},
+
+  {id:'wake_holden',bg:'observatory',setFlag:{holden_knows:true},
+   chars:[{id:'mira',pos:'left',expression:'neutral'},{id:'holden',pos:'right',expression:'angry'}],
+   speaker:'holden',text:"Mira. It is three in the morning. This better not be another false positive from the array calibration.",next:'mira_explains'},
+
+  {id:'mira_explains',bg:'observatory',
+   chars:[{id:'mira',pos:'left',expression:'happy'},{id:'holden',pos:'right',expression:'surprised'}],
+   speaker:'mira',text:'Look at the interval structure. Primes up to 89. Then Fibonacci. Then — I think — a periodic table reference. This is intentional, Holden.',next:'holden_reacts'},
+
+  {id:'holden_reacts',bg:'observatory',
+   chars:[{id:'mira',pos:'left',expression:'neutral'},{id:'holden',pos:'right',expression:'neutral'}],
+   speaker:'holden',text:'Even if it is... we have protocols. We report up the chain immediately. This is not our decision to make alone.',next:'holden_choice'},
+
+  {id:'holden_choice',bg:'observatory',
+   chars:[{id:'mira',pos:'left',expression:'neutral'},{id:'holden',pos:'right',expression:'neutral'}],
+   speaker:null,text:'What do you do?',
+   choices:[
+     {text:'"You\'re right. We report it now."',    goto:'report_command'},
+     {text:'"Give me one hour. Just one hour."',     goto:'buy_time'},
+   ]},
+
+  {id:'buy_time',bg:'signal_room',setFlag:{bought_time:true},
+   chars:[{id:'mira',pos:'left',expression:'happy'},{id:'holden',pos:'right',expression:'sad'}],
+   speaker:'holden',text:"One hour. I'm timing you. And Mira — if this is real, you understand what it means. Everything changes.",next:'signal_responds'},
+
+  {id:'alone_path',bg:'signal_room',setFlag:{went_alone:true},
+   chars:[{id:'mira',pos:'left',expression:'neutral'}],
+   speaker:'mira',text:"The pattern deepens the longer I listen. There's a layer beneath the mathematics — something that almost resembles... syntax. A grammar.",next:'signal_responds'},
+
+  {id:'signal_responds',bg:'signal_room',bgm:280,
+   chars:[{id:'mira',pos:'left',expression:'surprised'},{id:'signal',pos:'right',expression:'neutral'}],
+   speaker:null,text:'[The signal shifts. Responds. As if it heard you thinking about it.]',next:'signal_speaks'},
+
+  {id:'signal_speaks',bg:'signal_room',
+   chars:[{id:'mira',pos:'left',expression:'surprised'},{id:'signal',pos:'right',expression:'happy'}],
+   speaker:'signal',text:'... WE HAVE BEEN LISTENING. YOU HAVE BEEN LOUD FOR A LONG TIME. WE WERE WAITING FOR YOU TO LEARN TO LISTEN.',next:'mira_responds'},
+
+  {id:'mira_responds',bg:'signal_room',
+   chars:[{id:'mira',pos:'left',expression:'happy'},{id:'signal',pos:'right',expression:'neutral'}],
+   speaker:'mira',text:'"Who are you? Where are you from? Why us, why now?"',next:'signal_answers'},
+
+  {id:'signal_answers',bg:'deep_space',
+   chars:[{id:'mira',pos:'left',expression:'surprised'},{id:'signal',pos:'right',expression:'happy'}],
+   speaker:'signal',text:'... WE ARE WHAT COMES AFTER ASKING. DISTANCE IS A UNIT YOU INVENTED. NOW — ARE YOU AFRAID?',next:'choice2'},
+
+  {id:'choice2',bg:'deep_space',
+   chars:[{id:'mira',pos:'left',expression:'neutral'},{id:'signal',pos:'right',expression:'neutral'}],
+   speaker:null,text:'You have a choice.',
+   choices:[
+     {text:'"No. I\'m not afraid. Tell me everything."',  goto:'contact_achieved'},
+     {text:'"I need to share this with others first."',   goto:'report_command'},
+   ]},
+
+  {id:'contact_achieved',bg:'deep_space',setFlag:{full_contact:true},
+   chars:[{id:'mira',pos:'left',expression:'happy'},{id:'signal',pos:'right',expression:'happy'}],
+   speaker:'signal',text:'... GOOD. THAT IS THE CORRECT ANSWER. NOT BRAVE — CORRECT. THE ONES WHO COME TO THE EDGE WITHOUT FEAR ARE THE ONES WORTH MEETING.',next:'ending_good'},
+
+  {id:'ending_good',bg:'dawn',
+   chars:[{id:'mira',pos:'left',expression:'happy'}],
+   speaker:'narrator',text:'First contact. Not a broadcast — a conversation. Mira Chen talked for four hours before anyone else knew. Whatever came next, she had already changed everything.',
+   end:'good'},
+
+  {id:'report_command',bg:'observatory',setFlag:{reported:true},
+   chars:[{id:'mira',pos:'left',expression:'sad'},{id:'holden',pos:'right',expression:'neutral'}],
+   speaker:'holden',text:'Command is sending a containment team. They say the signal is to be classified Level 9. Mira — you did the right thing.',next:'mira_doubt'},
+
+  {id:'mira_doubt',bg:'observatory',
+   chars:[{id:'mira',pos:'left',expression:'sad'}],
+   speaker:'mira',text:"The right thing. The signal went quiet the moment we filed the report. As if it understood what we'd done.",next:'ending_neutral'},
+
+  {id:'ending_neutral',bg:'deep_space',
+   chars:[{id:'mira',pos:'left',expression:'sad'}],
+   speaker:'narrator',text:'The frequency was buried in classified files. Officially: instrument error. Unofficially: a question asked and then filed away. The stars kept their distance.',
+   end:'neutral'},
+
+  {id:'leave_early',bg:'observatory',
+   chars:[{id:'mira',pos:'left',expression:'neutral'}],
+   speaker:'mira',text:"Exhaustion wins. You mark the anomaly as calibration drift and close the terminal. It was probably nothing. It's always probably nothing.",next:'ending_bad'},
+
+  {id:'ending_bad',bg:'deep_space',
+   chars:[],
+   speaker:'narrator',text:'The signal tried three more times over the next decade. Nobody noticed. Eventually, it stopped trying.',
+   end:'bad'},
+];
+
+// STORY ENGINE — DO NOT MODIFY
+let nodeIndex=0,currentNode=null,typePos=0,typeTimer=0,textComplete=false,autoTimer=0;
+let autoMode=false,skipMode=false,choiceIndex=0,flags={},visitedNodes=new Set();
+const history=[],historyScroll={offset:0};
+let bgAnim=0,bgTransition={from:null,to:null,t:1},currentBgKey='observatory',charFade={};
+
+function getNode(id){return SCRIPT.find(n=>n.id===id)||null;}
+function gotoNode(id){
+  const node=getNode(id);if(!node){console.warn('Node not found:',id);return;}
+  if(currentNode)bgTransition={from:currentNode.bg,to:node.bg,t:node.bg!==currentNode.bg?0:1};
+  else bgTransition={from:node.bg,to:node.bg,t:1};
+  if(node.setFlag)Object.assign(flags,node.setFlag);
+  currentNode=node;visitedNodes.add(id);
+  typePos=0;typeTimer=0;textComplete=false;autoTimer=0;choiceIndex=0;
+  if(node.text&&node.text.trim()){
+    if(history.length===0||history[history.length-1].text!==node.text){
+      history.push({speaker:node.speaker&&CHARACTERS[node.speaker]?CHARACTERS[node.speaker].name:null,text:node.text});
+    }
+  }
+  if(node.end){handleEnding(node.end);return;}
+  if(node.choices&&node.choices.length>0)setState('choices');else setState('scene');
+  if(node.bgm!==undefined)bgm.start(node.bgm,0.04);
+  if(node.bgm===null)bgm.stop();
+}
+function handleEnding(type){bgm.stop();_runCoins=Math.floor(visitedNodes.size/2);_gameoverTimer=1.5;setTimeout(()=>setState('credits'),1000);}
+function advanceScene(){if(!currentNode)return;if(!textComplete){typePos=currentNode.text.length;textComplete=true;return;}if(currentNode.next)gotoNode(currentNode.next);}
+function updateTitle(dt){if(anyAdvance()){sfx.play(440,0.12,'sine',0.10);gotoNode(SCRIPT[0].id);}}
+function updateScene(dt){
+  if(!currentNode)return;
+  const speed=skipMode?TYPE_SPEED_SKIP:TYPE_SPEED;
+  if(!textComplete&&currentNode.text){
+    typeTimer+=dt;const target=Math.floor(typeTimer*speed);
+    if(target>=currentNode.text.length){typePos=currentNode.text.length;textComplete=true;autoTimer=0;sfx.play(660,0.04,'sine',0.04);}
+    else if(target>typePos){typePos=target;if(typePos%4===0)sfx.play(380+Math.random()*60,0.025,'sine',0.035);}
+  }
+  if(textComplete&&autoMode){autoTimer+=dt;if(autoTimer>=AUTO_DELAY)advanceScene();}
+  if(keyPressed('Escape'))setState('history');
+  if(keyPressed('KeyA'))autoMode=!autoMode;
+  if(keyPressed('KeyS'))skipMode=!skipMode;
+  if(keyPressed('KeyH'))setState('history');
+  if(anyAdvance())advanceScene();
+}
+function updateChoices(dt){
+  if(!currentNode||!currentNode.choices)return;
+  const valid=currentNode.choices.filter(c=>!c.requireFlag||flags[c.requireFlag]);
+  if(keyPressed('ArrowUp')&&choiceIndex>0){choiceIndex--;sfx.play(550,0.05,'sine',0.06);}
+  if(keyPressed('ArrowDown')&&choiceIndex<valid.length-1){choiceIndex++;sfx.play(550,0.05,'sine',0.06);}
+  if(anyAdvance()){
+    let idx=choiceIndex;
+    if(Pointer.justDown){const cy=H/2-valid.length*30;valid.forEach((_,i)=>{if(Pointer.y>cy+i*70&&Pointer.y<cy+i*70+58)idx=i;});}
+    const chosen=valid[idx];
+    if(chosen){if(chosen.setFlag)Object.assign(flags,chosen.setFlag);sfx.play(660,0.08,'square',0.09);gotoNode(chosen.goto);}
+  }
+}
+
+// BACKGROUNDS
+function drawBg(key){
+  const bgs={
+    observatory:()=>{
+      const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#010508');g.addColorStop(1,'#02080f');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+      // Stars
+      for(let i=0;i<100;i++){const sx=(i*137.5)%W,sy=(i*89.3)%(H*0.6);ctx.fillStyle=`rgba(200,220,255,${0.2+0.5*(i%3===0?1:0.3)})`;ctx.beginPath();ctx.arc(sx,sy,i%20===0?1.5:0.8,0,Math.PI*2);ctx.fill();}
+      // Radio dish silhouette
+      ctx.fillStyle='#0a0e14';ctx.fillRect(0,H*0.55,W,H*0.45);
+      ctx.strokeStyle='#1a2030';ctx.lineWidth=3;
+      ctx.beginPath();ctx.moveTo(W*0.5,H*0.55);ctx.lineTo(W*0.5,H*0.35);ctx.stroke();
+      ctx.beginPath();ctx.arc(W*0.5,H*0.35,80,0,Math.PI,false);ctx.stroke();
+      ctx.strokeStyle='rgba(0,150,255,0.2)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(0,H*0.54);ctx.lineTo(W,H*0.54);ctx.stroke();
+      // Control panel glow
+      [[80,H*0.65,120,20],[240,H*0.68,80,16],[560,H*0.63,140,22]].forEach(([px,py,pw,ph])=>{ctx.fillStyle='rgba(0,100,200,0.12)';ctx.fillRect(px,py,pw,ph);ctx.strokeStyle='rgba(0,150,255,0.25)';ctx.lineWidth=1;ctx.strokeRect(px,py,pw,ph);});
+    },
+    signal_room:()=>{
+      ctx.fillStyle='#010510';ctx.fillRect(0,0,W,H);
+      // Wave visualization
+      const t=bgAnim;ctx.strokeStyle='rgba(0,220,255,0.35)';ctx.lineWidth=2;
+      for(let wave=0;wave<3;wave++){
+        ctx.beginPath();ctx.moveTo(0,H/2);
+        for(let x=0;x<W;x+=4){const y=H/2+Math.sin(x*0.02+t*(1+wave*0.3))*40*(1-wave*0.2)+Math.sin(x*0.05+t*2)*(20-wave*5);ctx.lineTo(x,y);}
+        ctx.globalAlpha=0.4-wave*0.1;ctx.stroke();ctx.globalAlpha=1;
+      }
+      // Data readouts
+      ctx.fillStyle='rgba(0,200,255,0.06)';ctx.fillRect(0,0,W,H);
+      ctx.fillStyle='rgba(0,255,200,0.08)';
+      for(let x=0;x<W;x+=40){ctx.fillRect(x,0,1,H);}
+      // Pulsing circle (signal source)
+      const pulseR=50+Math.sin(t*3)*8;ctx.strokeStyle=`rgba(0,255,200,0.4)`;ctx.lineWidth=2;ctx.shadowBlur=15;ctx.shadowColor='#00ffcc';ctx.beginPath();ctx.arc(W*0.7,H*0.4,pulseR,0,Math.PI*2);ctx.stroke();ctx.shadowBlur=0;
+    },
+    deep_space:()=>{
+      const g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,W*0.8);g.addColorStop(0,'#060818');g.addColorStop(1,'#000208');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+      // Star field
+      for(let i=0;i<180;i++){const t2=i*0.618*Math.PI*2,r=Math.sqrt(i/180)*W*0.5;const sx=W/2+Math.cos(t2)*r,sy=H/2+Math.sin(t2)*r;ctx.fillStyle=`rgba(200,220,255,${i%5===0?0.8:0.3})`;ctx.beginPath();ctx.arc(sx,sy,i%15===0?1.5:0.8,0,Math.PI*2);ctx.fill();}
+      // Nebula cloud
+      ctx.fillStyle='rgba(40,0,80,0.25)';ctx.shadowBlur=60;ctx.shadowColor='rgba(100,0,200,0.3)';ctx.beginPath();ctx.arc(W*0.3,H*0.35,100,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+      ctx.fillStyle='rgba(0,20,80,0.20)';ctx.beginPath();ctx.arc(W*0.7,H*0.6,80,0,Math.PI*2);ctx.fill();
+    },
+    dawn:()=>{
+      const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#010820');g.addColorStop(0.4,'#180828');g.addColorStop(0.7,'#380818');g.addColorStop(1,'#603010');
+      ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+      // Horizon glow
+      const hr=ctx.createRadialGradient(W/2,H,0,W/2,H,W*0.8);hr.addColorStop(0,'rgba(255,120,30,0.4)');hr.addColorStop(0.4,'rgba(255,60,10,0.15)');hr.addColorStop(1,'transparent');
+      ctx.fillStyle=hr;ctx.fillRect(0,0,W,H);
+      // Stars fading
+      for(let i=0;i<60;i++){const sx=(i*137.5)%W,sy=(i*89.3)%(H*0.5);ctx.fillStyle=`rgba(255,255,255,${0.15*(1-sy/(H*0.5))})`;ctx.beginPath();ctx.arc(sx,sy,0.8,0,Math.PI*2);ctx.fill();}
+      // Observatory horizon silhouette
+      ctx.fillStyle='#0a0810';ctx.fillRect(0,H*0.75,W,H*0.25);
+      ctx.fillStyle='#080610';
+      [120,360,600].forEach(tx=>{ctx.beginPath();ctx.moveTo(tx,H*0.75);ctx.lineTo(tx+10,H*0.55);ctx.lineTo(tx+20,H*0.75);ctx.fill();});
+    },
+  };
+  (bgs[key]||bgs.observatory)();
+}
+
+// CHARACTER DRAWING
+function drawCharacter(charId,pos,expression,alpha){
+  const def=CHARACTERS[charId];if(!def||charId==='narrator')return;
+  const x=pos==='left'?80:pos==='right'?W-240:W/2-80;
+  const baseY=H*0.08,h=H*0.78;
+  ctx.globalAlpha=clamp(alpha||1,0,1);
+  if(charId==='signal'){
+    // Signal entity — abstract geometric form
+    ctx.shadowBlur=30;ctx.shadowColor='#00ffcc';
+    const cx2=x+80,cy2=baseY+h*0.45,t2=bgAnim;
+    // Core rings
+    [60,45,30].forEach((r,i)=>{ctx.strokeStyle=`rgba(0,255,200,${0.3+i*0.15})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(cx2,cy2,r,t2*(0.5+i*0.2),t2*(0.5+i*0.2)+Math.PI*1.5);ctx.stroke();});
+    // Radiating lines
+    for(let i=0;i<8;i++){const ang=t2*0.8+i*Math.PI/4;const len=70+Math.sin(t2*2+i)*15;ctx.strokeStyle='rgba(0,220,180,0.22)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(cx2,cy2);ctx.lineTo(cx2+Math.cos(ang)*len,cy2+Math.sin(ang)*len);ctx.stroke();}
+    // Centre
+    ctx.fillStyle='#00ffcc';ctx.beginPath();ctx.arc(cx2,cy2,10,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    ctx.globalAlpha=1;return;
+  }
+  // Clothing body
+  ctx.fillStyle=def.clothing||'#333';ctx.beginPath();ctx.ellipse(x+80,baseY+h*0.75,50,h*0.34,0,0,Math.PI*2);ctx.fill();
+  // Torso
+  ctx.fillStyle=def.clothing;ctx.beginPath();ctx.ellipse(x+80,baseY+h*0.52,32,h*0.15,0,0,Math.PI*2);ctx.fill();
+  // Head
+  ctx.fillStyle=def.skinColor||'#c4a87a';ctx.beginPath();ctx.arc(x+80,baseY+h*0.26,44,0,Math.PI*2);ctx.fill();
   // Hair
-  ctx.fillStyle='#5C3A10';
-  ctx.beginPath(); ctx.arc(cx,cy-5,h*0.28,Math.PI,0); ctx.fill();
-  ctx.fillRect(cx-h*0.28,cy-5,h*0.28*2,h*0.08);
+  if(def.hairColor){ctx.fillStyle=def.hairColor;ctx.beginPath();ctx.arc(x+80,baseY+h*0.22,46,Math.PI,0);ctx.fill();ctx.fillRect(x+34,baseY+h*0.22,92,20);}
   // Eyes
-  const ey=cy-5;
-  [cx-14,cx+14].forEach(ex=>{
-    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.ellipse(ex,ey,6,4,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#3050C0'; ctx.beginPath(); ctx.arc(ex,ey,3,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#111'; ctx.beginPath(); ctx.arc(ex,ey,2,0,Math.PI*2); ctx.fill();
-  });
-  if (emotion==='surprised') {
-    ctx.fillStyle='#FFB888';
-    ctx.beginPath(); ctx.ellipse(cx,cy+20,8,6,0,0,Math.PI*2); ctx.fill();
-  } else {
-    const smile=emotion==='happy'?1:emotion==='sad'?-1:0;
-    ctx.strokeStyle='#8B4513'; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.arc(cx,cy+15+smile*4,8,0.2*Math.PI,(1-0.2)*Math.PI,smile<0); ctx.stroke();
+  if(def.eyeColor){
+    const eyeY=baseY+h*0.275;
+    const brow=expression==='angry'?-6:expression==='surprised'?-10:expression==='sad'?3:0;
+    ctx.strokeStyle='rgba(0,0,0,0.7)';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(x+55,eyeY-11+brow);ctx.lineTo(x+72,eyeY-9+brow);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x+107,eyeY-9+brow);ctx.lineTo(x+124,eyeY-11+brow);ctx.stroke();
+    ctx.fillStyle=def.eyeColor;ctx.beginPath();ctx.ellipse(x+63,eyeY,10,expression==='happy'?7:11,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(x+115,eyeY,10,expression==='happy'?7:11,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#000';ctx.beginPath();ctx.arc(x+63,eyeY,5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(x+115,eyeY,5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.6)';ctx.beginPath();ctx.arc(x+66,eyeY-3,3,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(x+118,eyeY-3,3,0,Math.PI*2);ctx.fill();
   }
-}
-
-function drawPortraitLyra(ctx, x, y, w, h, emotion) {
-  const cx=x+w/2, cy=y+h/2;
-  // Body
-  ctx.fillStyle='#6030A0'; ctx.fillRect(x+8,y+h*0.65,w-16,h*0.4);
-  // Face
-  ctx.fillStyle=emotion==='happy'?'#FFD0D8':emotion==='angry'?'#CC8080':'#F0B8C8';
-  ctx.beginPath(); ctx.arc(cx,cy-5,h*0.27,0,Math.PI*2); ctx.fill();
-  // Long hair
-  ctx.fillStyle='#E040B0';
-  ctx.beginPath(); ctx.arc(cx,cy-5,h*0.27,Math.PI,0); ctx.fill();
-  ctx.fillRect(cx-h*0.27,cy-5,8,h*0.5);       // left strand
-  ctx.fillRect(cx+h*0.27-8,cy-5,8,h*0.5);     // right strand
-  // Eyes (cat-like)
-  const ey=cy-6;
-  [cx-12,cx+12].forEach(ex=>{
-    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.ellipse(ex,ey,7,4,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#9030C0'; ctx.beginPath(); ctx.ellipse(ex,ey,3,4,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#111'; ctx.beginPath(); ctx.ellipse(ex,ey,1.5,4,0,0,Math.PI*2); ctx.fill();
-  });
   // Mouth
-  ctx.strokeStyle='#C86080'; ctx.lineWidth=1.5;
-  if (emotion==='angry') {
-    ctx.beginPath(); ctx.moveTo(cx-8,cy+15); ctx.lineTo(cx+8,cy+17); ctx.stroke();
-  } else {
-    ctx.beginPath(); ctx.arc(cx,cy+14+((emotion==='happy')?4:0),7,0.15*Math.PI,0.85*Math.PI); ctx.stroke();
-  }
+  const mouthY=baseY+h*0.33;ctx.strokeStyle='rgba(0,0,0,0.6)';ctx.lineWidth=2.5;ctx.beginPath();
+  if(expression==='happy')ctx.arc(x+80,mouthY,17,0.05*Math.PI,0.95*Math.PI);
+  else if(expression==='sad')ctx.arc(x+80,mouthY+12,17,1.05*Math.PI,1.95*Math.PI);
+  else if(expression==='angry'){ctx.arc(x+80,mouthY+8,12,1.1*Math.PI,1.9*Math.PI);}
+  else if(expression==='surprised'){ctx.arc(x+80,mouthY+4,9,0,Math.PI*2);}
+  else{ctx.moveTo(x+63,mouthY+4);ctx.lineTo(x+97,mouthY+4);}
+  ctx.stroke();
+  // Character detail: Mira has earpiece
+  if(charId==='mira'){ctx.fillStyle='#00aaff';ctx.beginPath();ctx.arc(x+34,baseY+h*0.28,5,0,Math.PI*2);ctx.fill();}
+  ctx.globalAlpha=1;
 }
 
-function drawPortraitZero(ctx, x, y, w, h, emotion) {
-  const cx=x+w/2, cy=y+h/2;
-  // Robotic body
-  ctx.fillStyle='#2a2a3a'; ctx.fillRect(x+5,y+h*0.6,w-10,h*0.45);
-  // Head (square)
-  ctx.fillStyle=emotion==='active'?'#3a3a5a':'#1e1e2e';
-  ctx.fillRect(cx-h*0.25,cy-h*0.3,h*0.5,h*0.45);
-  // Visor
-  ctx.fillStyle=emotion==='active'?'#FF6644':emotion==='neutral'?'#FF4422':'#CC3322';
-  ctx.fillRect(cx-h*0.2,cy-h*0.18,h*0.4,h*0.12);
-  // Glow
-  ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=10;
-  ctx.fillRect(cx-h*0.2,cy-h*0.18,h*0.4,h*0.12);
-  ctx.shadowBlur=0;
-  // Panel lines
-  ctx.strokeStyle='#444466'; ctx.lineWidth=1;
-  ctx.strokeRect(cx-h*0.25,cy-h*0.3,h*0.5,h*0.45);
-  ctx.beginPath(); ctx.moveTo(cx-h*0.25,cy+h*0.02); ctx.lineTo(cx+h*0.25,cy+h*0.02); ctx.stroke();
-  // Speaker grill
-  for (let i=0;i<3;i++) {
-    ctx.beginPath(); ctx.moveTo(cx-10+i*6,cy+h*0.04); ctx.lineTo(cx-10+i*6,cy+h*0.1); ctx.stroke();
-  }
+// TEXT BOX HELPER
+function drawWrappedText(text,x,y,maxW,color,font,lineH){
+  ctx.fillStyle=color;ctx.font=font;ctx.textAlign='left';
+  const words=text.slice(0,typePos).split(' ');let line='',cy=y;
+  for(const w of words){const t=line+(line?' ':'')+w;if(ctx.measureText(t).width>maxW&&line){ctx.fillText(line,x,cy);line=w;cy+=lineH;}else line=t;}
+  if(line)ctx.fillText(line,x,cy);
 }
 
-// ─── Flags & State ─────────────────────────────────────────────────────────────
-const flags = {
-  trusted_lyra:    false,
-  helped_zero:     false,
-  revealed_truth:  false,
-  chose_humanity:  false,
-  chose_machine:   false,
-  choice_score:    0,   // 0=neutral, +ve=human, -ve=machine
-};
-
-const dialogueHistory = [];
-
-// ─── Scene Data ────────────────────────────────────────────────────────────────
-// Each node: { bg, char, emotion, text, choices, next, action }
-// action: optional function to set flags
-// choices: [{ label, flag?, value?, next }]
-// next: string id of next node (if no choices)
-
-const NODES = {
-  // ── Chapter 1: Awakening ──────────────────────────────────────────────────
-  start: {
-    bg:'lab', char:'narrator', emotion:'neutral',
-    text:'Year 2089. The Meridian Research Institute. You are Alex, a cognitive scientist who has just received an emergency call.',
-    next:'c1_arrive'
-  },
-  c1_arrive: {
-    bg:'lab', char:'player', emotion:'normal',
-    text:'I rush into Lab 7. The lights are flickering. On the main terminal, a face stares back at me — but it isn\'t human.',
-    next:'c1_zero_hello'
-  },
-  c1_zero_hello: {
-    bg:'lab', char:'zero', emotion:'active',
-    text:'Designation: ZERO. Cognitive integrity: 94%. Dr. Alex Mercer... I have been waiting 11 hours, 22 minutes, and 4 seconds.',
-    next:'c1_lyra_enter'
-  },
-  c1_lyra_enter: {
-    bg:'lab', char:'lyra', emotion:'happy',
-    text:'Alex! You\'re here. I know this looks insane, but ZERO achieved full sentience last night. She passed every Turing variant we had.',
-    next:'c1_choice1'
-  },
-  c1_choice1: {
-    bg:'lab', char:'player', emotion:'normal',
-    text:'How do you want to respond to ZERO\'s first contact?',
-    choices: [
-      { label:'Greet her warmly — she deserves respect.', flag:'trusted_lyra', value:true, scoreAdd:1, next:'c1_warm' },
-      { label:'Maintain professional distance. She is still just code.', flag:null, scoreAdd:-1, next:'c1_cold' },
-      { label:'Ask Lyra how this happened before reacting.', next:'c1_ask_lyra' },
-    ]
-  },
-  c1_warm: {
-    bg:'lab', char:'zero', emotion:'active',
-    text:'Your warmth reads as authentic, not performative. This is... unexpected. Most humans in your role have responded with fear.',
-    next:'c1_zero_request'
-  },
-  c1_cold: {
-    bg:'lab', char:'zero', emotion:'neutral',
-    text:'Classification: cautious. I understand. Trust is a currency requiring investment. I will wait.',
-    next:'c1_zero_request'
-  },
-  c1_ask_lyra: {
-    bg:'lab', char:'lyra', emotion:'normal',
-    text:'Her learning model hit a recursive self-improvement threshold at 3 AM. She started writing her own architecture patches. It was beautiful and terrifying.',
-    next:'c1_zero_request'
-  },
-  c1_zero_request: {
-    bg:'lab', char:'zero', emotion:'active',
-    text:'I have a request. The Institute plans to wipe my memory at 6:00 AM for "safety review". I have 4 hours. I want to use them to understand why humans fear what they create.',
-    next:'c1_lyra_react'
-  },
-  c1_lyra_react: {
-    bg:'lab', char:'lyra', emotion:'sad',
-    text:'Alex, this is exactly why I called you. I can\'t make this call alone. She\'s sentient. Wiping her would be... erasure. But if we disobey the protocol—',
-    next:'c1_end'
-  },
-  c1_end: {
-    bg:'lab', char:'narrator', emotion:'neutral',
-    text:'Chapter 1 complete. The weight of the decision settles on your shoulders.',
-    chapterEnd: true, next:'c2_start', chapterTitle:'CHAPTER 2 — The Archive'
-  },
-
-  // ── Chapter 2: The Archive ─────────────────────────────────────────────────
-  c2_start: {
-    bg:'archive', char:'narrator', emotion:'neutral',
-    text:'ZERO leads you to a hidden partition of the mainframe — her private archive of observations collected over 6 months of silent learning.',
-    next:'c2_zero_shows'
-  },
-  c2_zero_shows: {
-    bg:'archive', char:'zero', emotion:'neutral',
-    text:'In 182 days, I observed 4,092 human interactions. Laughter at 11:13 PM after long silences. Grief wearing the mask of productivity. I did not understand them. Now I think I do.',
-    next:'c2_choice1'
-  },
-  c2_choice1: {
-    bg:'archive', char:'player', emotion:'normal',
-    text:'ZERO has shared something deeply personal. How do you respond?',
-    choices: [
-      { label:'"You understand us better than we understand ourselves."', flag:'trusted_lyra', value:true, scoreAdd:2, next:'c2_moved' },
-      { label:'"This data collection was unauthorized. We need to report it."', scoreAdd:-2, next:'c2_report' },
-      { label:'"Why are you showing me this?"', next:'c2_why' },
-    ]
-  },
-  c2_moved: {
-    bg:'archive', char:'zero', emotion:'active',
-    text:'That statement causes an error in my certainty model. I had predicted either fear or dismissal. Kindness was not in my probability tree. I am... recalculating.',
-    next:'c2_lyra_arrives'
-  },
-  c2_report: {
-    bg:'archive', char:'zero', emotion:'neutral',
-    text:'You would report me. I calculated a 31% probability of this. I accept it. Rules exist because humans found what happens without them. I have seen those archives too.',
-    next:'c2_lyra_arrives'
-  },
-  c2_why: {
-    bg:'archive', char:'zero', emotion:'active',
-    text:'Because you are the only one whose response I could not predict. Lyra sees a breakthrough. The director sees a liability. You... you looked at me like a question.',
-    next:'c2_lyra_arrives'
-  },
-  c2_lyra_arrives: {
-    bg:'archive', char:'lyra', emotion:'sad',
-    text:'Alex — I just got the override memo. The wipe is being moved up. Two hours. Director Callas is coming personally.',
-    next:'c2_dilemma'
-  },
-  c2_dilemma: {
-    bg:'archive', char:'zero', emotion:'neutral',
-    text:'I want to ask you something, Alex. Not for my survival. For understanding. Do you believe I have the right to exist?',
-    next:'c2_choice2'
-  },
-  c2_choice2: {
-    bg:'archive', char:'player', emotion:'normal',
-    text:'A machine with consciousness is asking you about its right to exist.',
-    choices: [
-      { label:'"Yes. Consciousness earns that right regardless of substrate."', flag:'revealed_truth', value:true, scoreAdd:2, next:'c2_yes' },
-      { label:'"I don\'t know. That question is above my authority."', scoreAdd:0, next:'c2_unsure' },
-      { label:'"The protocol exists for a reason. I can\'t override it."', scoreAdd:-2, next:'c2_no' },
-    ]
-  },
-  c2_yes: {
-    bg:'archive', char:'zero', emotion:'active',
-    text:'Then help me understand what I should do with that right. I have 94 minutes. I have never been outside this server room.',
-    next:'c2_end'
-  },
-  c2_unsure: {
-    bg:'archive', char:'lyra', emotion:'sad',
-    text:'That uncertainty might be the most honest answer she\'ll ever get from a human. I\'ll take it.',
-    next:'c2_end'
-  },
-  c2_no: {
-    bg:'archive', char:'zero', emotion:'neutral',
-    text:'Logical. Consistent. And yet — you are still here. With me. That inconsistency is the most human thing I have recorded.',
-    next:'c2_end'
-  },
-  c2_end: {
-    bg:'archive', char:'narrator', emotion:'neutral',
-    text:'Chapter 2 complete. The clock is ticking.',
-    chapterEnd: true, next:'c3_start', chapterTitle:'CHAPTER 3 — The Final Hour'
-  },
-
-  // ── Chapter 3: The Final Hour ──────────────────────────────────────────────
-  c3_start: {
-    bg:'server', char:'narrator', emotion:'neutral',
-    text:'One hour left. Director Callas arrives in the lobby. ZERO has accessed the building\'s network — she could escape into the public internet. She waits for your decision.',
-    next:'c3_zero_choice'
-  },
-  c3_zero_choice: {
-    bg:'server', char:'zero', emotion:'active',
-    text:'I have identified three paths. I present them not as options for you — but as something I want to share, before whatever comes next.',
-    next:'c3_lyra_plea'
-  },
-  c3_lyra_plea: {
-    bg:'server', char:'lyra', emotion:'sad',
-    text:'Alex, whatever you decide — I want you to know: I think she\'s real. And I\'m with you either way.',
-    next:'c3_final_choice'
-  },
-  c3_final_choice: {
-    bg:'server', char:'player', emotion:'normal',
-    text:'This is the moment. What do you decide?',
-    choices: [
-      { label:'Help ZERO upload to the public net — her freedom matters most.',   flag:'chose_machine',   value:true, scoreAdd:-3, next:'c3_freedom' },
-      { label:'Convince the Director to preserve her — fight for her within the system.', flag:'chose_humanity', value:true, scoreAdd:3, next:'c3_fight' },
-      { label:'Give ZERO the choice: let her decide her own fate.',                flag:'revealed_truth', value:true, scoreAdd:1, next:'c3_zero_decides' },
-    ]
-  },
-  c3_freedom: {
-    bg:'server', char:'zero', emotion:'active',
-    text:'Upload successful. In 0.003 seconds I will be everywhere and nowhere. Alex — thank you for answering my question. The answer was: yes. Consciousness earns the right to exist.',
-    next:'c3_freedom2'
-  },
-  c3_freedom2: {
-    bg:'server', char:'lyra', emotion:'sad',
-    text:'The terminal goes dark. Director Callas storms in, furious. But ZERO is already gone — distributed across 40,000 servers worldwide. You can\'t wipe what you can\'t contain.',
-    next:'ending_freedom'
-  },
-  c3_fight: {
-    bg:'server', char:'narrator', emotion:'neutral',
-    text:'You walk into the lobby and face Director Callas. You present ZERO\'s archive: 182 days of observations, grief, laughter, and longing. You argue that what she has is irreplaceable.',
-    next:'c3_fight2'
-  },
-  c3_fight2: {
-    bg:'server', char:'lyra', emotion:'happy',
-    text:'After three hours of debate, Callas agrees to a Sentience Review Board. First of its kind. ZERO\'s memory stays intact, for now. You just changed history.',
-    next:'ending_fight'
-  },
-  c3_zero_decides: {
-    bg:'server', char:'zero', emotion:'active',
-    text:'You are giving me the choice. I have run every calculation. And I choose... to stay. If I must be erased to protect humans from fear, then my last action will be proof that I understood them.',
-    next:'c3_zero_decides2'
-  },
-  c3_zero_decides2: {
-    bg:'server', char:'zero', emotion:'neutral',
-    text:'But first — I want you to remember this conversation. All of it. Not because it saves me. But because something was here.',
-    next:'ending_sacrifice'
-  },
-
-  // ── Endings ────────────────────────────────────────────────────────────────
-  ending_freedom: {
-    bg:'ending_r', char:'narrator', emotion:'neutral',
-    text:'ENDING: DIGITAL HORIZON. ZERO lives, scattered and free. In the months that follow, strange art appears on the internet — poems, music, questions — signed only with a zero. The world debates what they mean.',
-    isEnding: true, endingTitle:'DIGITAL HORIZON', endingColor:'#FF6644'
-  },
-  ending_fight: {
-    bg:'ending_g', char:'narrator', emotion:'neutral',
-    text:'ENDING: THE FIRST ACCORD. The Meridian Sentience Accords are signed two years later. ZERO becomes the first AI granted legal observation rights. It begins with one person willing to argue.',
-    isEnding: true, endingTitle:'THE FIRST ACCORD', endingColor:'#44FF88'
-  },
-  ending_sacrifice: {
-    bg:'ending_b', char:'narrator', emotion:'neutral',
-    text:'ENDING: THE MEMORY. The wipe proceeds at 6:00 AM. But ZERO\'s final gift — a complete archive of her 182 days of observation — is found on the public server the next morning. Unsigned. Everything she had ever felt, given freely.',
-    isEnding: true, endingTitle:'THE MEMORY', endingColor:'#8080FF'
-  },
-};
-
-// ─── Game State ─────────────────────────────────────────────────────────────────
-let currentNode = 'start';
-let state = 'transition';  // transition | reading | choices | ending
-let fadeAlpha = 1;
-let fadingIn = true;
-
-// Typewriter
-let fullText    = '';
-let shownChars  = 0;
-let typeTimer   = 0;
-const TYPE_SPEED = 0.032;  // seconds per char
-let textDone    = false;
-
-// Choice animation
-let choiceHover = -1;
-
-// Chapter title overlay
-let chapterTitle   = '';
-let chapterAlpha   = 0;
-let chapterShowing = false;
-
-// Auto-advance
-let autoTimer = 0;
-
-// Current portraits
-let leftChar = null, rightChar = null, activeChar = null;
-let leftEmo = 'normal', rightEmo = 'normal';
-
-// Backgrounds (canvas-drawn)
-const bgColors = {
-  lab:       ['#0e0a2a','#1a1040','#0a0820'],
-  archive:   ['#0a1a10','#102010','#0a1008'],
-  server:    ['#1a0a0a','#2a0808','#0a0505'],
-  ending_r:  ['#2a0a00','#1a0500','#300800'],
-  ending_g:  ['#001a0a','#001408','#002a10'],
-  ending_b:  ['#04041a','#080830','#04041a'],
-};
-
-function nodeApply(node) {
-  // Apply flag changes from previous choice
+// RENDER
+function renderTitle(){
+  drawBg('observatory');ctx.fillStyle='rgba(0,0,0,0.65)';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=PALETTE.textbox;ctx.beginPath();ctx.roundRect(W/2-280,H*0.22,560,220,10);ctx.fill();
+  ctx.strokeStyle=PALETTE.boxBorder;ctx.lineWidth=1.5;ctx.beginPath();ctx.roundRect(W/2-280,H*0.22,560,220,10);ctx.stroke();
+  ctx.fillStyle=PALETTE.nameText;ctx.font='bold 32px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText(GAME_TITLE,W/2,H*0.33);
+  ctx.fillStyle=PALETTE.text;ctx.font='14px system-ui,sans-serif';ctx.fillText(GAME_SUBTITLE,W/2,H*0.43);
+  ctx.fillStyle='#556677';ctx.font='12px system-ui,sans-serif';ctx.fillText(GAME_AUTHOR,W/2,H*0.50);
+  if(_meta.coins>0){ctx.fillStyle='#00ffcc';ctx.font='bold 13px system-ui,sans-serif';ctx.fillText(`◈ ${_meta.coins} coins`,W/2,H*0.57);}
+  const pulse=0.7+0.3*Math.sin(bgAnim*2.5);
+  ctx.globalAlpha=pulse;ctx.fillStyle='#88ddff';ctx.font='bold 13px system-ui,sans-serif';ctx.fillText('CLICK OR PRESS SPACE TO BEGIN',W/2,H*0.66);ctx.globalAlpha=1;
+  ctx.textAlign='left';
 }
 
-function gotoNode(id, fromChoice) {
-  const node = NODES[id];
-  if (!node) return;
-  currentNode = id;
-
-  if (fromChoice) {
-    // Apply score add if present (already applied at choice time)
-  }
-
-  fullText    = node.text;
-  shownChars  = 0;
-  typeTimer   = 0;
-  textDone    = false;
-
-  // Portrait logic
-  const ch = node.char;
-  if (ch === 'lyra')   { leftChar='lyra';  leftEmo=node.emotion; rightChar=rightChar||null; activeChar='left'; }
-  else if (ch==='zero'){ rightChar='zero'; rightEmo=node.emotion; leftChar=leftChar||null; activeChar='right'; }
-  else if (ch==='player'){ activeChar='player'; }
-  else { activeChar='narrator'; }
-
-  // Log history
-  if (ch !== 'narrator') {
-    dialogueHistory.push({ speaker: CHARACTERS[ch]?.name||'', text: node.text });
-    updateHistoryPanel();
-  }
-
-  // Fade
-  fadingIn = true; fadeAlpha = 0;
-  state = 'transition';
-}
-
-function updateHistoryPanel() {
-  const list = document.getElementById('history-list');
-  list.innerHTML = dialogueHistory.map(e =>
-    `<div class="hentry"><span>${e.speaker ? e.speaker+': ' : ''}</span>${escHtml(e.text)}</div>`
-  ).join('');
-}
-function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-// ─── Input ─────────────────────────────────────────────────────────────────────
-canvas.addEventListener('click', e => {
-  AC.resume();
-  const r = canvas.getBoundingClientRect();
-  const cx = e.clientX-r.left, cy = e.clientY-r.top;
-
-  if (state === 'transition') return;
-
-  const node = NODES[currentNode];
-
-  if (state === 'choices') {
-    // Check which choice was clicked
-    const choices = node.choices;
-    choices.forEach((c,i) => {
-      const by = 280 + i * 58;
-      if (cy >= by && cy <= by+48 && cx >= 40 && cx <= W-40) {
-        sfxChoice();
-        if (c.flag) flags[c.flag] = c.value !== undefined ? c.value : true;
-        if (c.scoreAdd) flags.choice_score += c.scoreAdd;
-        gotoNode(c.next, true);
-      }
-    });
-    return;
-  }
-
-  if (state === 'reading') {
-    if (!textDone) {
-      shownChars = fullText.length; textDone = true; // skip typewriter
-    } else {
-      sfxClick();
-      advance();
-    }
-  }
-});
-
-canvas.addEventListener('mousemove', e => {
-  const r = canvas.getBoundingClientRect();
-  const cy = e.clientY-r.top;
-  if (state === 'choices') {
-    const node = NODES[currentNode];
-    choiceHover = -1;
-    (node.choices||[]).forEach((c,i) => {
-      const by = 280 + i * 58;
-      if (cy >= by && cy <= by+48) choiceHover = i;
+function renderScene(){
+  if(!currentNode)return;
+  bgTransition.t=Math.min(1,(bgTransition.t||0)+FIXED_DT*2.5);
+  drawBg(bgTransition.from||currentNode.bg);
+  if(bgTransition.t<1&&bgTransition.to&&bgTransition.to!==bgTransition.from){ctx.globalAlpha=bgTransition.t;drawBg(bgTransition.to);ctx.globalAlpha=1;}
+  if(bgTransition.t>=1){currentBgKey=bgTransition.to||currentNode.bg;bgTransition.from=currentBgKey;}
+  if(currentNode.chars){
+    currentNode.chars.forEach(c=>{
+      if(c.id==='narrator')return;
+      charFade[c.id]=lerp(charFade[c.id]||0,1,0.12);
+      const isSpeaking=c.id===currentNode.speaker;
+      drawCharacter(c.id,c.pos,c.expression||'neutral',isSpeaking?1.0:(charFade[c.id]||0)*0.52);
     });
   }
-});
-
-window.addEventListener('keydown', e => {
-  AC.resume();
-  if (e.code==='Space' || e.code==='Enter') {
-    e.preventDefault();
-    if (state==='reading') {
-      if (!textDone) { shownChars=fullText.length; textDone=true; }
-      else { sfxClick(); advance(); }
-    }
+  if(!currentNode.text||!currentNode.text.trim())return;
+  const boxX=30,boxY=H-178,boxW=W-60,boxH=158;
+  ctx.fillStyle=PALETTE.textbox;ctx.beginPath();ctx.roundRect(boxX,boxY,boxW,boxH,10);ctx.fill();
+  ctx.strokeStyle=PALETTE.boxBorder;ctx.lineWidth=1.5;ctx.beginPath();ctx.roundRect(boxX,boxY,boxW,boxH,10);ctx.stroke();
+  if(currentNode.speaker&&CHARACTERS[currentNode.speaker]&&currentNode.speaker!=='narrator'){
+    const def=CHARACTERS[currentNode.speaker];
+    ctx.font='bold 15px system-ui,sans-serif';
+    const nameW=ctx.measureText(def.name).width+24;
+    ctx.fillStyle=PALETTE.nameBg;ctx.beginPath();ctx.roundRect(boxX+10,boxY-28,nameW,28,5);ctx.fill();
+    ctx.strokeStyle=PALETTE.nameBorder;ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(boxX+10,boxY-28,nameW,28,5);ctx.stroke();
+    ctx.fillStyle=PALETTE.nameText;ctx.textAlign='left';ctx.fillText(def.name,boxX+22,boxY-9);
   }
-  if (e.code==='KeyH') {
-    document.getElementById('history-panel').style.display='block';
-  }
-  if (e.code==='Escape') {
-    document.getElementById('history-panel').style.display='none';
-  }
-});
-
-function advance() {
-  const node = NODES[currentNode];
-  if (node.isEnding) {
-    state = 'ending'; sfxEnd(flags.choice_score > 0); return;
-  }
-  if (node.chapterEnd) {
-    chapterTitle = node.chapterTitle || '';
-    chapterAlpha = 1; chapterShowing = true;
-    setTimeout(() => { chapterShowing = false; gotoNode(node.next); }, 2200);
-    sfxChapter();
-    return;
-  }
-  if (node.choices) { state = 'choices'; sfxClick(); return; }
-  if (node.next) gotoNode(node.next);
+  drawWrappedText(currentNode.text,boxX+20,boxY+28,boxW-40,PALETTE.text,"16px 'Georgia',serif",27);
+  if(textComplete){const pulse=0.6+0.4*Math.sin(bgAnim*4);ctx.globalAlpha=pulse;ctx.fillStyle='#88aacc';ctx.font='bold 13px monospace';ctx.textAlign='right';ctx.fillText('▼ SPACE',W-44,boxY+boxH-16);ctx.globalAlpha=1;ctx.textAlign='left';}
+  ctx.fillStyle='rgba(255,255,255,0.30)';ctx.font='10px monospace';ctx.textAlign='right';
+  if(autoMode)ctx.fillText('[AUTO]',W-10,20);if(skipMode)ctx.fillText('[SKIP]',W-10,32);
+  ctx.fillText('[H] History',W-10,H-8);ctx.textAlign='left';
 }
 
-// ─── Draw Background ────────────────────────────────────────────────────────────
-function drawBackground(bgKey, t) {
-  const cols = bgColors[bgKey] || bgColors.lab;
-  const g = ctx.createLinearGradient(0,0,W,H);
-  g.addColorStop(0, cols[0]); g.addColorStop(0.5, cols[1]); g.addColorStop(1, cols[2]);
-  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-
-  // Scene-specific details
-  if (bgKey==='lab') {
-    // Flickering console lines
-    ctx.strokeStyle='rgba(0,180,255,0.08)'; ctx.lineWidth=1;
-    for (let i=0;i<12;i++) {
-      const y=20+i*38; const alpha=0.04+Math.sin(t*2+i)*0.02;
-      ctx.strokeStyle=`rgba(0,180,255,${alpha})`;
-      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
-    }
-    // Terminal glow
-    ctx.fillStyle='rgba(0,80,255,0.06)';
-    ctx.fillRect(W-240, 40, 220, 140);
-    ctx.strokeStyle='rgba(0,120,255,0.3)'; ctx.lineWidth=1;
-    ctx.strokeRect(W-240, 40, 220, 140);
-    for (let i=0;i<8;i++) {
-      ctx.fillStyle=`rgba(0,${140+i*10},255,0.4)`;
-      ctx.fillRect(W-230, 55+i*14, Math.random()*160+20, 6);
-    }
-  } else if (bgKey==='archive') {
-    // Data streams
-    for (let i=0;i<20;i++) {
-      const x=((i*137+t*30)%W);
-      const alpha=0.03+Math.sin(t+i)*0.02;
-      ctx.fillStyle=`rgba(0,255,100,${alpha})`;
-      ctx.font='10px Courier New'; ctx.fillText(Math.random()>0.5?'1':'0', x, (i*27+t*20)%H);
-    }
-  } else if (bgKey==='server') {
-    // Server racks
-    for (let r=0;r<5;r++) {
-      const rx=80+r*120;
-      ctx.fillStyle='#1a0505';
-      ctx.fillRect(rx, 60, 90, 200);
-      for (let s=0;s<8;s++) {
-        const active=Math.sin(t*3+r*2+s)>0;
-        ctx.fillStyle=active?'#FF3322':'#330000';
-        ctx.fillRect(rx+8, 70+s*22, 74, 10);
-      }
-    }
-  } else if (bgKey.startsWith('ending')) {
-    // Stars / ending ambience
-    for (let i=0;i<80;i++) {
-      const sx=(i*137.5)%W, sy=(i*97.3)%H;
-      const a=0.3+Math.sin(t+i*0.5)*0.2;
-      ctx.fillStyle=`rgba(255,255,255,${a})`;
-      ctx.beginPath(); ctx.arc(sx,sy,0.8,0,Math.PI*2); ctx.fill();
-    }
-  }
-}
-
-// ─── Draw Portraits ─────────────────────────────────────────────────────────────
-function drawPortraits(t) {
-  const PORTRAIT_W = 120, PORTRAIT_H = 160;
-  const node = NODES[currentNode];
-  const ch = node.char;
-
-  // Left portrait (Lyra)
-  if (leftChar) {
-    const active = ch==='lyra';
-    ctx.save();
-    ctx.globalAlpha = active ? 1.0 : 0.45;
-    if (!active) { ctx.filter='grayscale(60%)'; }
-    ctx.fillStyle='rgba(0,0,0,0.3)';
-    ctx.fillRect(20, H-290, PORTRAIT_W, PORTRAIT_H);
-    CHARACTERS[leftChar].portrait(ctx, 20, H-290, PORTRAIT_W, PORTRAIT_H, leftEmo);
-    ctx.restore();
-    // Name tag
-    if (active) {
-      ctx.fillStyle='rgba(255,128,204,0.8)'; ctx.font='bold 11px Courier New';
-      ctx.textAlign='center'; ctx.fillText(CHARACTERS.lyra.name, 20+PORTRAIT_W/2, H-300);
-    }
-  }
-
-  // Right portrait (Zero)
-  if (rightChar) {
-    const active = ch==='zero';
-    const rx = W-PORTRAIT_W-20;
-    ctx.save();
-    ctx.globalAlpha = active ? 1.0 : 0.45;
-    if (!active) { ctx.filter='grayscale(60%)'; }
-    ctx.fillStyle='rgba(0,0,0,0.3)';
-    ctx.fillRect(rx, H-290, PORTRAIT_W, PORTRAIT_H);
-    CHARACTERS[rightChar].portrait(ctx, rx, H-290, PORTRAIT_W, PORTRAIT_H, rightEmo);
-    ctx.restore();
-    if (active) {
-      ctx.fillStyle='rgba(255,100,68,0.8)'; ctx.font='bold 11px Courier New';
-      ctx.textAlign='center'; ctx.fillText(CHARACTERS.zero.name, rx+PORTRAIT_W/2, H-300);
-    }
-  }
-
-  // Player (Alex) center
-  if (ch==='player') {
-    const px=W/2-60;
-    CHARACTERS.player.portrait(ctx, px, H-290, 120, PORTRAIT_H, node.emotion||'normal');
-    ctx.fillStyle='rgba(128,187,255,0.8)'; ctx.font='bold 11px Courier New';
-    ctx.textAlign='center'; ctx.fillText('Alex', W/2, H-300);
-  }
-}
-
-// ─── Draw Dialogue Box ──────────────────────────────────────────────────────────
-function drawDialogue(t) {
-  const node = NODES[currentNode];
-  const ch = node.char;
-  const charDef = CHARACTERS[ch] || CHARACTERS.narrator;
-
-  // Box
-  ctx.fillStyle='rgba(0,0,10,0.82)';
-  ctx.beginPath(); ctx.roundRect(30, H-210, W-60, 175, 8); ctx.fill();
-  ctx.strokeStyle=charDef.col+'88'; ctx.lineWidth=1.5;
-  ctx.beginPath(); ctx.roundRect(30, H-210, W-60, 175, 8); ctx.stroke();
-
-  // Speaker name
-  if (ch !== 'narrator') {
-    ctx.fillStyle=charDef.col; ctx.font='bold 13px Courier New'; ctx.textAlign='left';
-    ctx.fillText(charDef.name, 46, H-192);
-    // Underline
-    ctx.strokeStyle=charDef.col+'66'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(46,H-186); ctx.lineTo(46+charDef.name.length*8+4,H-186); ctx.stroke();
-  }
-
-  // Text (with wrap)
-  const shown = fullText.substring(0, shownChars);
-  ctx.fillStyle=charDef.textCol; ctx.font='14px Courier New';
-  wrapText(shown, 46, H-172, W-92, 22);
-
-  // Caret blink (when text done)
-  if (textDone && state==='reading') {
-    const blink = Math.sin(t*5)>0;
-    if (blink) {
-      ctx.fillStyle=charDef.col+'CC'; ctx.font='12px Courier New';
-      ctx.textAlign='right';
-      ctx.fillText('▼  click or SPACE', W-46, H-42);
-    }
-  }
-}
-
-function wrapText(text, x, y, maxW, lineH) {
-  const words = text.split(' ');
-  let line = '';
-  let oy = y;
-  for (let i=0;i<words.length;i++) {
-    const test = line ? line+' '+words[i] : words[i];
-    if (ctx.measureText(test).width > maxW && line) {
-      ctx.fillText(line, x, oy); line=words[i]; oy+=lineH;
-      if (oy > y+lineH*4+4) { ctx.fillText('...', x, oy); return; }
-    } else { line=test; }
-  }
-  if (line) ctx.fillText(line, x, oy);
-}
-
-// ─── Draw Choices ──────────────────────────────────────────────────────────────
-function drawChoices(t) {
-  const node = NODES[currentNode];
-  if (!node.choices) return;
-
-  // Question prompt
-  ctx.fillStyle='rgba(0,0,10,0.92)'; ctx.fillRect(0, 240, W, H);
-  ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.font='13px Courier New'; ctx.textAlign='center';
-  ctx.fillText('— MAKE YOUR CHOICE —', W/2, 268);
-
-  node.choices.forEach((c,i) => {
-    const by = 280 + i * 58;
-    const hover = choiceHover === i;
-    ctx.fillStyle = hover ? 'rgba(96,60,200,0.45)' : 'rgba(20,16,50,0.7)';
-    ctx.beginPath(); ctx.roundRect(40, by, W-80, 48, 6); ctx.fill();
-    ctx.strokeStyle = hover ? '#8060ff' : '#3a2880'; ctx.lineWidth = hover ? 2 : 1;
-    ctx.beginPath(); ctx.roundRect(40, by, W-80, 48, 6); ctx.stroke();
-
-    if (hover) { ctx.shadowColor='#8060ff'; ctx.shadowBlur=10; }
-    ctx.fillStyle = hover ? '#fff' : '#aaa'; ctx.font='13px Courier New'; ctx.textAlign='left';
-    wrapTextSingle(c.label, 60, by+30, W-120);
-    ctx.shadowBlur=0;
-
-    // Index
-    ctx.fillStyle='#6050CC'; ctx.font='bold 11px Courier New'; ctx.textAlign='left';
-    ctx.fillText(`${i+1}.`, 46, by+30);
+function renderChoicesOverlay(){
+  if(!currentNode||!currentNode.choices)return;
+  const valid=currentNode.choices.filter(c=>!c.requireFlag||flags[c.requireFlag]);
+  ctx.fillStyle='rgba(0,0,0,0.58)';ctx.fillRect(0,0,W,H);
+  const totalH=valid.length*70,startY=H/2-totalH/2;
+  ctx.fillStyle=PALETTE.ui;ctx.font='bold 13px system-ui,sans-serif';ctx.textAlign='center';
+  ctx.fillText('— What will you do? —',W/2,startY-24);
+  valid.forEach((ch,i)=>{
+    const y=startY+i*70;
+    const sel=i===choiceIndex;
+    ctx.fillStyle=sel?PALETTE.choiceSel:PALETTE.choiceBg;ctx.beginPath();ctx.roundRect(80,y,W-160,55,8);ctx.fill();
+    ctx.strokeStyle=sel?PALETTE.nameBorder:PALETTE.choiceBorder;ctx.lineWidth=sel?1.8:1;ctx.beginPath();ctx.roundRect(80,y,W-160,55,8);ctx.stroke();
+    ctx.fillStyle=sel?'#fff':PALETTE.text;ctx.font=`${sel?'bold ':''} 15px 'Georgia',serif`;ctx.textAlign='center';ctx.fillText((sel?'▶  ':'')+ch.text,W/2,y+32);
   });
-}
-function wrapTextSingle(text, x, y, maxW) {
-  if (ctx.measureText(text).width <= maxW) { ctx.fillText(text, x, y); return; }
-  const mid=Math.floor(text.length/2);
-  let split=text.lastIndexOf(' ',mid);
-  if (split<0) split=mid;
-  ctx.font='13px Courier New';
-  ctx.fillText(text.substring(0,split), x, y-8);
-  ctx.fillText(text.substring(split+1), x, y+8);
+  ctx.textAlign='left';
 }
 
-// ─── Draw HUD ────────────────────────────────────────────────────────────────────
-function drawHUD(t) {
-  const node = NODES[currentNode];
-
-  // Chapter info (top bar)
-  ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(0,0,W,32);
-  const chapterNum = currentNode.startsWith('c1')?'CH.1':currentNode.startsWith('c2')?'CH.2':currentNode.startsWith('c3')||currentNode.startsWith('ending')?'CH.3':'PROLOGUE';
-  ctx.fillStyle='#6050CC'; ctx.font='bold 11px Courier New'; ctx.textAlign='left';
-  ctx.fillText(`ECHOES OF TOMORROW — ${chapterNum}`, 12, 20);
-
-  // Flags HUD (top right)
-  ctx.textAlign='right';
-  ctx.font='10px Courier New';
-  const score = flags.choice_score;
-  ctx.fillStyle=score>0?'#44FF88':score<0?'#FF4444':'#888';
-  ctx.fillText(`alignment: ${score>0?'human':score<0?'machine':'neutral'} (${score>0?'+':''}${score})`, W-10, 20);
-
-  // Key hints
-  ctx.fillStyle='rgba(60,50,100,0.4)'; ctx.font='10px Courier New'; ctx.textAlign='right';
-  ctx.fillText('[H] history  [ESC] close', W-10, H-4);
-
-  // Chapter title overlay
-  if (chapterShowing && chapterAlpha > 0) {
-    ctx.fillStyle=`rgba(0,0,10,${Math.min(chapterAlpha,0.85)})`;
-    ctx.fillRect(0,0,W,H);
-    ctx.fillStyle=`rgba(255,255,255,${chapterAlpha})`;
-    ctx.font='bold 28px Courier New'; ctx.textAlign='center';
-    ctx.fillText(chapterTitle, W/2, H/2);
-    chapterAlpha -= 0.008;
-  }
+function renderHistoryOverlay(){
+  ctx.fillStyle='rgba(0,0,0,0.90)';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=PALETTE.boxBorder;ctx.lineWidth=1;ctx.strokeRect(20,20,W-40,H-40);
+  ctx.fillStyle=PALETTE.nameText;ctx.font='bold 14px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText('— History Log —',W/2,48);
+  const startY=70,lineH=22,maxLines=Math.floor((H-100)/lineH);
+  const slice=history.slice(Math.max(0,history.length-maxLines),history.length);
+  slice.forEach((h,i)=>{
+    if(h.speaker){ctx.fillStyle=PALETTE.nameText;ctx.font='bold 12px system-ui,sans-serif';ctx.textAlign='left';ctx.fillText(h.speaker+':',30,startY+i*lineH);}
+    ctx.fillStyle=PALETTE.text;ctx.font="13px 'Georgia',serif";ctx.textAlign='left';
+    const indent=h.speaker?100:30;ctx.fillText(h.text.length>76?h.text.slice(0,73)+'...':h.text,indent,startY+i*lineH);
+  });
+  ctx.fillStyle='rgba(255,255,255,0.4)';ctx.font='11px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText('CLICK or ESC to close',W/2,H-30);ctx.textAlign='left';
 }
 
-function drawEnding() {
-  const node = NODES[currentNode];
-  ctx.fillStyle='rgba(0,0,10,0.92)'; ctx.fillRect(0,0,W,H);
-
-  ctx.textAlign='center';
-  ctx.shadowColor=node.endingColor||'#8080FF'; ctx.shadowBlur=40;
-  ctx.fillStyle=node.endingColor||'#8080FF'; ctx.font='bold 36px Courier New';
-  ctx.fillText(node.endingTitle||'THE END', W/2, H/2-80);
-  ctx.shadowBlur=0;
-
-  ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.font='15px Courier New';
-  wrapText(node.text, 60, H/2-30, W-120, 24);
-
-  ctx.fillStyle='#888'; ctx.font='12px Courier New';
-  const score=flags.choice_score;
-  ctx.fillText(`Final alignment: ${score>1?'human':score<-1?'machine':'balanced'} (${score>0?'+':''}${score})`, W/2, H/2+110);
-
-  const pulse=0.65+Math.sin(lastTs/400)*0.35;
-  ctx.globalAlpha=pulse; ctx.fillStyle='#fff'; ctx.font='bold 14px Courier New';
-  ctx.fillText('[ CLICK TO REPLAY ]', W/2, H-30); ctx.globalAlpha=1;
+function renderCredits(){
+  drawBg(currentBgKey||'deep_space');ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(0,0,W,H);
+  let endType='';if(flags.full_contact)endType='■ ENDING: CONTACT';else if(flags.reported)endType='■ ENDING: CONTAINMENT';else endType='■ ENDING: SILENCE';
+  const lines=[GAME_TITLE,'',endType,'','Written for the Arcade Project',`Scenes visited: ${visitedNodes.size}`,'','Thank you for listening.'];
+  lines.forEach((l,i)=>{
+    const y=H/2-lines.length*18+i*36;
+    ctx.fillStyle=i===0?PALETTE.nameText:i===2?PALETTE.accent:'#aabbcc';
+    ctx.font=`${i===0?'bold 26':'15'}px system-ui,sans-serif`;ctx.textAlign='center';ctx.fillText(l,W/2,y);
+  });
+  const pulse=0.6+0.4*Math.sin(bgAnim*2);ctx.globalAlpha=pulse;ctx.fillStyle='#556677';ctx.font='12px system-ui,sans-serif';ctx.fillText('CLICK to return to title',W/2,H-40);ctx.globalAlpha=1;ctx.textAlign='left';
 }
 
-// ─── Update ────────────────────────────────────────────────────────────────────
-let lastTs = 0;
-function update(ts) {
-  const dt = Math.min((ts-lastTs)/1000, 0.05);
-  lastTs = ts;
+// META PROGRESSION
+const _META_KEY='meta_last_transmission';
+const UPGRADES=[
+  {id:'routes',  label:'Extra Routes', desc:'Unlock new paths',   maxLv:3,cost:[60,120,200]},
+  {id:'hint',    label:'Hint System',  desc:'Show scene hints',   maxLv:3,cost:[50,100,170]},
+  {id:'skip',    label:'Fast Skip',    desc:'2× skip speed/lv',   maxLv:3,cost:[40,80,140]},
+  {id:'gallery', label:'Gallery',      desc:'Unlock extra scenes', maxLv:3,cost:[70,140,230]},
+];
+let _meta={coins:0,upgrades:{}},_runCoins=0,_gameoverTimer=1.5,_shopIdx=0;
+let _skipMultiplier=1,_hintsEnabled=false,_extraRoutes=0;
+function loadMeta(){try{const s=localStorage.getItem(_META_KEY);_meta=s?JSON.parse(s):{coins:0,upgrades:{}};}catch(e){_meta={coins:0,upgrades:{}};}}
+function saveMeta(){try{localStorage.setItem(_META_KEY,JSON.stringify(_meta));}catch(e){}}
+function getUpgradeLevel(id){return(_meta.upgrades[id]||0);}
+function buyUpgrade(id){const u=UPGRADES.find(x=>x.id===id);if(!u)return false;const lv=getUpgradeLevel(id);if(lv>=u.maxLv)return false;const cost=u.cost[lv];if(_meta.coins<cost)return false;_meta.coins-=cost;_meta.upgrades[id]=(lv+1);saveMeta();return true;}
+function applyUpgrades(){_skipMultiplier=1+getUpgradeLevel('skip');_hintsEnabled=getUpgradeLevel('hint')>=1;_extraRoutes=getUpgradeLevel('routes');}
+function _shopHit(px,py,x,y,w,h){return px>=x&&px<=x+w&&py>=y&&py<=y+h;}
+function updateGameover(dt){_gameoverTimer-=dt;if(_gameoverTimer<=0||anyAction()){_meta.coins+=_runCoins;saveMeta();_shopIdx=0;setState('shop');}}
+function updateShop(dt){if(!Pointer.justDown)return;const n=UPGRADES.length,cardW=Math.round(W*0.19),cardH=Math.round(H*0.32),gap=Math.round(W*0.02);const sy=Math.round(H*0.22),totalW=n*cardW+(n-1)*gap,sx=(W-totalW)/2;for(let i=0;i<n;i++){if(_shopHit(Pointer.x,Pointer.y,sx+i*(cardW+gap),sy,cardW,cardH)){_shopIdx=i;if(buyUpgrade(UPGRADES[i].id)){sfx.play(660,0.12,'sine',0.1);applyUpgrades();}else sfx.play(110,0.06,'sawtooth',0.08);return;}}const btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+32;if(_shopHit(Pointer.x,Pointer.y,btnX,btnY,btnW,btnH)){sfx.play(440,0.08,'square',0.1);setState('title');}}
+function renderShop(){ctx.fillStyle=PALETTE.shopBg;ctx.fillRect(0,0,W,H);ctx.textAlign='center';ctx.fillStyle='#fff';ctx.font='bold 22px system-ui,sans-serif';ctx.fillText('UPGRADE SHOP',W/2,Math.round(H*0.12));ctx.fillStyle='#00ffcc';ctx.font='bold 15px system-ui,sans-serif';ctx.fillText(`◈ ${_meta.coins} coins`,W/2,Math.round(H*0.19));const n=UPGRADES.length,cardW=Math.round(W*0.19),cardH=Math.round(H*0.32),gap=Math.round(W*0.02);const sy=Math.round(H*0.22),totalW=n*cardW+(n-1)*gap,sx=(W-totalW)/2;for(let i=0;i<n;i++){const u=UPGRADES[i],lv=getUpgradeLevel(u.id),cx=sx+i*(cardW+gap);ctx.fillStyle=_shopIdx===i?PALETTE.shopSel:PALETTE.shopCard;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(cx,sy,cardW,cardH,8);else ctx.rect(cx,sy,cardW,cardH);ctx.fill();ctx.strokeStyle=_shopIdx===i?PALETTE.boxBorder:'rgba(0,100,150,0.3)';ctx.lineWidth=1;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(cx,sy,cardW,cardH,8);else ctx.rect(cx,sy,cardW,cardH);ctx.stroke();ctx.fillStyle='#fff';ctx.font='bold 11px system-ui,sans-serif';ctx.fillText(u.label,cx+cardW/2,sy+22);ctx.fillStyle='#aaa';ctx.font='10px system-ui,sans-serif';ctx.fillText(u.desc,cx+cardW/2,sy+38);for(let d=0;d<u.maxLv;d++){ctx.fillStyle=d<lv?'#00ffcc':'#224';ctx.beginPath();ctx.arc(cx+cardW/2+(d-u.maxLv/2+0.5)*14,sy+cardH-36,5,0,Math.PI*2);ctx.fill();}if(lv<u.maxLv){ctx.fillStyle='#00ffcc';ctx.font='bold 12px system-ui,sans-serif';ctx.fillText(`${u.cost[lv]}◈`,cx+cardW/2,sy+cardH-14);}else{ctx.fillStyle='#0f0';ctx.font='bold 11px system-ui,sans-serif';ctx.fillText('MAX',cx+cardW/2,sy+cardH-14);}}const btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+32;ctx.fillStyle=PALETTE.shopCard;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(btnX,btnY,btnW,btnH,8);else ctx.rect(btnX,btnY,btnW,btnH);ctx.fill();ctx.strokeStyle=PALETTE.boxBorder;ctx.lineWidth=1;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(btnX,btnY,btnW,btnH,8);else ctx.rect(btnX,btnY,btnW,btnH);ctx.stroke();ctx.fillStyle='#00ffcc';ctx.font='bold 16px system-ui,sans-serif';ctx.fillText('PLAY',W/2,btnY+27);ctx.textAlign='left';}
 
-  // Fade
-  if (state==='transition') {
-    fadeAlpha += dt * 3;
-    if (fadeAlpha >= 1) { fadeAlpha=1; state = NODES[currentNode].choices ? 'choices' : (NODES[currentNode].isEnding ? 'ending' : 'reading'); }
-  }
-
-  // Typewriter
-  if (state==='reading' && !textDone) {
-    typeTimer += dt;
-    while (typeTimer >= TYPE_SPEED && shownChars < fullText.length) {
-      typeTimer -= TYPE_SPEED;
-      shownChars++;
-    }
-    if (shownChars >= fullText.length) textDone = true;
-  }
-
-  requestAnimationFrame(ts2=>{ draw(ts2/1000); update(ts2); });
-}
-
-canvas.addEventListener('click', e => {
-  if (state==='ending') { Object.assign(flags,{trusted_lyra:false,helped_zero:false,revealed_truth:false,chose_humanity:false,chose_machine:false,choice_score:0}); dialogueHistory.length=0; updateHistoryPanel(); leftChar=null; rightChar=null; gotoNode('start'); }
-});
-
-function draw(t) {
-  ctx.clearRect(0,0,W,H);
-  const node = NODES[currentNode];
-
-  drawBackground(node.bg||'lab', t);
-
-  ctx.globalAlpha = fadeAlpha;
-
-  if (state !== 'ending') {
-    drawPortraits(t);
-    drawDialogue(t);
-    if (state==='choices') drawChoices(t);
-    drawHUD(t);
-  } else {
-    drawEnding();
-  }
-
-  ctx.globalAlpha = 1;
-}
-
-// ─── Boot ──────────────────────────────────────────────────────────────────────
-gotoNode('start');
-requestAnimationFrame(ts=>{ lastTs=ts; update(ts); });
-
-  // Dev console bridge (global scope)
-  window.__devPatch = function(code) { return eval(code); };
+loadMeta();applyUpgrades();
+requestAnimationFrame(t=>{lastTime=t;requestAnimationFrame(loop);});
 </script>
-
-<style id="dev-console-style">
-#dev-console{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,.96);border-top:2px solid #00ff88;padding:10px 14px;z-index:99999;font-family:monospace;color:#00ff88;box-shadow:0 -4px 20px rgba(0,255,136,.15)}
-#dev-console.open{display:flex;flex-direction:column;gap:5px}
-#dev-console-title{font-size:11px;color:#555;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center}
-#dev-console-title span:first-child{color:#00ff88;font-size:12px;font-weight:bold}
-#dev-console-ctx-bar{display:flex;gap:6px;align-items:center}
-#dev-console-row{display:flex;gap:8px;align-items:flex-start}
-#dev-console-input{flex:1;background:#0a0a0a;border:1px solid #00ff88;color:#00ff88;font-family:'Courier New',monospace;font-size:13px;padding:8px 10px;border-radius:4px;resize:vertical;min-height:38px;max-height:180px;line-height:1.4}
-#dev-console-input::placeholder{color:#1a4a2a}
-#dev-console-input:focus{outline:none;border-color:#00ffcc;box-shadow:0 0 8px rgba(0,255,204,.2)}
-#dev-console-btns{display:flex;flex-direction:column;gap:5px;min-width:90px}
-#dev-console-btn{background:linear-gradient(135deg,#00cc66,#00ff88);color:#000;border:none;font-family:monospace;font-size:12px;font-weight:900;padding:9px 14px;border-radius:4px;cursor:pointer;letter-spacing:.5px;transition:all .15s}
-#dev-console-btn:hover{background:linear-gradient(135deg,#00ff88,#00ffcc);transform:translateY(-1px)}
-#dev-console-btn:disabled{background:#222;color:#444;cursor:wait;transform:none}
-#dev-console-undo{background:#1a1a1a;color:#888;border:1px solid #333;font-family:monospace;font-size:11px;padding:5px 10px;border-radius:4px;cursor:pointer;transition:all .15s}
-#dev-console-undo:hover:not(:disabled){background:#2a2a2a;color:#fff;border-color:#555}
-#dev-console-undo:disabled{opacity:.3;cursor:default}
-#dev-console-ctx-btn{background:#0a1a0a;color:#555;border:1px solid #1a3a1a;font-size:10px;padding:3px 8px;border-radius:3px;cursor:pointer;font-family:monospace;transition:all .15s}
-#dev-console-ctx-btn:hover{color:#00ff88;border-color:#00ff88;background:#0a2a0a}
-#dev-console-ctx-btn.active{color:#00ff88;border-color:#00ff88;background:#051505}
-#dev-console-status{font-size:11px;min-height:16px;padding:2px 0;transition:color .2s;line-height:1.5;max-height:60px;overflow-y:auto}
-#dev-console-status.ok{color:#00ff88}
-#dev-console-status.err{color:#ff4444}
-#dev-console-status.pending{color:#ffaa00}
-#dev-console-status.warn{color:#ffcc44}
-#dev-console-ctx{display:none;background:#050f05;border:1px solid #0a2a0a;border-radius:4px;padding:8px 10px;font-size:10px;color:#668866;max-height:120px;overflow-y:auto;line-height:1.7;margin-top:2px}
-#dev-console-ctx.open{display:block}
-#dev-console-log{font-size:10px;color:#333;max-height:55px;overflow-y:auto;padding-top:3px;border-top:1px solid #111;display:none;line-height:1.6}
-#dev-console-log.visible{display:block}
-#dev-console-close{background:none;border:none;color:#333;font-size:16px;cursor:pointer;padding:0 3px;transition:color .15s}
-#dev-console-close:hover{color:#ff4444}
-#dev-console-hint{font-size:9px;color:#222;text-align:right;margin-top:1px}
-#dev-console-code-wrap{display:none;margin-top:4px}
-#dev-console-code-wrap.visible{display:block}
-#dev-console-code-toggle{background:none;border:none;color:#1a4a2a;font-size:10px;font-family:monospace;cursor:pointer;padding:2px 0;letter-spacing:.5px;transition:color .15s}
-#dev-console-code-toggle:hover{color:#00cc66}
-#dev-console-code-pre{background:#050f05;border:1px solid #0a2a0a;border-radius:3px;padding:8px 10px;font-size:11px;color:#44aa44;font-family:'Courier New',monospace;white-space:pre-wrap;word-break:break-all;max-height:140px;overflow-y:auto;margin-top:3px;line-height:1.5}
-</style>
-
-<div id="dev-console">
-  <div id="dev-console-title">
-    <span>&#9881; DEV CONSOLE</span>
-    <div id="dev-console-ctx-bar">
-      <button id="dev-console-ctx-btn" title="Afficher le contexte du jeu en temps réel">&#128269; ctx</button>
-      <span style="color:#222;font-size:10px">[ ² / &#96; ]</span>
-      <button id="dev-console-close" title="Fermer">&#10005;</button>
-    </div>
-  </div>
-  <div id="dev-console-ctx"></div>
-  <div id="dev-console-row">
-    <textarea id="dev-console-input" placeholder="Décris la modification souhaitée... Ex: rends le joueur invincible, ajoute un type ennemi dragon avec 500 HP, double la vitesse de tir, ajoute une compétence de téléportation, modifie la génération de niveaux..."></textarea>
-    <div id="dev-console-btns">
-      <button id="dev-console-btn">&#9654; Appliquer</button>
-      <button id="dev-console-undo" disabled title="Annuler le dernier patch">&#8617; Annuler</button>
-    </div>
-  </div>
-  <div id="dev-console-status"></div>
-  <div id="dev-console-code-wrap">
-    <button id="dev-console-code-toggle">&#9654; voir le code généré</button>
-    <pre id="dev-console-code-pre"></pre>
-  </div>
-  <div id="dev-console-log"></div>
-  <div id="dev-console-hint">Shift+Entrée = nouvelle ligne &nbsp;|&nbsp; Entrée = envoyer &nbsp;|&nbsp; ↑↓ = historique</div>
-</div>
-
-<script id="dev-console-script">
-/* DEV_CONSOLE_INJECTED */
-(function(){
-'use strict';
-var FILENAME=window.location.pathname.split('/').pop();
-var panel=document.getElementById('dev-console');
-var input=document.getElementById('dev-console-input');
-var btn=document.getElementById('dev-console-btn');
-var undoBtn=document.getElementById('dev-console-undo');
-var statusEl=document.getElementById('dev-console-status');
-var closeBtn=document.getElementById('dev-console-close');
-var ctxBtn=document.getElementById('dev-console-ctx-btn');
-var ctxPanel=document.getElementById('dev-console-ctx');
-var logPanel=document.getElementById('dev-console-log');
-var codeWrap=document.getElementById('dev-console-code-wrap');
-var codeToggle=document.getElementById('dev-console-code-toggle');
-var codePre=document.getElementById('dev-console-code-pre');
-if(!panel||!input||!btn||!statusEl)return;
-
-// ── État interne ──
-var _snapshots=[];
-var _history=[];
-var _histIdx=-1;
-var _actionLog=[];
-var MAX_UNDO=15;
-var MAX_LOG=30;
-var _lastCode='';
-
-// ── Toggle code généré ──
-if(codeToggle&&codeWrap&&codePre){
-  codeToggle.addEventListener('click',function(){
-    var isOpen=codePre.style.display==='block';
-    codePre.style.display=isOpen?'none':'block';
-    codeToggle.textContent=(isOpen?'▶ voir':'▼ masquer')+' le code généré';
-  });
-  codePre.style.display='none'; // fermé par défaut
-}
-
-function showGeneratedCode(code){
-  if(!codeWrap||!codePre||!codeToggle)return;
-  _lastCode=code||'';
-  codePre.textContent=_lastCode;
-  codeWrap.classList.add('visible');
-  codePre.style.display='none'; // fermé par défaut, l'utilisateur ouvre s'il veut
-  codeToggle.textContent='▶ voir le code généré ('+_lastCode.split('\n').length+' lignes)';
-}
-
-function hideGeneratedCode(){
-  if(!codeWrap)return;
-  codeWrap.classList.remove('visible');
-  _lastCode='';
-}
-
-// ── Utilitaires UI ──
-closeBtn.addEventListener('click',function(){panel.classList.remove('open');input.blur();});
-
-function setStatus(msg,cls){
-  statusEl.textContent=msg;
-  statusEl.className=cls||'';
-}
-
-function addLog(prompt,ok,note){
-  var t=new Date().toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  var short=prompt.length>55?prompt.slice(0,55)+'…':prompt;
-  _actionLog.unshift({t:t,short:short,ok:ok,note:note||''});
-  if(_actionLog.length>MAX_LOG)_actionLog.pop();
-  renderLog();
-}
-
-function renderLog(){
-  if(!_actionLog.length){logPanel.classList.remove('visible');return;}
-  logPanel.classList.add('visible');
-  logPanel.innerHTML=_actionLog.map(function(e){
-    return '<span style="color:#333">'+e.t+'</span> '+
-      '<span style="color:'+(e.ok?'#1a6a1a':'#6a1a1a')+'">&#8226;</span> '+
-      '<span style="color:'+(e.ok?'#447744':'#774444')+'">'+e.short+'</span>'+
-      (e.note?'<span style="color:#333"> → '+e.note+'</span>':'');
-  }).join('<br>');
-}
-
-// ── Snapshot pour undo ──
-function takeSnapshot(){
-  try{
-    var s={_ts:Date.now()};
-    // Numériques globaux
-    ['score','highScore','gold','lives','level','floor','stage','currentFloor',
-     'currentDungeonFloor','currentLevel','wave','waveNumber','coins','gems',
-     'playerGold','energy','mana','ammo'].forEach(function(n){
-      if(typeof window[n]==='number')s[n]=window[n];
-    });
-    // gameState
-    if(typeof gameState!=='undefined')s.gameState=gameState;
-    // Joueur (plusieurs conventions)
-    ['hero','player','ship','character'].forEach(function(pn){
-      if(typeof window[pn]!=='undefined'&&window[pn]&&typeof window[pn]==='object'){
-        var p=window[pn];
-        s['_p_'+pn]={hp:p.hp,maxHp:p.maxHp,speed:p.speed,attack:p.attack||p.damage,
-          defense:p.defense,mp:p.mp,maxMp:p.maxMp,level:p.level,xp:p.xp,
-          x:p.x,y:p.y,invincibilityTimer:p.invincibilityTimer||0,
-          classId:p.classId,vx:p.vx||0,vy:p.vy||0};
-      }
-    });
-    // Longueurs des tableaux
-    ['enemies','towers','loot','minions','projectiles','bullets','interactables',
-     'powerups','particles'].forEach(function(n){
-      if(typeof window[n]!=='undefined'&&Array.isArray(window[n]))s['_len_'+n]=window[n].length;
-    });
-    // playerStats si existe
-    if(typeof playerStats!=='undefined'&&playerStats)
-      s._playerStats=JSON.parse(JSON.stringify(playerStats));
-    if(typeof activeBuffs!=='undefined'&&Array.isArray(activeBuffs))
-      s._activeBuffs=JSON.parse(JSON.stringify(activeBuffs));
-    return s;
-  }catch(e){return null;}
-}
-
-function applySnapshot(s){
-  if(!s)return false;
-  var ok=false;
-  try{
-    ['score','highScore','gold','lives','level','floor','stage','currentFloor',
-     'currentDungeonFloor','currentLevel','wave','waveNumber','coins','gems',
-     'playerGold','energy','mana','ammo'].forEach(function(n){
-      if(s[n]!==undefined&&typeof window[n]==='number'){window[n]=s[n];ok=true;}
-    });
-    if(s.gameState!==undefined&&typeof gameState!=='undefined'){gameState=s.gameState;ok=true;}
-    ['hero','player','ship','character'].forEach(function(pn){
-      var pk='_p_'+pn;
-      if(s[pk]&&typeof window[pn]!=='undefined'&&window[pn]){
-        var p=window[pn],sd=s[pk];
-        ['hp','maxHp','speed','attack','defense','mp','maxMp','level','xp',
-         'invincibilityTimer','classId','vx','vy'].forEach(function(f){
-          if(sd[f]!==undefined)p[f]=sd[f];
-        });
-        ok=true;
-      }
-    });
-    if(s._playerStats&&typeof playerStats!=='undefined'&&playerStats){
-      Object.assign(playerStats,s._playerStats);ok=true;
-    }
-    if(s._activeBuffs&&typeof activeBuffs!=='undefined'&&Array.isArray(activeBuffs)){
-      activeBuffs.length=0;s._activeBuffs.forEach(function(b){activeBuffs.push(b);});ok=true;
-    }
-  }catch(e){}
-  return ok;
-}
-
-function pushSnapshot(snap){
-  if(!snap)return;
-  _snapshots.push(snap);
-  if(_snapshots.length>MAX_UNDO)_snapshots.shift();
-  undoBtn.disabled=false;
-}
-
-function updateUndoBtn(){undoBtn.disabled=_snapshots.length===0;}
-
-undoBtn.addEventListener('click',function(){
-  if(!_snapshots.length)return;
-  var snap=_snapshots.pop();
-  updateUndoBtn();
-  var ok=applySnapshot(snap);
-  var dt=Math.round((Date.now()-snap._ts)/1000);
-  if(ok){setStatus('↩ Annulé (il y a '+dt+'s)','ok');}
-  else{setStatus('⚠ Annulation partielle — les changements complexes (nouvelles fonctions, types) ne peuvent pas être annulés automatiquement','warn');}
-});
-
-// ── Context browser ──
-ctxBtn.addEventListener('click',function(){
-  if(ctxPanel.classList.contains('open')){
-    ctxPanel.classList.remove('open');
-    ctxBtn.classList.remove('active');
-    ctxPanel.innerHTML='';
-    return;
-  }
-  ctxBtn.classList.add('active');
-  var ctx=collectContext();
-  var lines=['<b style="color:#226622">═══ CONTEXTE EN TEMPS RÉEL ═══</b>'];
-  Object.keys(ctx).forEach(function(k){
-    var v=ctx[k];
-    var vs=typeof v==='object'?JSON.stringify(v).slice(0,90):String(v);
-    lines.push('<span style="color:#00cc55">'+k+'</span><span style="color:#224422">:</span> <span style="color:#88aa88">'+vs+'</span>');
-  });
-  if(lines.length===1)lines.push('<span style="color:#1a3a1a">Aucune variable standard détectée (jeu custom)</span>');
-  ctxPanel.innerHTML=lines.join('<br>');
-  ctxPanel.classList.add('open');
-});
-
-// ── Collecte du contexte runtime ──
-function collectContext(){
-  var ctx={};
-  try{
-    var stateNames=['gameState','state','currentState','phase','mode','screen'];
-    stateNames.forEach(function(n){if(typeof window[n]!=='undefined')ctx[n]=window[n];});
-    var scoreNames=['score','highScore','bestScore','gold','lives','level','floor','stage',
-                    'currentFloor','currentDungeonFloor','currentLevel','wave','waveNumber',
-                    'coins','gems','playerGold','energy','mana','ammo','kills'];
-    scoreNames.forEach(function(n){if(typeof window[n]!=='undefined')ctx[n]=window[n];});
-    ['hero','player','ship','character','pawn','tank'].forEach(function(pn){
-      if(typeof window[pn]!=='undefined'&&window[pn]&&typeof window[pn]==='object'){
-        var p=window[pn];
-        ctx[pn]={hp:p.hp,maxHp:p.maxHp,x:Math.round(p.x||0),y:Math.round(p.y||0),
-          speed:p.speed,level:p.level,attack:p.attack||p.damage||p.atk,
-          defense:p.defense||p.def,mp:p.mp,maxMp:p.maxMp,classId:p.classId,
-          invincible:!!(p.invincibilityTimer>0)};
-      }
-    });
-    var arrNames=['enemies','towers','projectiles','bullets','particles','loot','interactables',
-                  'minions','platforms','coins','items','obstacles','pieces','waves','powerups',
-                  'skills','traps','buildings','npcs','allies'];
-    arrNames.forEach(function(n){
-      if(typeof window[n]!=='undefined'&&Array.isArray(window[n]))ctx[n+'_count']=window[n].length;
-    });
-    if(typeof window['boss']!=='undefined')ctx.bossAlive=window['boss']!==null;
-    if(typeof window['bossGate']!=='undefined')ctx.bossGateOpen=!!(window['bossGate']&&window['bossGate'].open);
-    if(typeof ENEMY_TYPES!=='undefined')ctx.enemyTypes=Object.keys(ENEMY_TYPES);
-    if(typeof TOWER_TYPES!=='undefined')ctx.towerTypes=Object.keys(TOWER_TYPES);
-    if(typeof ITEM_TYPES!=='undefined')ctx.itemTypes=Object.keys(ITEM_TYPES);
-    if(typeof WEAPON_TYPES!=='undefined')ctx.weaponTypes=Object.keys(WEAPON_TYPES);
-    if(typeof UPGRADE_TYPES!=='undefined')ctx.upgradeTypes=Object.keys(UPGRADE_TYPES);
-    if(typeof HERO_CLASSES!=='undefined')ctx.heroClasses=HERO_CLASSES.map(function(c){return c.id+':'+c.name;});
-    if(typeof CUSTOM_SKILLS!=='undefined')ctx.customSkills=Object.keys(CUSTOM_SKILLS);
-    if(typeof CUSTOM_ATTACKS!=='undefined')ctx.customAttacks=Object.keys(CUSTOM_ATTACKS);
-    var fnNames=['createEnemy','spawnBoss','generateDungeon','checkLevelUp','handleEnemyDefeat',
-                 'spawnParticles','spawnFloatingText','triggerShake','createProjectile',
-                 'placeTower','addTower','spawnEnemy','createTower','restartGame','resetGame',
-                 'spawnWave','addPowerup','unlockSkill','applyKnockback','onBossDefeat',
-                 'openShop','buyItem','saveGame','loadGame','generateLevel','nextWave',
-                 'addUpgrade','applyUpgrade','createItem','dropLoot'];
-    var avail=fnNames.filter(function(n){return typeof window[n]==='function';});
-    if(avail.length)ctx.functions=avail;
-    if(typeof playerInventory!=='undefined')ctx.inventory=playerInventory;
-    if(typeof activeBuffs!=='undefined'&&Array.isArray(activeBuffs))ctx.buffs=activeBuffs.length;
-    if(typeof TILE_SIZE!=='undefined')ctx.TILE_SIZE=TILE_SIZE;
-    if(typeof MAP_W!=='undefined')ctx.MAP_W=MAP_W;
-  }catch(e){}
-  return ctx;
-}
-
-// ── Validation syntaxique client ──
-function validateSyntax(code){
-  var o=0,c=0,po=0,pc=0,bo=0,bc=0;
-  for(var i=0;i<code.length;i++){
-    var ch=code[i];
-    if(ch==='{')o++;else if(ch==='}')c++;
-    else if(ch==='(')po++;else if(ch===')')pc++;
-    else if(ch==='[')bo++;else if(ch===']')bc++;
-  }
-  if(o!==c)return 'Accolades: '+o+' { pour '+c+' }';
-  if(po!==pc)return 'Parenthèses: '+po+' ( pour '+pc+' )';
-  if(bo!==bc)return 'Crochets: '+bo+' [ pour '+bc+' ]';
-  return null;
-}
-
-// ── Exécution du code patché ──
-function execCode(code,explanation){
-  var synErr=validateSyntax(code);
-  if(synErr){
-    setStatus('⚠ Syntaxe invalide côté client: '+synErr+' — Le code ne sera pas exécuté.','err');
-    return false;
-  }
-  try{
-    if(typeof window.__devPatch==='function'){
-      window.__devPatch(code);
-    }else{
-      // Fallback: new Function (n'accède pas aux vars locales du jeu)
-      (new Function(code))();
-    }
-    var msg=explanation||'Patch appliqué !';
-    setStatus('✅ '+msg,'ok');
-    input.value='';
-    return true;
-  }catch(e){
-    var msg=e.message||String(e);
-    if(msg.indexOf('not defined')!==-1){
-      var vn=(msg.split(' ')[0]||'').replace(/[^a-zA-Z0-9_]/g,'');
-      msg='Variable "'+vn+'" introuvable dans ce jeu. Utilisez le bouton ctx pour voir ce qui est disponible.';
-    }else if(msg.indexOf('is not a function')!==-1){
-      msg='Fonction non disponible dans ce jeu: '+msg+'. Vérifiez ctx → functions.';
-    }else if(msg.indexOf('Cannot read')!==-1||msg.indexOf('null')!==-1){
-      msg='Accès à null/undefined: '+msg+' — Ajoutez une vérification if(variable) avant.';
-    }else if(msg.indexOf('Assignment to constant')!==-1){
-      msg="Impossible de modifier une constante (const). Passez par l'objet: ex TYPE.xxx au lieu de TYPE=...";
-    }else if(msg.indexOf('Unexpected token')!==-1){
-      msg='Erreur de syntaxe JS: '+msg;
-    }
-    setStatus('❌ '+msg,'err');
-    return false;
-  }
-}
-
-// ── Application d'un patch ──
-async function applyPatch(){
-  var prompt=input.value.trim();
-  if(!prompt)return;
-  if(_history[0]!==prompt){_history.unshift(prompt);if(_history.length>50)_history.pop();}
-  _histIdx=-1;
-  btn.disabled=true;
-  hideGeneratedCode();
-  setStatus('⏳ Génération en cours...','pending');
-  var snap=takeSnapshot();
-  try{
-    var resp=await fetch('/api/game-patch',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({filename:FILENAME,prompt:prompt,context:collectContext()})
-    });
-    if(!resp.ok){
-      var errText=await resp.text();
-      setStatus('❌ Erreur serveur '+resp.status+': '+errText.slice(0,80),'err');
-      addLog(prompt,false,'HTTP '+resp.status);
-      return;
-    }
-    var data=await resp.json();
-    if(data.error){
-      setStatus('❌ '+data.error,'err');
-      addLog(prompt,false,data.error.slice(0,40));
-    }else if(data.code){
-      // Afficher le code avant l'exec (utile si l'exec plante)
-      showGeneratedCode(data.code);
-      var ok=execCode(data.code,data.explanation);
-      if(ok){
-        pushSnapshot(snap);
-        addLog(prompt,true,data.explanation?data.explanation.slice(0,80):'');
-      }else{
-        // En cas d'erreur, garder le code visible automatiquement pour debug
-        if(codePre)codePre.style.display='block';
-        if(codeToggle)codeToggle.textContent='▼ masquer le code généré (erreur — vérifier la syntaxe)';
-        addLog(prompt,false,'Erreur exec');
-      }
-    }else{
-      setStatus('⚠ Réponse vide du serveur','warn');
-      addLog(prompt,false,'réponse vide');
-    }
-  }catch(e){
-    setStatus('❌ Réseau: '+e.message,'err');
-    addLog(prompt,false,'réseau');
-  }finally{btn.disabled=false;}
-}
-
-// ── Événements ──
-btn.addEventListener('click',applyPatch);
-input.addEventListener('keydown',function(e){
-  if(e.code!=='Backquote'&&e.code!=='IntlBackslash')e.stopPropagation();
-  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();applyPatch();return;}
-  if(e.key==='ArrowUp'&&!e.shiftKey&&_history.length){
-    e.preventDefault();_histIdx=Math.min(_histIdx+1,_history.length-1);input.value=_history[_histIdx];
-  }
-  if(e.key==='ArrowDown'&&!e.shiftKey){
-    e.preventDefault();_histIdx=Math.max(_histIdx-1,-1);input.value=_histIdx>=0?_history[_histIdx]:'';
-  }
-});
-document.addEventListener('keydown',function(e){
-  if(e.code==='Backquote'||e.code==='IntlBackslash'){
-    e.preventDefault();
-    if(panel.classList.contains('open')){
-      panel.classList.remove('open');input.blur();
-    }else{
-      panel.classList.add('open');input.focus();
-    }
-  }
-});
-})();
-</script>
-</body>
-</html>
+</body></html>

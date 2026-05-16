@@ -36,7 +36,7 @@ def _init_delay_for_genre(genre: str) -> float:
 
 # Cache local pour Three.js (évite de re-télécharger à chaque test)
 _THREEJS_CACHE_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "rag_database", "three.min.js")
-_THREEJS_CDN = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
+_THREEJS_CDN = "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"
 
 
 def _get_threejs_local() -> str | None:
@@ -82,6 +82,8 @@ def run(code: str, genre_profile: GenreProfile) -> EvaluationResult:
     _MAX_AI_REPAIRS = 2   # max appels Gemini dans cette boucle
     _ai_repairs_done = 0
     _repair_code = code
+    # B3: error type tracker — counts how many iterations each error fingerprint has persisted
+    _error_persist: dict[str, int] = {}
     import re as _re_repair
     _undef_pattern     = _re_repair.compile(r"'?(\w+)'? is not defined", _re_repair.IGNORECASE)
     _arcade_pattern    = _re_repair.compile(r'ARCADE_ERROR:\s*(.+)', _re_repair.IGNORECASE)
@@ -159,6 +161,17 @@ def run(code: str, genre_profile: GenreProfile) -> EvaluationResult:
         # Dédupliquer
         _error_msgs = list(dict.fromkeys(_error_msgs))[:6]
 
+        # B3: update persistence counter and flag recurring errors for the AI
+        _new_persist: dict[str, int] = {}
+        _flagged_msgs = []
+        for _em in _error_msgs:
+            _fp = _em[:60]  # fingerprint: first 60 chars
+            _cnt = _error_persist.get(_fp, 0) + 1
+            _new_persist[_fp] = _cnt
+            _flagged_msgs.append(f"[PERSISTS×{_cnt}] {_em}" if _cnt > 1 else _em)
+        _error_persist.update(_new_persist)
+        _error_msgs = _flagged_msgs  # AI sees persistence count
+
         has_any_error = bool(_undef_vars or _has_arcade_error or _has_screen_issue
                              or _cannot_read_props or _not_func_names or _error_msgs)
         if not has_any_error:
@@ -188,24 +201,34 @@ def run(code: str, genre_profile: GenreProfile) -> EvaluationResult:
             _did_any_fix = True
             _fix_reasons.append("fix_all_auto")
 
-        # Fix code_validator si des erreurs typiques de la pipeline sont présentes
-        if _cannot_read_props or _not_func_names:
-            try:
-                from code_validator import validate_and_fix as _cv_fix
-                import re as _re_cv
-                _cv_result, _cv_issues, _ = _cv_fix(_fixed)
-                if _cv_issues:
-                    _fixed = _cv_result
-                    _did_any_fix = True
-                    _fix_reasons.append(f"code_validator ({len(_cv_issues)} fix(es))")
-            except Exception:
-                pass
+        # B4a: code_validator on every pass — includes _fix_arrow_key_mapping for
+        # key-mapping bugs that cause "Joueur réactif" failures
+        try:
+            from code_validator import validate_and_fix as _cv_fix
+            _cv_result, _cv_issues, _ = _cv_fix(_fixed)
+            if _cv_issues:
+                _fixed = _cv_result
+                _did_any_fix = True
+                _fix_reasons.append(f"code_validator ({len(_cv_issues)} fix(es))")
+        except Exception:
+            pass
 
         # ── ÉTAPE 2 : Mini-patcher IA si les fixes déterministes n'ont pas suffi ─
         if not _did_any_fix and _ai_repairs_done < _MAX_AI_REPAIRS and _error_msgs:
             phase4_log.info(f"[Repair {_repair_i+1}] Fixes déterministes insuffisants — mini-patcher IA ({_ai_repairs_done+1}/{_MAX_AI_REPAIRS})")
             _ai_fixed = _mini_patcher_gemini(_repair_code, _error_msgs, genre_profile)
             if _ai_fixed:
+                # B5: diff ratio check — rollback if AI patch modified >35% of chars
+                # (protects against LLM rewriting the whole game instead of targeting the fix)
+                _orig_len = max(len(_repair_code), 1)
+                _changed = sum(1 for a, b in zip(_repair_code, _ai_fixed) if a != b)
+                _changed += abs(len(_ai_fixed) - len(_repair_code))
+                _diff_ratio = _changed / _orig_len
+                if _diff_ratio > 0.35:
+                    phase4_log.warning(
+                        f"[Repair {_repair_i+1}] B5: mini-patcher diff ratio {_diff_ratio:.0%} > 35% — rollback"
+                    )
+                    break
                 _fixed = _ai_fixed
                 _did_any_fix = True
                 _ai_repairs_done += 1
@@ -220,6 +243,16 @@ def run(code: str, genre_profile: GenreProfile) -> EvaluationResult:
 
         _reason_str = " | ".join(_fix_reasons)
         phase4_log.info(f"[Repair {_repair_i+1}/{_MAX_REPAIR}] {_reason_str} — relance Playwright")
+
+        # Fix 2: syntax check before Playwright — don't waste a run on broken code
+        try:
+            from js_syntax_checker import check_and_report as _pre_chk
+            _, _pre_broken = _pre_chk(_fixed)
+            if _pre_broken:
+                phase4_log.warning(f"[Repair {_repair_i+1}] Fixed code has syntax error — skipping Playwright run")
+                break
+        except Exception:
+            pass
 
         try:
             _ev_retry = _run_playwright(_fixed, genre_profile)
@@ -358,12 +391,17 @@ def _mini_patcher_gemini(html_code: str, error_msgs: list, genre_profile) -> str
         html_after  = html_code[js_match.end():]
 
         # ── Extraire les cibles depuis les messages d'erreur ───────────────────
+        def _is_only_obj_key(ident: str) -> bool:
+            used_standalone = bool(re.search(rf'\b{re.escape(ident)}\s*(?:\(|\.|\[|=(?!=))', js_code))
+            used_as_key = bool(re.search(rf'[{{\s,]\s*{re.escape(ident)}\s*:', js_code))
+            return used_as_key and not used_standalone
+
         targets = set()
         for err in error_msgs:
             # "X is not defined"
             for m in re.finditer(r"'?(\w+)'? is not defined", err, re.IGNORECASE):
                 v = m.group(1)
-                if v not in ('undefined', 'null', 'true', 'false', 'window', 'document'):
+                if v not in ('undefined', 'null', 'true', 'false', 'window', 'document') and not _is_only_obj_key(v):
                     targets.add(v)
             # "Cannot read properties of undefined (reading 'X')"
             for m in re.finditer(r"reading '(\w+)'", err):
@@ -403,6 +441,22 @@ def _mini_patcher_gemini(html_code: str, error_msgs: list, genre_profile) -> str
             # Fallback : prendre les 2000 premiers chars (zone init souvent problématique)
             sections_to_fix = [(js_code[:2000], 0, 2000)]
 
+        # ── Fix 5: collect declaration context for each target ────────────────
+        decl_ctx_lines = []
+        for _tgt in list(targets)[:4]:
+            # Search for assignments/declarations of the target variable
+            _decl_pat = re.compile(
+                r'^[^\n]*\b(?:var|let|const)\s+' + re.escape(_tgt) + r'\b[^\n]*$'
+                r'|^[^\n]*\b' + re.escape(_tgt) + r'\s*=[^\n]{0,80}$',
+                re.MULTILINE
+            )
+            _decl_matches = _decl_pat.findall(js_code)
+            if _decl_matches:
+                for _dm in _decl_matches[:2]:
+                    decl_ctx_lines.append(f'  // Déclaration de {_tgt}: {_dm.strip()[:120]}')
+
+        decl_ctx_text = '\n'.join(decl_ctx_lines) if decl_ctx_lines else '  // (aucune déclaration trouvée)'
+
         # ── Construire le prompt focalisé ──────────────────────────────────────
         errors_text = '\n'.join(f'  {i+1}. {e}' for i, e in enumerate(error_msgs[:4]))
         sections_text = '\n\n---\n\n'.join(
@@ -416,6 +470,9 @@ Playwright a détecté ces erreurs runtime :
 
 ERREURS :
 {errors_text}
+
+DÉCLARATIONS DES VARIABLES CIBLES (où elles sont définies dans le code) :
+{decl_ctx_text}
 
 VARIABLES GLOBALES DU JEU (contexte — ne pas modifier) :
 ```javascript
@@ -442,7 +499,7 @@ RÈGLES :
 
 SECTIONS CORRIGÉES :"""
 
-        response = call_gemini(prompt, temperature=0.05, max_tokens=8000)
+        response = call_gemini(prompt, temperature=0.05, max_tokens=8000, disable_thinking=True)
 
         if not response or len(response) < 50:
             phase4_log.warning("Mini-patcher IA : réponse vide")
@@ -478,6 +535,24 @@ SECTIONS CORRIGÉES :"""
                 continue
             replacements.append((sec_start, sec_end, fixed_section))
 
+        # Fix 6: if "X is not defined" target is missing from the fixed section, inject fallback
+        undef_targets = set()
+        for err in error_msgs[:4]:
+            for m in re.finditer(r"'?(\w+)'? is not defined", err, re.IGNORECASE):
+                undef_targets.add(m.group(1))
+
+        if undef_targets:
+            for i, (s_start, s_end, fixed_section) in enumerate(replacements):
+                for _uv in list(undef_targets):
+                    _decl_pat_check = re.compile(
+                        r'\b(?:var|let|const)\s+' + re.escape(_uv) + r'\b'
+                        r'|\b' + re.escape(_uv) + r'\s*='
+                    )
+                    if not _decl_pat_check.search(fixed_section):
+                        _fallback = f'var {_uv} = null; // fallback injected\n'
+                        replacements[i] = (s_start, s_end, _fallback + fixed_section)
+                        phase4_log.info(f"Fix 6: injected fallback declaration for '{_uv}'")
+
         if not replacements:
             return None
 
@@ -489,10 +564,23 @@ SECTIONS CORRIGÉES :"""
         # Réinjecter dans le HTML
         fixed_html = html_before + js_prefix + '\n' + fixed_js + '\n' + js_suffix + html_after
 
-        # Sanity check
+        # Sanity check — length
         if len(fixed_html) < len(html_code) * 0.65:
             phase4_log.warning(f"Mini-patcher IA : HTML résultant trop court — rejeté")
             return None
+
+        # Syntax check — reject if the patch introduced a new syntax error
+        try:
+            from js_syntax_checker import check_and_report as _js_chk
+            _issues, _broken = _js_chk(fixed_html)
+            if _broken:
+                phase4_log.warning(
+                    f"Mini-patcher IA : syntaxe cassée après injection "
+                    f"({_issues[0][:80] if _issues else '?'}) — rejeté"
+                )
+                return None
+        except Exception:
+            pass  # If checker unavailable, accept and let Playwright decide
 
         phase4_log.info(
             f"Mini-patcher IA : {len(replacements)} section(s) corrigée(s) "

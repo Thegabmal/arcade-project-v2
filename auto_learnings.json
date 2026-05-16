@@ -3810,5 +3810,939 @@
       }
     ],
     "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-12T12:50:33.235801",
+    "titre": "NEON STRIKE",
+    "genre": "shooter",
+    "score": 6.52,
+    "approuve": false,
+    "html_size": 86943,
+    "new_common_vars_candidates": [
+      {
+        "varname": "active",
+        "occurrences": 34,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "alphaTimer",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "anim",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bullet",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "bulletSpeed",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "direction",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "down",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "enter",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 53,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 17,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 20,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gain",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 13,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "glowColor",
+        "occurrences": 12,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "menuBeep",
+        "call_count": 3
+      },
+      {
+        "function": "lines",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-12T13:24:41.985887",
+    "titre": "Royal Rampart",
+    "genre": "tower defense",
+    "score": 6.83,
+    "approuve": false,
+    "html_size": 94101,
+    "new_common_vars_candidates": [
+      {
+        "varname": "animation",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "animations",
+        "occurrences": 12,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "buffer",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "case",
+        "occurrences": 61,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "complex",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "context",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "down",
+        "occurrences": 15,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "effect",
+        "occurrences": 18,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 51,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "filter",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 11,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "following",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 21,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gain",
+        "occurrences": 3,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "resume",
+        "call_count": 5
+      },
+      {
+        "function": "shape",
+        "call_count": 2
+      },
+      {
+        "function": "soundMenuBeep",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "key_case_mismatch",
+        "description": "keydown mélange toLowerCase() et 'ArrowLeft' (capital) — touches non détectées",
+        "severity": "high"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-12T20:36:59.878457",
+    "titre": "Chroniques des Gribouillis",
+    "genre": "rpg",
+    "score": 6.06,
+    "approuve": false,
+    "html_size": 106872,
+    "new_common_vars_candidates": [
+      {
+        "varname": "active",
+        "occurrences": 29,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "atkGain",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "availablePoints",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "charDisplaySpeed",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "character",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 12,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "context",
+        "occurrences": 16,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "critChance",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentLine",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "defGain",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "doubleFireTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "down",
+        "occurrences": 14,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "enter",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "entities",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "escape",
+        "occurrences": 7,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "border",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['dialogue', 'level_up_menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-12T22:38:03.355863",
+    "titre": "Jump'n'Joy: L'Aventure Cubique",
+    "genre": "platformer",
+    "score": 4.89,
+    "approuve": false,
+    "html_size": 43689,
+    "new_common_vars_candidates": [
+      {
+        "varname": "assets",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "body",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "canDoubleJump",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "castShadow",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "core",
+        "occurrences": 32,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "display",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "duplicated",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "functions",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "here",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "initialized",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "innerHTML",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "intersects",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "isGroundPounding",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "isGrounded",
+        "occurrences": 12,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "clone",
+        "call_count": 11
+      },
+      {
+        "function": "remove",
+        "call_count": 6
+      },
+      {
+        "function": "intersectsBox",
+        "call_count": 5
+      },
+      {
+        "function": "copy",
+        "call_count": 5
+      },
+      {
+        "function": "multiplyScalar",
+        "call_count": 5
+      },
+      {
+        "function": "sub",
+        "call_count": 4
+      },
+      {
+        "function": "setFromObject",
+        "call_count": 3
+      },
+      {
+        "function": "lookAt",
+        "call_count": 2
+      },
+      {
+        "function": "setSize",
+        "call_count": 2
+      },
+      {
+        "function": "getWorldDirection",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['LOADING']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-14T14:17:51.915714",
+    "titre": "Cosmic Cascade",
+    "genre": "shooter",
+    "score": 6.4,
+    "approuve": false,
+    "html_size": 149146,
+    "new_common_vars_candidates": [
+      {
+        "varname": "active",
+        "occurrences": 41,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "anim",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "body",
+        "occurrences": 15,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "bossDir",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bulletDamage",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bulletSize",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "center",
+        "occurrences": 28,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "collision",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "destroyed",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "doubleShot",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "doubleTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "down",
+        "occurrences": 17,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 134,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 36,
+        "suggested_default": "0"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "test",
+        "call_count": 5
+      },
+      {
+        "function": "icon",
+        "call_count": 4
+      },
+      {
+        "function": "path",
+        "call_count": 4
+      },
+      {
+        "function": "body",
+        "call_count": 3
+      }
+    ],
+    "residual_patterns": [],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-14T19:15:32.983554",
+    "titre": "Cyber-Sprint",
+    "genre": "arcade",
+    "score": 6.79,
+    "approuve": false,
+    "html_size": 47614,
+    "new_common_vars_candidates": [
+      {
+        "varname": "alive",
+        "occurrences": 7,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "animTimer",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bobTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "coyoteTimer",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "crouching",
+        "occurrences": 17,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 27,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gravity",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "iframes",
+        "occurrences": 13,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "isJumping",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "jumpBufferTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "jumpsLeft",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "justTapped",
+        "occurrences": 5,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-15T21:01:50.543648",
+    "titre": "Witch Broom Blast",
+    "genre": "shooter",
+    "score": 7.16,
+    "approuve": false,
+    "html_size": 53165,
+    "new_common_vars_candidates": [
+      {
+        "varname": "alive",
+        "occurrences": 16,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "damage",
+        "occurrences": 13,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "enemiesLeft",
+        "occurrences": 12,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 39,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 16,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "fireTimer",
+        "occurrences": 22,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "flashTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 18,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gravity",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gunship",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "iframes",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "initFn",
+        "occurrences": 3,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-15T21:22:15.634266",
+    "titre": "AstroBlast",
+    "genre": "shooter",
+    "score": 7.37,
+    "approuve": false,
+    "html_size": 56208,
+    "new_common_vars_candidates": [
+      {
+        "varname": "alive",
+        "occurrences": 15,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "bobTimer",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "damage",
+        "occurrences": 11,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "enemiesLeft",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 43,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 20,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "fireTimer",
+        "occurrences": 17,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "flashTimer",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 18,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gravity",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "iframes",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "initFn",
+        "occurrences": 3,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-15T21:22:20.855356",
+    "titre": "Astro Fury: Nebula Storm",
+    "genre": "shooter",
+    "score": 7.04,
+    "approuve": false,
+    "html_size": 52215,
+    "new_common_vars_candidates": [
+      {
+        "varname": "alive",
+        "occurrences": 15,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "bobTimer",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "damage",
+        "occurrences": 11,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "enemiesLeft",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 36,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 18,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "fireTimer",
+        "occurrences": 13,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "flashTimer",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 18,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 12,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gravity",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "iframes",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "initFn",
+        "occurrences": 3,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
   }
 ]

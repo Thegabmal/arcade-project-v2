@@ -55,7 +55,7 @@ jeux_sauvegardes/<nom>.html + metadata.json
 **Propagation** :
 - `GenreProfile.technologie_rendu` = `"threejs"` ou `"canvas2d"`
 - `agent_tech_architect.py` : force `technologie_rendu: threejs` si 3D détecté, autorise Three.js dans les contraintes
-- `agent_createur.py` : utilise `SYSTEM_3D` + exigences Three.js (CDN r128, WebGLRenderer, THREE.Clock, etc.)
+- `agent_createur.py` : utilise `SYSTEM_3D` + exigences Three.js (CDN r160 / 0.160.0, WebGLRenderer, THREE.Clock, etc.)
 
 **Dans l'interface**, le sélecteur "🎮 Jeu 3D (Three.js)" force le type.
 
@@ -204,7 +204,7 @@ GENERATION_TIMEOUT = 900  # 15 minutes
 - Machine à états, score, localStorage, responsive
 
 ### Jeux 3D (Three.js)
-- Three.js via CDN (r128)
+- Three.js via CDN (r160 / 0.160.0)
 - WebGLRenderer plein écran responsive
 - THREE.Clock pour delta time
 - Caméra PerspectiveCamera (FPS/TPS/fixe selon genre)

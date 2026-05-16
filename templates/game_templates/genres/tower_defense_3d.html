@@ -1,0 +1,586 @@
+<!--
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ARCADE PROJECT — TOWER DEFENSE 3D TEMPLATE (Three.js r160)                 ║
+║  Covers: tower defense, puzzle 3D (top-down orbital click games).           ║
+║  Read this entirely before writing a single line of code.                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ ROLE ──────────────────────────────────────────────────────────────────────┐
+│ You are a senior Three.js game developer.                                    │
+│ Fill EVERY [FILL: ...] section to create a complete 3D tower defense game.  │
+│ DO NOT touch the ENGINE block — it is already wired and tested.              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ THE TWO ZONES ─────────────────────────────────────────────────────────────┐
+│  1. ENGINE — DO NOT MODIFY  (Three.js setup, raycasting, path, meta, loop)  │
+│  2. [FILL: ...] sections — YOUR creative work                                │
+│     Replace EVERY placeholder. Any [FILL] left = broken game.               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SACRED CONTRACT — ENGINE GLOBALS (NEVER redeclare) ───────────────────────┐
+│  scene, camera, renderer, clock  → Three.js core (already initialised)      │
+│  raycaster, mouse → THREE.Raycaster + Vector2 for click-to-tile             │
+│  gameState  → 'menu' | 'playing' | 'gameover' | 'shop'                     │
+│  meta       → { coins:0, upgrades:{} }                                      │
+│  gold        → current in-game gold (separate from meta.coins)              │
+│  baseHp      → current base hit points                                      │
+│  wave, waveActive → current wave number and active flag                     │
+│  GRID        → { cols, rows, cellSize }  grid dimensions                    │
+│  gridTiles[] → [{ mesh, gridX, gridZ, occupied:bool }]                      │
+│  towers[]    → [{ grp, type, pos:V3, range, dmg, rate, timer, targets }]   │
+│  enemies[]   → [{ mesh, hp, maxHp, speed, reward, pathIdx, pos:V3 }]       │
+│  PATH[]      → [{x,z}] waypoints in grid coordinates                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ENGINE HELPERS — USE, DON'T REWRITE ───────────────────────────────────────┐
+│  worldPos(gx,gz)       → Vector3 center of grid tile (gx,gz)               │
+│  placeTower(tile, type)→ builds tower mesh, adds to towers[], marks tile    │
+│  killEnemy(e)          → removes enemy, awards gold+meta.coins, updateHUD  │
+│  spawnEnemy(type)      → pushes enemy onto enemies[], walks PATH            │
+│  updateHUD()           → syncs gold, base HP, wave, coins display          │
+│  flashBase()           → red screen flash when base takes damage            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ YOUR CONTRACT — FILL THESE ─────────────────────────────────────────────────┐
+│  META_KEY          → unique localStorage key, e.g. 'meta_last_bastion_2'   │
+│  UPGRADE_DEFS[]    → 4 upgrades with id, name, desc, cost, maxLv            │
+│  applyUpgrades()   → reads meta.upgrades, sets gold/baseHp/tower vars       │
+│  GRID             → { cols:12, rows:10, cellSize:4 }  (or your values)      │
+│  PATH[]            → enemy waypoints as {x,z} grid coordinates              │
+│  TOWER_TYPES{}     → { id: { name, cost, range, dmg, rate, color, desc } } │
+│  ENEMY_TYPES{}     → { id: { hp, speed, reward, color, scale } }            │
+│  buildScene()      → lights, ground, path tiles, base, start zone           │
+│  spawnWave(n)      → spawn enemies for wave n using spawnEnemy(type)        │
+│  updatePlaying(dt) → wave logic, income, win/lose condition                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>[FILL: GAME_TITLE]</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#000; overflow:hidden; font-family:system-ui,sans-serif; }
+  #c { display:block; width:100vw; height:100vh; }
+  #hud { position:fixed; inset:0; pointer-events:none; font-family:system-ui,sans-serif; }
+  #top-bar { position:absolute; top:0; left:0; right:0; background:rgba(0,0,0,0.6); padding:10px 20px; display:flex; gap:30px; align-items:center; pointer-events:none; }
+  #wave-disp  { font-size:15px; font-weight:700; color:#ffd700; letter-spacing:2px; }
+  #gold-disp  { font-size:15px; color:#ffd700; }
+  #hp-disp    { font-size:15px; color:#e74c3c; }
+  #coins-disp { font-size:15px; color:#aaa; margin-left:auto; }
+  #status-msg { position:absolute; top:55px; left:50%; transform:translateX(-50%); font-size:16px; font-weight:700; color:#ffd700; letter-spacing:3px; display:none; }
+  #hit-flash  { position:absolute; inset:0; background:rgba(231,76,60,0); pointer-events:none; transition:background .08s; }
+  /* tower selector panel */
+  #tower-panel { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.75); padding:10px 16px; display:flex; gap:10px; align-items:center; pointer-events:all; }
+  #tower-panel span { font-size:11px; color:#888; letter-spacing:2px; margin-right:6px; }
+  .tower-btn { padding:7px 14px; font-size:11px; font-weight:700; letter-spacing:1px; border:2px solid #555; background:rgba(0,0,0,0.5); color:#ccc; cursor:pointer; text-transform:uppercase; font-family:system-ui; transition:all .12s; }
+  .tower-btn:hover,.tower-btn.selected { border-color:#ffd700; color:#ffd700; }
+  #send-wave-btn { margin-left:auto; padding:9px 22px; font-size:12px; font-weight:700; border:2px solid #00ff88; color:#00ff88; background:transparent; cursor:pointer; letter-spacing:2px; text-transform:uppercase; font-family:system-ui; }
+  #send-wave-btn:hover { background:#00ff88; color:#000; }
+  /* [FILL: CSS_ACCENT] — replace #00ff88 with your game's accent color */
+  #overlay {
+    position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.88); color:#fff;
+  }
+  #overlay h1 { font-size:52px; font-weight:900; letter-spacing:6px; font-family:'Impact',system-ui; margin-bottom:8px; color:#00ff88; }
+  #overlay .sub { font-size:13px; color:#666; letter-spacing:4px; margin-bottom:36px; }
+  .menu-btn { padding:13px 38px; margin:5px; font-size:14px; font-weight:700; letter-spacing:2px; border:2px solid #00ff88; background:transparent; cursor:pointer; text-transform:uppercase; transition:all .15s; font-family:system-ui; color:#00ff88; }
+  .menu-btn:hover { background:#00ff88; color:#000; }
+  #shop-overlay {
+    position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.92); color:#fff;
+  }
+  #shop-overlay h2 { font-size:28px; font-weight:700; margin-bottom:6px; letter-spacing:3px; font-family:system-ui; }
+  #shop-overlay .coins-info { font-size:14px; color:#ffd700; margin-bottom:24px; }
+  #shop-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; max-width:520px; width:90%; margin-bottom:24px; }
+  .shop-card { border:1px solid #333; padding:16px; text-align:center; background:#111; border-radius:8px; }
+  .shop-card h3 { font-size:13px; font-weight:700; letter-spacing:1px; margin-bottom:6px; font-family:system-ui; }
+  .shop-card p { font-size:11px; color:#777; margin-bottom:10px; font-family:system-ui; }
+  .shop-card .lv { font-size:11px; color:#00ff88; margin-bottom:8px; }
+  .buy-btn { padding:7px 18px; font-size:11px; font-weight:700; border:1px solid #00ff88; background:transparent; color:#00ff88; cursor:pointer; letter-spacing:1px; text-transform:uppercase; font-family:system-ui; }
+  .buy-btn:hover { background:#00ff88; color:#000; }
+  .buy-btn:disabled { border-color:#333; color:#333; cursor:default; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div id="top-bar">
+    <div id="wave-disp">WAVE 1</div>
+    <div id="gold-disp">🪙 GOLD: 150</div>
+    <div id="hp-disp">❤️ BASE: 20</div>
+    <div id="coins-disp">META: 🪙 0</div>
+  </div>
+  <div id="status-msg"></div>
+  <div id="hit-flash"></div>
+  <div id="tower-panel">
+    <span>BUILD:</span>
+    <!-- buttons injected by buildTowerPanel() -->
+    <button id="send-wave-btn" onclick="sendWave()">SEND WAVE</button>
+  </div>
+</div>
+
+<!-- MAIN OVERLAY -->
+<div id="overlay">
+  <h1>[FILL: GAME_TITLE]</h1>
+  <div class="sub">[FILL: GAME_SUBTITLE]</div>
+  <button class="menu-btn" id="btn-play">[FILL: START_LABEL]</button>
+</div>
+
+<!-- SHOP OVERLAY -->
+<div id="shop-overlay">
+  <h2>[FILL: SHOP_TITLE]</h2>
+  <div class="coins-info" id="shop-coins">🪙 0 coins</div>
+  <div id="shop-grid"></div>
+  <button class="menu-btn" id="btn-close-shop">[FILL: SHOP_LABEL]</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js"></script>
+<script>
+'use strict';
+// ═══ ENGINE — DO NOT MODIFY ═══
+
+// ── Meta-progression ──────────────────────────────────────────────────────────
+const META_KEY = '[FILL: META_KEY]';
+let meta = { coins:0, upgrades:{} };
+function loadMeta() {
+  try { const s=localStorage.getItem(META_KEY); if(s) meta=JSON.parse(s); } catch(e){}
+  UPGRADE_DEFS.forEach(u=>{ if(meta.upgrades[u.id]==null) meta.upgrades[u.id]=0; });
+}
+function saveMeta() { try { localStorage.setItem(META_KEY,JSON.stringify(meta)); } catch(e){} }
+function buyUpgrade(id) {
+  const u=UPGRADE_DEFS.find(x=>x.id===id); if(!u) return;
+  const lv=meta.upgrades[id]||0;
+  if(lv>=u.maxLv || meta.coins<u.cost) return;
+  meta.coins-=u.cost; meta.upgrades[id]=lv+1;
+  saveMeta(); applyUpgrades(); renderShop();
+}
+function renderShop() {
+  document.getElementById('shop-coins').textContent='🪙 '+meta.coins+' coins';
+  const g=document.getElementById('shop-grid'); g.innerHTML='';
+  UPGRADE_DEFS.forEach(u=>{
+    const lv=meta.upgrades[u.id]||0;
+    const maxed=lv>=u.maxLv;
+    const canBuy=!maxed&&meta.coins>=u.cost;
+    g.innerHTML+=`<div class="shop-card">
+      <h3>${u.name}</h3><p>${u.desc}</p>
+      <div class="lv">Lv ${lv} / ${u.maxLv}</div>
+      <button class="buy-btn" onclick="buyUpgrade('${u.id}')" ${!canBuy?'disabled':''}>
+        ${maxed?'MAX':'Buy — 🪙'+u.cost}
+      </button></div>`;
+  });
+}
+
+// ── Three.js core ──────────────────────────────────────────────────────────────
+const scene    = new THREE.Scene();
+const camera   = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.5, 400);
+const renderer = new THREE.WebGLRenderer({ canvas:document.getElementById('c'), antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+const clock = new THREE.Clock();
+
+// fixed top-down isometric camera
+camera.position.set(0, 38, 28);
+camera.lookAt(0, 0, 0);
+
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+// ── Raycasting for tile click ─────────────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const mouse     = new THREE.Vector2();
+
+// ── Game state ─────────────────────────────────────────────────────────────────
+let gameState='menu';
+let gold=150;
+let baseHp=20;
+let wave=1;
+let waveActive=false;
+let selectedTowerType = null; // key from TOWER_TYPES
+
+// ── Arrays ────────────────────────────────────────────────────────────────────
+let gridTiles = [];
+let towers    = [];
+let enemies   = [];
+let projectiles = [];
+
+// ── World position helper ──────────────────────────────────────────────────────
+function worldPos(gx, gz) {
+  const ox = -(GRID.cols * GRID.cellSize) / 2 + GRID.cellSize/2;
+  const oz = -(GRID.rows * GRID.cellSize) / 2 + GRID.cellSize/2;
+  return new THREE.Vector3(ox + gx*GRID.cellSize, 0, oz + gz*GRID.cellSize);
+}
+
+// ── HUD ───────────────────────────────────────────────────────────────────────
+function updateHUD() {
+  document.getElementById('wave-disp').textContent = 'WAVE '+wave;
+  document.getElementById('gold-disp').textContent = '🪙 GOLD: '+gold;
+  document.getElementById('hp-disp').textContent   = '❤️ BASE: '+baseHp;
+  document.getElementById('coins-disp').textContent= 'META: 🪙 '+meta.coins;
+}
+
+function showStatus(msg, dur=2500) {
+  const el=document.getElementById('status-msg');
+  el.textContent=msg; el.style.display='block';
+  clearTimeout(el._t); el._t=setTimeout(()=>el.style.display='none',dur);
+}
+
+function flashBase() {
+  const f=document.getElementById('hit-flash');
+  f.style.background='rgba(231,76,60,0.4)';
+  setTimeout(()=>f.style.background='rgba(231,76,60,0)',150);
+}
+
+// ── Tower panel buttons ───────────────────────────────────────────────────────
+function buildTowerPanel() {
+  const panel = document.getElementById('tower-panel');
+  // remove old buttons except the send-wave button
+  [...panel.querySelectorAll('.tower-btn')].forEach(b=>b.remove());
+  const sendBtn = document.getElementById('send-wave-btn');
+  Object.entries(TOWER_TYPES).forEach(([id,t])=>{
+    const btn=document.createElement('button');
+    btn.className='tower-btn';
+    btn.textContent=t.name+' ('+t.cost+'g)';
+    btn.title=t.desc;
+    btn.onclick=()=>{ selectedTowerType=id; document.querySelectorAll('.tower-btn').forEach(b=>b.classList.remove('selected')); btn.classList.add('selected'); };
+    panel.insertBefore(btn, sendBtn);
+  });
+}
+
+// ── Place tower on tile ───────────────────────────────────────────────────────
+function placeTower(tile, type) {
+  const def = TOWER_TYPES[type];
+  if(gold < def.cost) { showStatus('NOT ENOUGH GOLD',1500); return; }
+  if(tile.occupied)   { showStatus('TILE OCCUPIED',1000);   return; }
+  // check tile not on path
+  const onPath = PATH.some(p=>p.x===tile.gridX && p.z===tile.gridZ);
+  if(onPath) { showStatus('CANNOT BUILD ON PATH',1000); return; }
+
+  gold -= def.cost; tile.occupied=true;
+  const grp = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.8,1.0,0.6,8), new THREE.MeshLambertMaterial({color:def.color}));
+  base.position.y=0.3; grp.add(base);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,1.2,6), new THREE.MeshLambertMaterial({color:0x666666}));
+  barrel.position.set(0.6,0.9,0); barrel.name='barrel'; grp.add(barrel);
+  grp.position.copy(worldPos(tile.gridX, tile.gridZ));
+  grp.castShadow=true; scene.add(grp);
+  towers.push({ grp, type, tile, pos:grp.position.clone(), range:def.range, dmg:def.dmg*(1+(meta.upgrades['tower_dmg']||0)*0.2), rate:def.rate, timer:0 });
+  updateHUD();
+}
+
+// ── Kill enemy ────────────────────────────────────────────────────────────────
+function killEnemy(e) {
+  const def = ENEMY_TYPES[e.type];
+  gold += e.reward; meta.coins += Math.ceil(e.reward/5); saveMeta();
+  scene.remove(e.mesh); enemies.splice(enemies.indexOf(e),1);
+  updateHUD();
+}
+
+// ── Spawn enemy ───────────────────────────────────────────────────────────────
+function spawnEnemy(type) {
+  const def = ENEMY_TYPES[type];
+  const startWP = PATH[0];
+  const pos = worldPos(startWP.x, startWP.z).add(new THREE.Vector3(0,0.6,0));
+  const geo = new THREE.CapsuleGeometry(0.4*def.scale, 0.8*def.scale, 4, 8);
+  const mat = new THREE.MeshLambertMaterial({color:def.color});
+  const mesh = new THREE.Mesh(geo,mat); mesh.position.copy(pos); mesh.castShadow=true; scene.add(mesh);
+  enemies.push({ mesh, type, hp:def.hp, maxHp:def.hp, speed:def.speed, reward:def.reward, pathIdx:1, pos:pos.clone(), scale:def.scale });
+}
+
+// ── Tower fire ────────────────────────────────────────────────────────────────
+function fireTowerProjectile(tower, enemy) {
+  const geo = new THREE.SphereGeometry(0.2,6,6);
+  const mat = new THREE.MeshBasicMaterial({color:TOWER_TYPES[tower.type].color});
+  const mesh = new THREE.Mesh(geo,mat); mesh.position.copy(tower.pos).add(new THREE.Vector3(0,1,0)); scene.add(mesh);
+  const dir = enemy.pos.clone().sub(mesh.position).normalize();
+  projectiles.push({ mesh, vel:dir.multiplyScalar(20), dmg:tower.dmg, splash:TOWER_TYPES[tower.type].splash||0, life:2 });
+}
+
+// ── Update towers ─────────────────────────────────────────────────────────────
+function updateTowers(dt) {
+  for(const t of towers) {
+    t.timer-=dt;
+    if(t.timer>0) continue;
+    // find nearest enemy in range
+    let nearest=null, bestDist=Infinity;
+    for(const e of enemies) {
+      const d=e.pos.distanceTo(t.pos);
+      if(d<t.range && d<bestDist){ bestDist=d; nearest=e; }
+    }
+    if(!nearest) continue;
+    t.timer=t.rate;
+    // rotate barrel toward target
+    const barrel=t.grp.getObjectByName('barrel');
+    if(barrel) t.grp.lookAt(nearest.pos);
+    fireTowerProjectile(t, nearest);
+  }
+}
+
+// ── Update projectiles ────────────────────────────────────────────────────────
+function updateProjectiles(dt) {
+  for(let i=projectiles.length-1;i>=0;i--){
+    const p=projectiles[i]; p.life-=dt;
+    p.mesh.position.addScaledVector(p.vel,dt);
+    if(p.life<=0){ scene.remove(p.mesh); projectiles.splice(i,1); continue; }
+    // hit check
+    for(let j=enemies.length-1;j>=0;j--){
+      const e=enemies[j];
+      if(p.mesh.position.distanceTo(e.pos)<0.9*(e.scale||1)){
+        e.hp-=p.dmg;
+        scene.remove(p.mesh); projectiles.splice(i,1);
+        if(p.splash>0) { // splash damage
+          for(const oe of enemies) { if(oe!==e && oe.pos.distanceTo(e.pos)<p.splash) oe.hp-=p.dmg*0.5; }
+        }
+        if(e.hp<=0) killEnemy(e);
+        break;
+      }
+    }
+  }
+}
+
+// ── Update enemies ────────────────────────────────────────────────────────────
+function updateEnemies(dt) {
+  for(let i=enemies.length-1;i>=0;i--){
+    const e=enemies[i];
+    if(e.pathIdx>=PATH.length){
+      // reached base
+      baseHp--; flashBase(); scene.remove(e.mesh); enemies.splice(i,1);
+      if(baseHp<=0){ triggerGameOver(false); return; }
+      updateHUD(); continue;
+    }
+    const wp = worldPos(PATH[e.pathIdx].x, PATH[e.pathIdx].z);
+    const dir = wp.clone().sub(e.pos);
+    const dist = dir.length();
+    if(dist<0.3) { e.pathIdx++; continue; }
+    dir.normalize();
+    const moveAmt = e.speed * dt;
+    e.pos.addScaledVector(dir, moveAmt);
+    e.mesh.position.copy(e.pos);
+    e.mesh.lookAt(e.pos.clone().add(dir));
+    // HP bar tilt — scale mesh Y by hp fraction
+    e.mesh.scale.y = 0.5 + 0.5*(e.hp/e.maxHp);
+  }
+}
+
+// ── Canvas click → tile selection ────────────────────────────────────────────
+function onCanvasClick(e) {
+  if(gameState!=='playing' || !selectedTowerType) return;
+  mouse.x =  (e.clientX / innerWidth ) * 2 - 1;
+  mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(gridTiles.map(t=>t.mesh));
+  if(hits.length>0){
+    const mesh=hits[0].object;
+    const tile=gridTiles.find(t=>t.mesh===mesh);
+    if(tile) placeTower(tile, selectedTowerType);
+  }
+}
+document.getElementById('c').addEventListener('click', onCanvasClick);
+
+// ── Send wave button ──────────────────────────────────────────────────────────
+function sendWave() {
+  if(!waveActive && gameState==='playing') {
+    spawnWave(wave);
+    waveActive=true;
+    document.getElementById('send-wave-btn').disabled=true;
+  }
+}
+
+// ── Game state machine ────────────────────────────────────────────────────────
+function startGame() {
+  document.getElementById('overlay').style.display='none';
+  applyUpgrades();
+  buildScene();
+  buildTowerPanel();
+  gold=150+(meta.upgrades['gold_income']||0)*25;
+  baseHp=20+(meta.upgrades['base_hp']||0)*5;
+  wave=1; waveActive=false; selectedTowerType=null;
+  document.getElementById('send-wave-btn').disabled=false;
+  gameState='playing';
+  updateHUD();
+}
+
+function triggerGameOver(won) {
+  gameState='gameover';
+  if(won){ meta.coins+=30; saveMeta(); }
+  const ov=document.getElementById('overlay');
+  ov.innerHTML=`
+    <h1 style="color:${won?'#ffd700':'#e74c3c'}">${won?'[FILL: WIN_SUBTITLE]':'[FILL: GAMEOVER_SUBTITLE]'}</h1>
+    <div class="sub">WAVE REACHED: ${wave}</div>
+    <button class="menu-btn" id="btn-shop">[FILL: SHOP_LABEL]</button>
+    <button class="menu-btn" id="btn-retry">[FILL: RETRY_LABEL]</button>`;
+  ov.style.display='flex';
+  document.getElementById('btn-shop').onclick = openShop;
+  document.getElementById('btn-retry').onclick = startGame;
+}
+
+function openShop() {
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('shop-overlay').style.display='flex';
+  gameState='shop'; renderShop();
+}
+function closeShop() {
+  document.getElementById('shop-overlay').style.display='none';
+  triggerGameOver(false);
+}
+document.getElementById('btn-close-shop').onclick = closeShop;
+
+// ── Main loop ──────────────────────────────────────────────────────────────────
+function update(dt) {
+  if(gameState!=='playing') return;
+  updateEnemies(dt);
+  updateTowers(dt);
+  updateProjectiles(dt);
+  updatePlaying(dt);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  update(dt);
+  renderer.render(scene,camera);
+}
+
+// ═══ END ENGINE ═══
+
+
+// ── [FILL: UPGRADE_DEFS] ──────────────────────────────────────────────────────
+const UPGRADE_DEFS = [
+  { id:'gold_income', name:'Gold Income',  desc:'+25 starting gold per level',        cost:25, maxLv:4 },
+  { id:'tower_dmg',   name:'Tower Damage', desc:'+20% tower damage per level',        cost:30, maxLv:4 },
+  { id:'base_hp',     name:'Base Armor',   desc:'+5 max base HP per level',           cost:35, maxLv:4 },
+  { id:'tower_range', name:'Tower Range',  desc:'+1 range on all towers per level',   cost:40, maxLv:3 }
+];
+
+// ── [FILL: APPLY_UPGRADES] ────────────────────────────────────────────────────
+function applyUpgrades() {
+  // gold/baseHp are applied in startGame(); tower_dmg applied in placeTower().
+  // tower_range: stored in meta, checked per-tower when firing.
+}
+
+// ── [FILL: GRID] ──────────────────────────────────────────────────────────────
+// Dimensions of the play grid.
+const GRID = { cols:12, rows:10, cellSize:4 };
+
+// ── [FILL: PATH] ──────────────────────────────────────────────────────────────
+// Ordered list of {x,z} grid coordinates the enemies walk through.
+// x: 0..cols-1, z: 0..rows-1. First = spawn, last = base entry.
+const PATH = [
+  {x:0, z:2}, {x:2, z:2}, {x:2, z:5}, {x:5, z:5},
+  {x:5, z:1}, {x:8, z:1}, {x:8, z:7}, {x:10, z:7}, {x:11, z:7}
+];
+
+// ── [FILL: TOWER_TYPES] ───────────────────────────────────────────────────────
+// Define all buildable tower types.
+// splash: AoE radius (0 = single target). rate: seconds between shots.
+const TOWER_TYPES = {
+  gun:    { name:'Gun',    cost:50,  range:8,  dmg:1,  rate:0.4, color:0x888888, desc:'Fast, cheap',        splash:0   },
+  cannon: { name:'Cannon', cost:100, range:6,  dmg:4,  rate:1.8, color:0xcc6600, desc:'Slow, AoE splash',   splash:2.5 },
+  laser:  { name:'Laser',  cost:120, range:12, dmg:1.5,rate:0.2, color:0x00ccff, desc:'Long range, rapid',  splash:0   },
+  slow:   { name:'Slow',   cost:80,  range:7,  dmg:0.5,rate:1.0, color:0x9933ff, desc:'Halves enemy speed', splash:0   }
+};
+
+// ── [FILL: ENEMY_TYPES] ───────────────────────────────────────────────────────
+// Define all enemy types. scale: visual+collision multiplier.
+const ENEMY_TYPES = {
+  grunt:   { hp:5,  speed:4,  reward:10, color:0x33cc33, scale:1.0 },
+  runner:  { hp:3,  speed:8,  reward:15, color:0xffcc00, scale:0.8 },
+  brute:   { hp:20, speed:2,  reward:30, color:0xcc3333, scale:1.6 },
+  boss:    { hp:80, speed:1.5,reward:100,color:0x660066, scale:2.2 }
+};
+
+// ── [FILL: BUILD_SCENE] ───────────────────────────────────────────────────────
+// Clear scene and build: lights, ground, grid tiles, path tiles, base marker.
+// Must populate gridTiles[].
+function buildScene() {
+  // clear
+  while(scene.children.length) scene.remove(scene.children[0]);
+  gridTiles=[]; towers=[]; enemies=[]; projectiles=[];
+
+  scene.background = new THREE.Color(0x2a3a1a);
+  scene.fog = new THREE.Fog(0x2a3a1a, 80, 200);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const sun=new THREE.DirectionalLight(0xfff8e0, 1.2);
+  sun.position.set(20,50,30); sun.castShadow=true; scene.add(sun);
+
+  // ground
+  const gW=GRID.cols*GRID.cellSize, gD=GRID.rows*GRID.cellSize;
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(gW,gD), new THREE.MeshLambertMaterial({color:0x4a6a2a}));
+  ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+
+  // grid tiles
+  const pathSet=new Set(PATH.map(p=>p.x+','+p.z));
+  for(let z=0;z<GRID.rows;z++) for(let x=0;x<GRID.cols;x++){
+    const isPath=pathSet.has(x+','+z);
+    const mesh=new THREE.Mesh(
+      new THREE.BoxGeometry(GRID.cellSize-0.2, 0.3, GRID.cellSize-0.2),
+      new THREE.MeshLambertMaterial({color:isPath?0x8B6914:0x3a5a2a, transparent:true, opacity:isPath?1:0.7})
+    );
+    mesh.position.copy(worldPos(x,z)).add(new THREE.Vector3(0,0.15,0));
+    mesh.receiveShadow=true; scene.add(mesh);
+    if(!isPath) gridTiles.push({mesh, gridX:x, gridZ:z, occupied:false});
+  }
+
+  // path direction arrows
+  for(let i=0;i<PATH.length-1;i++){
+    const a=worldPos(PATH[i].x, PATH[i].z);
+    const b=worldPos(PATH[i+1].x, PATH[i+1].z);
+    const arw=new THREE.Mesh(new THREE.ConeGeometry(0.4,1,4), new THREE.MeshBasicMaterial({color:0xffcc00}));
+    arw.position.copy(a).lerp(b,0.5).add(new THREE.Vector3(0,0.4,0));
+    arw.lookAt(b.clone().add(new THREE.Vector3(0,0.4,0)));
+    arw.rotateX(Math.PI/2); scene.add(arw);
+  }
+
+  // base indicator at last waypoint
+  const basePos=worldPos(PATH[PATH.length-1].x, PATH[PATH.length-1].z);
+  const base=new THREE.Mesh(new THREE.BoxGeometry(3,2,3), new THREE.MeshLambertMaterial({color:0x0044aa}));
+  base.position.copy(basePos).add(new THREE.Vector3(0,1,0)); scene.add(base);
+  const flag=new THREE.Mesh(new THREE.BoxGeometry(0.1,2,0.1), new THREE.MeshBasicMaterial({color:0xffffff}));
+  flag.position.copy(basePos).add(new THREE.Vector3(0,3,0)); scene.add(flag);
+}
+
+// ── [FILL: SPAWN_WAVE] ────────────────────────────────────────────────────────
+// Spawn enemies for wave n using spawnEnemy(type).
+// Stagger spawns with setTimeout to avoid frame spikes.
+function spawnWave(n) {
+  const count = 5 + n*2;
+  for(let i=0;i<count;i++){
+    const delay = i*600;
+    let type='grunt';
+    if(n>=2 && Math.random()<0.3) type='runner';
+    if(n>=4 && Math.random()<0.2) type='brute';
+    setTimeout(()=>{ if(gameState==='playing') spawnEnemy(type); }, delay);
+  }
+  // boss every 5 waves
+  if(n>0 && n%5===0) setTimeout(()=>{ if(gameState==='playing') spawnEnemy('boss'); }, count*600+1000);
+}
+
+// ── [FILL: UPDATE_PLAYING] ────────────────────────────────────────────────────
+// Wave orchestration, gold income, special effects, etc.
+function updatePlaying(dt) {
+  if(waveActive && enemies.length===0) {
+    waveActive=false;
+    wave++;
+    gold+=20+(meta.upgrades['gold_income']||0)*5; // between-wave income
+    document.getElementById('send-wave-btn').disabled=false;
+    showStatus('WAVE '+wave+' READY — SEND WHEN READY', 3000);
+    updateHUD();
+  }
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+loadMeta();
+applyUpgrades();
+buildScene();           // preview scene in background
+buildTowerPanel();
+camera.position.set(0,38,28); camera.lookAt(0,0,0);
+gameState='menu';
+animate();
+document.getElementById('btn-play').onclick = startGame;
+</script>
+</body>
+</html>

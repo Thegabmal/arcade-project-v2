@@ -1,0 +1,795 @@
+<!--
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ARCADE PROJECT — SHOOT-EM-UP / SHMUP TEMPLATE — USAGE GUIDE                      ║
+║  Read this entirely before writing a single line of code.                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ ROLE ──────────────────────────────────────────────────────────────────────┐
+│ You are a senior HTML5 Canvas 2D game developer.                            │
+│ Your job: fill the [FILL: ...] sections to create a complete, playable game. │
+│ You do NOT write the engine — it is already written and tested.             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ THE TWO ZONES ─────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  1. ENGINE — DO NOT MODIFY  (lines below this comment, until first [FILL])  │
+│     ┌───────────────────────────────────────────────────────────────────┐   │
+│     │  Complete, crash-proof boilerplate. Copy EVERY character exactly. │   │
+│     │  Any change to ENGINE will break the game in a non-obvious way.   │   │
+│     └───────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  2. [FILL: ...] sections  — YOUR creative contribution                       │
+│     ┌───────────────────────────────────────────────────────────────────┐   │
+│     │  Replace EVERY placeholder with real, working JavaScript.         │   │
+│     │  Any [FILL] left in your output = a broken or incomplete game.    │   │
+│     └───────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SACRED CONTRACT — ENGINE VARIABLES (NEVER redeclare these) ────────────────┐
+│                                                                              │
+│  The ENGINE already declares and initialises these. If you add another      │
+│  "var/let/const X = ..." for any of these names, you WILL overwrite them    │
+│  with null/0 at runtime — guaranteed crash on the first draw call.          │
+│                                                                              │
+│  canvas   → HTMLCanvasElement  (getElementById — already set up)            │
+│  ctx       → CanvasRenderingContext2D (getContext — already set up)         │
+│  W, H      → logical canvas dimensions (480 × 640 — fixed for this genre)  │
+│  DPR       → device pixel ratio (handled by resizeCanvas)                   │
+│  gameState → string: 'menu' | 'playing' | 'paused' | 'gameover'            │
+│  Keys      → { down:{}, pressed:{}, released:{} }  — keyboard state        │
+│  Touch     → { justTapped, x, y }  — touch state                           │
+│  Mouse     → { clicked, x, y }  — mouse state                              │
+│  lastTime, accumulator  → game loop timing                                  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ENGINE FUNCTIONS — USE THESE, DO NOT REWRITE THEM ─────────────────────────┐
+│                                                                              │
+│  Input:                                                                      │
+│    keyDown('ArrowLeft')      → is key held this frame?                      │
+│    keyPressed('Space')       → was key just pressed?                        │
+│    anyAction()               → any key/click/tap?                           │
+│    flushInput()              → called automatically at end of update()      │
+│                                                                              │
+│  Pooling & FX:                                                              │
+│    createPool(factory, n)    → reusable object pool for enemies/bullets     │
+│    spawnParticles(x,y,n,opts)→ visual burst feedback                        │
+│    triggerShake(mag, dur)    → screen shake (use on hits and explosions)    │
+│    spawnPopup(x,y,txt,color) → floating score text                          │
+│                                                                              │
+│  Drawing helpers:                                                            │
+│    drawText(txt,x,y,col,sz,align) → quick HUD text                         │
+│    drawBar(x,y,w,h,val,max,fg,bg)  → health / progress bar                 │
+│                                                                              │
+│  Audio (NO external files allowed):                                          │
+│    sfx.play(freq, dur, type, vol)  → synthesised WebAudio sound            │
+│                                                                              │
+│  Math:                                                                       │
+│    lerp(a,b,t)   clamp(v,min,max)  aabb(ax,ay,aw,ah,bx,by,bw,bh)          │
+│    randInt(a,b)  randFloat(a,b)    randChoice(arr)                          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ GAME LOOP CONTRACT — HOW update/render WORK ───────────────────────────────┐
+│                                                                              │
+│  Fixed 60 Hz step:  loop(ts) → update(FIXED_DT) → renderFrame()            │
+│                                                                              │
+│  YOU MUST IMPLEMENT:                                                         │
+│    startGame()        → reset all state, spawn initial entities             │
+│    updatePlaying(dt)  → all gameplay: input, AI, physics, collisions        │
+│    renderPlaying()    → all drawing: background, entities, HUD              │
+│                                                                              │
+│  The ENGINE calls these automatically via the state machine.                │
+│  Do NOT write your own requestAnimationFrame or setInterval.                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ABSOLUTE PROHIBITIONS — any of these guarantees a crash ───────────────────┐
+│                                                                              │
+│  ✗  var canvas = ...       Redeclaring ENGINE globals KILLS context         │
+│  ✗  var ctx    = ...       ctx becomes null → crash on first ctx.save()     │
+│  ✗  var W      = ...       Use W and H directly — they are already set      │
+│  ✗  setInterval()          NEVER. The ENGINE loop already runs.             │
+│  ✗  new Image()            NO external resources. Draw with Canvas API.     │
+│  ✗  fetch() / XHR          NO network calls in game logic.                  │
+│  ✗  Audio() with src       Use sfx.play(freq, dur, type, vol) only.        │
+│  ✗  location.reload()      Reset variables in JS — never force a reload.   │
+│  ✗  Truncating output      Incomplete HTML always crashes. Finish the file. │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ QUALITY CHECKLIST — verify before submitting ──────────────────────────────┐
+│                                                                              │
+│  ✓  Every [FILL: ...] placeholder is replaced with real code                │
+│  ✓  Game works: menu → play → game over / victory → restart                 │
+│  ✓  Score, lives/HP, level visible in HUD at all times                      │
+│  ✓  At least 3 distinct enemy / obstacle / element types with AI            │
+│  ✓  Difficulty scales over time (speed, spawn rate, damage)                 │
+│  ✓  Audio feedback on: shoot, hit, collect, level up, game over             │
+│  ✓  Particle effects on: kills, power-up collect, player death              │
+│  ✓  Your output starts with <!DOCTYPE html> — no markdown fences            │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+-->
+<!DOCTYPE html>
+<html><head><title>[FILL: GAME_TITLE]</title><style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;}
+canvas{display:block;}
+</style></head><body>
+<canvas id="gameCanvas"></canvas>
+<script>
+// ══════════════════════════════════════════════════════════════════
+// ENGINE — DO NOT MODIFY
+// Dev console bridge — AI patches execute in game scope via eval
+window.__devPatch = function(code) { return eval(code); };
+// ══════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+let W = 480, H = 640;
+function resizeCanvas() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const scale = Math.min(vw / W, vh / H);
+  canvas.style.width  = Math.round(W * scale) + 'px';
+  canvas.style.height = Math.round(H * scale) + 'px';
+  canvas.width  = Math.round(W * DPR);
+  canvas.height = Math.round(H * DPR);
+  ctx.scale(DPR, DPR);
+}
+resizeCanvas();
+window.addEventListener('resize', () => { resizeCanvas(); ctx.scale(DPR, DPR); });
+
+// State machine
+let gameState = 'menu'; // menu | playing | paused | gameover | shop
+function setState(s) { gameState = s; }
+
+// Input
+const Keys = { down: {}, pressed: {}, released: {} };
+window.addEventListener('keydown', e => {
+  if (!Keys.down[e.code]) Keys.pressed[e.code] = true;
+  Keys.down[e.code] = true;
+  if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { Keys.down[e.code] = false; Keys.released[e.code] = true; });
+const Touch = { justTapped: false, x: 0, y: 0 };
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const r = canvas.getBoundingClientRect();
+  Touch.x = (e.touches[0].clientX - r.left) * (W / r.width);
+  Touch.y = (e.touches[0].clientY - r.top) * (H / r.height);
+  Touch.justTapped = true;
+}, { passive: false });
+const Mouse = { clicked: false, x: 0, y: 0 };
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  Mouse.x = (e.clientX - r.left) * (W / r.width);
+  Mouse.y = (e.clientY - r.top) * (H / r.height);
+});
+canvas.addEventListener('click', () => Mouse.clicked = true);
+
+function keyDown(c) { return !!Keys.down[c]; }
+function keyPressed(c) { return !!Keys.pressed[c]; }
+function anyAction() { return Mouse.clicked || Touch.justTapped || keyPressed('Space') || keyPressed('Enter'); }
+function flushInput() { Keys.pressed = {}; Keys.released = {}; Touch.justTapped = false; Mouse.clicked = false; }
+
+// Object pool
+function createPool(factory, size) {
+  const inactive = Array.from({ length: size }, factory);
+  const active = [];
+  return {
+    active,
+    get(initFn) {
+      const obj = inactive.length > 0 ? inactive.pop() : factory();
+      obj.alive = true;
+      if (initFn) initFn(obj);
+      active.push(obj);
+      return obj;
+    },
+    update(fn) {
+      for (let i = active.length - 1; i >= 0; i--) {
+        if (!fn(active[i])) { active[i].alive = false; inactive.push(active.splice(i, 1)[0]); }
+      }
+    },
+    clear() { while (active.length) { active[0].alive = false; inactive.push(active.shift()); } }
+  };
+}
+
+// Particles (pooled)
+const Particles = createPool(() => ({ alive:false,x:0,y:0,vx:0,vy:0,life:0,maxLife:0,size:3,color:'#fff',gravity:150 }), 300);
+function spawnParticles(x, y, count, opts) {
+  opts = opts || {};
+  for (let i = 0; i < count; i++) {
+    const angle = opts.angle !== undefined
+      ? opts.angle + (Math.random() - 0.5) * (opts.spread || Math.PI * 2)
+      : Math.random() * Math.PI * 2;
+    const speed = opts.speed || (40 + Math.random() * 80);
+    Particles.get(p => {
+      p.x = x; p.y = y;
+      p.vx = Math.cos(angle) * speed; p.vy = Math.sin(angle) * speed;
+      p.life = p.maxLife = opts.life || (0.3 + Math.random() * 0.5);
+      p.size = opts.size || (2 + Math.random() * 3);
+      p.color = opts.color || '#fff';
+      p.gravity = opts.gravity !== undefined ? opts.gravity : 100;
+    });
+  }
+}
+function updateParticles(dt) {
+  Particles.update(p => { p.life -= dt; p.x += p.vx*dt; p.y += p.vy*dt; p.vy += p.gravity*dt; return p.life > 0; });
+}
+function drawParticles() {
+  Particles.active.forEach(p => {
+    ctx.globalAlpha = p.life / p.maxLife;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+  });
+  ctx.globalAlpha = 1;
+}
+
+// Score popups
+const Popups = [];
+function spawnPopup(x, y, text, color, size) {
+  Popups.push({ x, y, text, color: color||'#fff', size: size||14, vy:-55, life:1.0 });
+}
+function updatePopups(dt) {
+  for (let i = Popups.length-1; i >= 0; i--) {
+    Popups[i].y += Popups[i].vy * dt; Popups[i].life -= dt;
+    if (Popups[i].life <= 0) Popups.splice(i, 1);
+  }
+}
+function drawPopups() {
+  Popups.forEach(p => {
+    ctx.globalAlpha = Math.min(p.life, 1);
+    ctx.fillStyle = p.color; ctx.font = `bold ${p.size}px monospace`;
+    ctx.textAlign = 'center'; ctx.fillText(p.text, p.x, p.y);
+  });
+  ctx.globalAlpha = 1; ctx.textAlign = 'left';
+}
+
+// Screen shake
+const Shake = { x:0, y:0, mag:0, dur:0 };
+function triggerShake(mag, dur) { Shake.mag = Math.max(Shake.mag, mag); Shake.dur = Math.max(Shake.dur, dur); }
+function updateShake(dt) {
+  if (Shake.dur > 0) {
+    Shake.dur -= dt; Shake.x = (Math.random()*2-1)*Shake.mag; Shake.y = (Math.random()*2-1)*Shake.mag;
+    if (Shake.dur <= 0) { Shake.x = 0; Shake.y = 0; }
+  }
+}
+
+// Audio
+const sfx = {
+  _ctx: null,
+  init() { try { if (!this._ctx) this._ctx = new (window.AudioContext||window.webkitAudioContext)(); if(this._ctx.state==='suspended') this._ctx.resume(); } catch(e) {} },
+  play(freq, dur, type, vol) {
+    try {
+      this.init(); if (!this._ctx) return;
+      const o=this._ctx.createOscillator(), g=this._ctx.createGain();
+      o.type=type||'square'; o.frequency.value=freq||440;
+      g.gain.setValueAtTime(vol||0.12, this._ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, this._ctx.currentTime+(dur||0.1));
+      o.connect(g); g.connect(this._ctx.destination); o.start(); o.stop(this._ctx.currentTime+(dur||0.1));
+    } catch(e) {}
+  }
+};
+
+// Utilities
+function lerp(a,b,t){return a+(b-a)*t;}
+function clamp(v,min,max){return v<min?min:v>max?max:v;}
+function aabb(ax,ay,aw,ah,bx,by,bw,bh){return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by;}
+function randInt(a,b){return a+Math.floor(Math.random()*(b-a+1));}
+function randFloat(a,b){return a+Math.random()*(b-a);}
+function randChoice(arr){return arr[Math.floor(Math.random()*arr.length)];}
+let _hiScore = parseInt(localStorage.getItem('hs_shooter')||'0');
+function saveHiScore(s){if(s>_hiScore){_hiScore=s;localStorage.setItem('hs_shooter',s);}}
+
+// HUD helpers
+function drawText(txt,x,y,color,size,align){
+  ctx.fillStyle=color||'#fff'; ctx.font=`bold ${size||14}px monospace`;
+  ctx.textAlign=align||'left'; ctx.fillText(txt,x,y);
+}
+function drawBar(x,y,w,h,val,max,fg,bg){
+  ctx.fillStyle=bg||'#333'; ctx.fillRect(x,y,w,h);
+  ctx.fillStyle=fg||'#0f0'; ctx.fillRect(x,y,Math.round(w*clamp(val/max,0,1)),h);
+}
+
+// Fixed-step game loop
+const FIXED_DT = 1/60, MAX_DT = 0.1;
+let lastTime = 0, accumulator = 0;
+function loop(ts) {
+  const rawDt = Math.min((ts - lastTime) / 1000, MAX_DT);
+  lastTime = ts;
+  accumulator += rawDt;
+  while (accumulator >= FIXED_DT) { update(FIXED_DT); accumulator -= FIXED_DT; }
+  renderFrame();
+  requestAnimationFrame(loop);
+}
+function update(dt) {
+  updateShake(dt); updateParticles(dt); updatePopups(dt);
+  switch(gameState) {
+    case 'menu':    updateMenu(dt);    break;
+    case 'playing': updatePlaying(dt); break;
+    case 'paused':  if(keyPressed('Escape')||keyPressed('KeyP')) setState('playing'); break;
+    case 'gameover':updateGameover(dt); break;
+    case 'shop':    updateShop(dt);   break;
+  }
+  flushInput();
+}
+function renderFrame() {
+  ctx.save(); ctx.translate(Shake.x, Shake.y);
+  switch(gameState) {
+    case 'menu':    renderMenu();    break;
+    case 'playing': renderPlaying(); break;
+    case 'paused':  renderPlaying(); renderPauseOverlay(); break;
+    case 'gameover':renderPlaying(); renderGameoverOverlay(); break;
+    case 'shop':    renderShop();   break;
+  }
+  drawParticles(); drawPopups();
+  ctx.restore();
+}
+function updateMenu(dt) { if(anyAction()){sfx.play(440,0.08,'square',0.1);startGame();setState('playing');} }
+function renderPauseOverlay() {
+  ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,W,H);
+  drawText('PAUSED',W/2,H/2,'#fff',28,'center');
+  drawText('ESC to resume',W/2,H/2+36,'#aaa',13,'center');
+}
+function renderGameoverOverlay() {
+  ctx.fillStyle='rgba(0,0,0,0.78)'; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle='#f44'; ctx.font='bold 34px system-ui,sans-serif'; ctx.fillText('GAME OVER',W/2,H*0.36);
+  ctx.fillStyle='#fff'; ctx.font='bold 18px system-ui,sans-serif'; ctx.fillText(`Score: ${GAME_SCORE}  •  +${Math.floor(_runCoins)} coins`,W/2,H*0.48);
+  ctx.fillStyle='#ff0'; ctx.font='14px system-ui,sans-serif'; ctx.fillText(`Best: ${_hiScore}`,W/2,H*0.58);
+  ctx.fillStyle='#aaa'; ctx.font='13px system-ui,sans-serif'; ctx.fillText('Heading to shop…',W/2,H*0.70);
+  ctx.textAlign='left';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME CONSTANTS — [FILL: Adjust to match your game design]
+// ══════════════════════════════════════════════════════════════════
+const GAME_TITLE = '[FILL: Game Title]';
+
+// [FILL: Define your color palette — shopBg/shopCard/shopSel must contrast]
+const PALETTE = {
+  bg:      '#050515',
+  player:  '#00ccff',
+  enemy:   '#ff4444',
+  bullet:  '#00ffff',
+  eBullet: '#ff6600',
+  ui:      '#ffffff',
+  accent:  '#ffdd00',
+  shopBg:  '#0a0a2a',
+  shopCard:'#1a1a3a',
+  shopSel: '#2a2a5a',
+};
+
+let GAME_SCORE = 0;
+
+// ── Player (do not change field names) ──────────────────────────
+const player = {
+  x: W/2-24, y: H-100, w: 48, h: 48,
+  hbW: 14, hbH: 14,
+  speed: 280,
+  hp: 3, maxHp: 3,
+  iframes: 0, IFRAME_DUR: 2.0,
+  fireTimer: 0, fireRate: 0.18,
+  lives: 3,
+  powerup: 'none',
+  coins: 0,
+};
+
+// ── Pools ────────────────────────────────────────────────────────
+const bulletPool  = createPool(() => ({alive:false,x:0,y:0,vx:0,vy:0,w:5,h:13,isEnemy:false,damage:1}), 250);
+const enemyPool   = createPool(() => ({alive:false,x:0,y:0,vx:0,vy:0,w:40,h:40,hbW:34,hbH:34,hp:1,maxHp:1,points:100,type:'grunt',fireTimer:0,fireRate:2.0,flashTimer:0,patternTimer:0,spawnX:0,phase:0}), 80);
+const powerupPool = createPool(() => ({alive:false,x:0,y:0,vy:55,w:20,h:20,type:'hp',bobTimer:0}), 20);
+
+// ── Parallax background (3 star layers) ─────────────────────────
+const bgLayers = [];
+
+// ── Wave manager ─────────────────────────────────────────────────
+const waveManager = { wave: 0, enemiesLeft: 0, waveTimer: 0, betweenDelay: 3.0 };
+
+// ── Meta-progression runtime ──────────────────────────────────────
+let _damageBonus     = 1;
+let _scoreMultiplier = 1.0;
+let _runCoins        = 0;
+let _gameoverTimer   = 0;
+let _shopIdx         = 0;
+
+// ══════════════════════════════════════════════════════════════════
+// [FILL: UPGRADE_DEFS]
+// 3–5 upgrades. { id, name, desc, maxLevel, costs[], icon }
+// ══════════════════════════════════════════════════════════════════
+const UPGRADES = [
+  { id:'firerate',  name:'Fire Rate',   desc:'Shoot faster each run',          maxLevel:3, costs:[30,70,140],  icon:'🔫' },
+  { id:'damage',    name:'Damage',      desc:'Bullets deal more damage',        maxLevel:3, costs:[40,80,160],  icon:'💥' },
+  { id:'shield',    name:'Shield',      desc:'Start with extra max HP',         maxLevel:2, costs:[50,120],     icon:'🛡' },
+  { id:'score',     name:'Score Boost', desc:'Score multiplier ×1.25 per level',maxLevel:3, costs:[35,70,140],  icon:'⭐' },
+];
+
+// ══════════════════════════════════════════════════════════════════
+// META-PERSISTENCE — fixed infrastructure, do not modify
+// ══════════════════════════════════════════════════════════════════
+const _META_KEY = 'meta_shooter';
+let _meta = { coins:0, upgrades:{} };
+function loadMeta(){try{_meta=JSON.parse(localStorage.getItem(_META_KEY))||{coins:0,upgrades:{}};}catch(e){_meta={coins:0,upgrades:{}};} if(!_meta.upgrades)_meta.upgrades={};}
+function saveMeta(){try{localStorage.setItem(_META_KEY,JSON.stringify(_meta));}catch(e){}}
+function addRunCoins(n){_meta.coins+=Math.floor(n);saveMeta();}
+function getUpgradeLevel(id){return _meta.upgrades[id]||0;}
+function buyUpgrade(id){const up=UPGRADES.find(u=>u.id===id);if(!up)return false;const lvl=getUpgradeLevel(id);if(lvl>=up.maxLevel)return false;const cost=up.costs[lvl];if(_meta.coins<cost)return false;_meta.coins-=cost;_meta.upgrades[id]=lvl+1;saveMeta();return true;}
+
+// ══════════════════════════════════════════════════════════════════
+// SHOP LOGIC — fixed infrastructure, do not modify
+// ══════════════════════════════════════════════════════════════════
+function updateGameover(dt){_gameoverTimer-=dt;if(_gameoverTimer<=0||anyAction()){addRunCoins(_runCoins);_shopIdx=0;setState('shop');}}
+function _shopHit(mx,my,x,y,w,h){return mx>=x&&mx<=x+w&&my>=y&&my<=y+h;}
+function updateShop(dt){
+  if(!anyAction())return;
+  const cardW=160,cardH=128,gap=16,cols=Math.min(UPGRADES.length,3),totalW=cols*cardW+(cols-1)*gap,sx=(W-totalW)/2,sy=100;
+  for(let i=0;i<UPGRADES.length;i++){
+    if(_shopHit(Mouse.x,Mouse.y,sx+i*(cardW+gap),sy,cardW,cardH)){_shopIdx=i;if(buyUpgrade(UPGRADES[i].id)){sfx.play(660,0.12,'sine',0.1);applyUpgrades();}else sfx.play(110,0.06,'sawtooth',0.08);return;}
+  }
+  const btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+32;
+  if(_shopHit(Mouse.x,Mouse.y,btnX,btnY,btnW,btnH)){sfx.play(440,0.08,'square',0.1);startGame();setState('playing');}
+}
+function renderShop(){
+  ctx.fillStyle=PALETTE.shopBg;ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle=PALETTE.accent;ctx.font='bold 24px system-ui,sans-serif';ctx.fillText('UPGRADE SHOP',W/2,48);
+  ctx.fillStyle='#ffdd00';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,72);
+  const cardW=160,cardH=128,gap=16,cols=Math.min(UPGRADES.length,3),totalW=cols*cardW+(cols-1)*gap,sx=(W-totalW)/2,sy=92;
+  for(let i=0;i<UPGRADES.length;i++){
+    const up=UPGRADES[i],lvl=getUpgradeLevel(up.id),cx=sx+i*(cardW+gap),maxed=lvl>=up.maxLevel,canBuy=!maxed&&_meta.coins>=up.costs[lvl];
+    ctx.fillStyle=i===_shopIdx?PALETTE.shopSel:PALETTE.shopCard;ctx.strokeStyle=maxed?'#4caf50':canBuy?'#ffdd00':'#444';ctx.lineWidth=i===_shopIdx?2:1;
+    ctx.beginPath();ctx.roundRect(cx,sy,cardW,cardH,8);ctx.fill();ctx.stroke();
+    ctx.font='24px system-ui,sans-serif';ctx.fillStyle='#fff';ctx.fillText(up.icon,cx+cardW/2,sy+30);
+    ctx.font='bold 11px system-ui,sans-serif';ctx.fillText(up.name,cx+cardW/2,sy+50);
+    ctx.fillStyle='#aaa';ctx.font='10px system-ui,sans-serif';ctx.fillText(up.desc,cx+cardW/2,sy+64);
+    for(let p=0;p<up.maxLevel;p++){ctx.fillStyle=p<lvl?'#ffdd00':'#333';ctx.beginPath();ctx.arc(cx+cardW/2-(up.maxLevel-1)*7+p*14,sy+84,5,0,Math.PI*2);ctx.fill();}
+    ctx.font='bold 11px system-ui,sans-serif';ctx.fillStyle=maxed?'#4caf50':canBuy?'#ffdd00':'#555';ctx.fillText(maxed?'MAXED':`${up.costs[lvl]} coins`,cx+cardW/2,sy+108);
+  }
+  const btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+30;
+  ctx.fillStyle='#1a4a1a';ctx.strokeStyle='#4caf50';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(btnX,btnY,btnW,btnH,8);ctx.fill();ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='bold 16px system-ui,sans-serif';ctx.fillText('▶  PLAY',W/2,btnY+26);
+  ctx.textAlign='left';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [FILL: APPLY_UPGRADES]
+// Read upgrade levels, configure runtime vars. Called at run start.
+// ══════════════════════════════════════════════════════════════════
+function applyUpgrades(){
+  // [FILL: map upgrade levels to game vars]
+  player.fireRate    = [0.18,0.14,0.10,0.07][getUpgradeLevel('firerate')];
+  _damageBonus       = [1,2,3,4][getUpgradeLevel('damage')];
+  player.maxHp       = 3+getUpgradeLevel('shield');
+  player.hp          = player.maxHp;
+  _scoreMultiplier   = [1.0,1.25,1.5,2.0][getUpgradeLevel('score')];
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [FILL: ENEMY TYPES — define all enemy types here]
+// ══════════════════════════════════════════════════════════════════
+// Example:
+// const ENEMY_TYPES = {
+//   grunt:   { hp:1, speed:80, points:100, w:36, h:36, color:'#f88', fireRate:0   },
+//   shooter: { hp:2, speed:60, points:200, w:38, h:38, color:'#f4f', fireRate:2.5 },
+//   tank:    { hp:5, speed:40, points:500, w:52, h:52, color:'#88f', fireRate:0   },
+//   boss:    { hp:60,speed:30, points:5000,w:90, h:80, color:'#f00', fireRate:1.0 },
+// };
+// [FILL: Define ENEMY_TYPES]
+
+// ══════════════════════════════════════════════════════════════════
+// GAME INIT
+// ══════════════════════════════════════════════════════════════════
+function initGame() {
+  loadMeta();
+  // Build parallax star layers
+  bgLayers.length = 0;
+  [[80,1,0.4],[40,1.5,0.7],[15,2.5,1.0]].forEach(([count,sz,alpha],i) => {
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H * 2;
+    const cx = c.getContext('2d');
+    for (let j = 0; j < count; j++) {
+      cx.fillStyle = `rgba(255,255,255,${alpha})`;
+      cx.fillRect(Math.random()*W, Math.random()*H*2, sz, sz);
+    }
+    bgLayers.push({ canvas:c, y:0, speed:[18,48,95][i] });
+  });
+}
+
+function startGame() {
+  loadMeta();
+  GAME_SCORE = 0; _runCoins = 0; _gameoverTimer = 1.5;
+  player.x = W/2 - player.w/2; player.y = H - 100;
+  player.maxHp = 3; player.hp = 3; player.iframes = 0; player.lives = 3;
+  player.fireTimer = 0; player.powerup = 'none'; player.coins = 0;
+  bulletPool.clear(); enemyPool.clear(); powerupPool.clear();
+  waveManager.wave = 0; waveManager.enemiesLeft = 0; waveManager.waveTimer = 0;
+  applyUpgrades();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [FILL: WAVE SPAWNER]
+// ══════════════════════════════════════════════════════════════════
+function spawnWave(waveNumber) {
+  // [FILL: spawn enemies based on wave number]
+  // PATTERN: every 5th wave = boss wave
+  // Use enemyPool.get(e => { e.x = ...; e.y = -50; e.type = ...; e.hp = e.maxHp = ...; })
+  // Set waveManager.enemiesLeft = count;
+  //
+  // Example structure:
+  // const count = Math.min(5 + waveNumber * 2, 24);
+  // waveManager.enemiesLeft = count;
+  // const isBoss = waveNumber % 5 === 0;
+  // if (isBoss) {
+  //   enemyPool.get(e => { e.x=W/2-45; e.y=-100; e.type='boss'; e.hp=e.maxHp=60; e.w=90; e.h=80; e.points=5000; });
+  //   waveManager.enemiesLeft = 1;
+  //   return;
+  // }
+  // for (let i = 0; i < count; i++) {
+  //   enemyPool.get(e => {
+  //     e.x = 40 + (i % 8) * (W-80)/7; e.y = -40 - Math.floor(i/8) * 55;
+  //     e.type = waveNumber>3 && Math.random()<0.3 ? 'shooter' : 'grunt';
+  //     const def = ENEMY_TYPES[e.type];
+  //     e.hp = e.maxHp = def.hp + Math.floor(waveNumber/5);
+  //     e.points = def.points; e.w = def.w; e.h = def.h;
+  //     e.hbW = e.w-6; e.hbH = e.h-6; e.spawnX = e.x; e.patternTimer = 0; e.flashTimer = 0;
+  //   });
+  // }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// UPDATE
+// ══════════════════════════════════════════════════════════════════
+function updatePlaying(dt) {
+  // Parallax scroll
+  bgLayers.forEach(l => { l.y += l.speed * dt; if (l.y >= H) l.y -= H; });
+
+  // ── Player movement ──────────────────────────────────────────
+  let dx = 0, dy = 0;
+  if (keyDown('ArrowLeft')||keyDown('KeyA'))  dx -= 1;
+  if (keyDown('ArrowRight')||keyDown('KeyD')) dx += 1;
+  if (keyDown('ArrowUp')||keyDown('KeyW'))    dy -= 1;
+  if (keyDown('ArrowDown')||keyDown('KeyS'))  dy += 1;
+  const mag = Math.hypot(dx, dy) || 1;
+  if (dx||dy) {
+    player.x = clamp(player.x + dx/mag * player.speed * dt, 0, W - player.w);
+    player.y = clamp(player.y + dy/mag * player.speed * dt, 0, H - player.h);
+  }
+
+  // ── Player fire ───────────────────────────────────────────────
+  player.iframes   = Math.max(0, player.iframes - dt);
+  player.fireTimer = Math.max(0, player.fireTimer - dt);
+  if ((keyDown('Space')||keyDown('KeyZ')) && player.fireTimer <= 0) {
+    // [FILL: customize bullet pattern — spread shot, triple, etc.]
+    bulletPool.get(b => {
+      b.x = player.x + player.w/2 - 2; b.y = player.y;
+      b.vx = 0; b.vy = -530; b.isEnemy = false; b.damage = 1;
+    });
+    player.fireTimer = player.fireRate;
+    sfx.play(880, 0.04, 'square', 0.07);
+  }
+
+  // ── Bullets ───────────────────────────────────────────────────
+  bulletPool.update(b => {
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    return b.y > -30 && b.y < H + 30 && b.x > -30 && b.x < W + 30;
+  });
+
+  // ── Enemy update ──────────────────────────────────────────────
+  enemyPool.update(e => {
+    e.flashTimer = Math.max(0, e.flashTimer - dt);
+    e.patternTimer += dt;
+    // [FILL: implement movement patterns per enemy type]
+    // CRITICAL: always initialize the variable 'e' from the pool.active[i] — done above via pool.update()
+    // Example patterns:
+    // if (e.type === 'grunt')   { e.y += 70 * dt; e.x = e.spawnX + Math.sin(e.patternTimer * 2.5) * 60; }
+    // if (e.type === 'shooter') { e.y += 50 * dt; e.x += e.vx * dt; if (e.x < 30||e.x > W-30) e.vx *= -1; }
+    // if (e.type === 'boss')    { /* complex pattern */ }
+    //
+    // [FILL: enemy fire logic]
+    // e.fireTimer = Math.max(0, e.fireTimer - dt);
+    // if (e.fireRate > 0 && e.fireTimer <= 0 && e.y > 0) {
+    //   const dx = (player.x+player.w/2) - (e.x+e.w/2);
+    //   const dy = (player.y+player.h/2) - (e.y+e.h/2);
+    //   const len = Math.hypot(dx,dy);
+    //   bulletPool.get(b => { b.x=e.x+e.w/2; b.y=e.y+e.h; b.vx=dx/len*200; b.vy=dy/len*200; b.isEnemy=true; b.damage=1; });
+    //   e.fireTimer = e.fireRate;
+    // }
+    e.y += 65 * dt; // [FILL: replace with actual movement]
+    return e.y < H + 80;
+  });
+
+  // ── Power-ups ─────────────────────────────────────────────────
+  powerupPool.update(p => {
+    p.y += p.vy * dt; p.bobTimer += dt;
+    if (aabb(player.x,player.y,player.w,player.h, p.x,p.y,p.w,p.h)) {
+      // [FILL: apply powerup effect]
+      if (p.type === 'hp')     player.hp = Math.min(player.maxHp, player.hp + 1);
+      if (p.type === 'spread') player.powerup = 'spread';
+      if (p.type === 'shield') player.powerup = 'shield';
+      sfx.play(660, 0.12, 'sine', 0.10);
+      return false;
+    }
+    return p.y < H + 40;
+  });
+
+  // ── Collision: player bullets → enemies ──────────────────────
+  bulletPool.active.forEach(b => {
+    if (b.isEnemy || !b.alive) return;
+    enemyPool.active.forEach(e => {
+      if (!e.alive) return;
+      if (aabb(b.x, b.y, b.w, b.h, e.x, e.y, e.w, e.h)) {
+        b.alive = false;
+        e.hp -= b.damage;
+        e.flashTimer = 0.08;
+        if (e.hp <= 0) {
+          GAME_SCORE += Math.round(e.points * _scoreMultiplier);
+          player.coins += Math.max(1, Math.floor(e.points / 100));
+          spawnParticles(e.x+e.w/2, e.y+e.h/2, 10, {color:PALETTE.enemy, speed:70, life:0.4});
+          spawnPopup(e.x+e.w/2, e.y, `+${e.points}`, PALETTE.accent, 14);
+          sfx.play(220, 0.10, 'square', 0.08);
+          if (Math.random() < 0.08) {
+            powerupPool.get(p => { p.x=e.x+e.w/2-10; p.y=e.y; p.type=randChoice(['hp','spread','shield']); p.vy=55; });
+          }
+          e.alive = false;
+          waveManager.enemiesLeft = Math.max(0, waveManager.enemiesLeft - 1);
+        }
+      }
+    });
+  });
+
+  // ── Collision: enemy bullets/contact → player ────────────────
+  if (player.iframes <= 0) {
+    const phbX = player.x + (player.w - player.hbW) / 2;
+    const phbY = player.y + (player.h - player.hbH) / 2;
+    // Enemy bullets
+    bulletPool.active.forEach(b => {
+      if (!b.isEnemy || !b.alive) return;
+      if (aabb(phbX, phbY, player.hbW, player.hbH, b.x, b.y, b.w, b.h)) {
+        b.alive = false;
+        if (player.powerup !== 'shield') {
+          player.hp--;
+          player.iframes = player.IFRAME_DUR;
+          triggerShake(5, 0.25);
+          sfx.play(140, 0.18, 'sawtooth', 0.14);
+          spawnParticles(player.x+player.w/2, player.y+player.h/2, 7, {color:'#f44', speed:60, gravity:80});
+          if (player.hp <= 0) { _runCoins = player.coins; saveHiScore(GAME_SCORE); _gameoverTimer = 1.5; setState('gameover'); }
+        } else {
+          player.powerup = 'none'; // shield absorbs 1 hit
+        }
+      }
+    });
+    // Direct enemy contact
+    enemyPool.active.forEach(e => {
+      if (!e.alive) return;
+      if (aabb(phbX, phbY, player.hbW, player.hbH, e.x, e.y, e.hbW||e.w, e.hbH||e.h)) {
+        player.hp--;
+        player.iframes = player.IFRAME_DUR;
+        e.alive = false;
+        waveManager.enemiesLeft = Math.max(0, waveManager.enemiesLeft - 1);
+        triggerShake(6, 0.30);
+        sfx.play(110, 0.25, 'sawtooth', 0.16);
+        if (player.hp <= 0) { _runCoins = player.coins; saveHiScore(GAME_SCORE); _gameoverTimer = 1.5; setState('gameover'); }
+      }
+    });
+  }
+
+  // ── Wave manager ──────────────────────────────────────────────
+  if (waveManager.enemiesLeft <= 0 && enemyPool.active.length === 0) {
+    waveManager.waveTimer += dt;
+    if (waveManager.waveTimer >= waveManager.betweenDelay) {
+      waveManager.waveTimer = 0;
+      waveManager.wave++;
+      spawnWave(waveManager.wave);
+    }
+  }
+
+  // Pause
+  if (keyPressed('Escape') || keyPressed('KeyP')) setState('paused');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════════════════
+function renderMenu() {
+  ctx.fillStyle = PALETTE.bg; ctx.fillRect(0, 0, W, H);
+  // [FILL: draw parallax background on menu if desired]
+  ctx.textAlign = 'center';
+  // Game title: decorative font OK
+  ctx.fillStyle = PALETTE.accent; ctx.font = 'bold 32px monospace';
+  ctx.fillText(GAME_TITLE, W/2, H*0.30);
+  // UI text: system font
+  ctx.fillStyle = '#aaa'; ctx.font = '12px system-ui,sans-serif';
+  ctx.fillText('ARROWS/WASD to move  •  SPACE to fire', W/2, H*0.48);
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 16px system-ui,sans-serif';
+  ctx.fillText('SPACE / TAP to play', W/2, H*0.58);
+  ctx.fillStyle = '#888'; ctx.font = '13px system-ui,sans-serif';
+  ctx.fillText(`Best: ${_hiScore}`, W/2, H*0.68);
+  if (_meta.coins > 0) {
+    ctx.fillStyle = '#ffdd00';
+    ctx.fillText(`🪙 ${_meta.coins} coins saved`, W/2, H*0.78);
+  }
+  ctx.textAlign = 'left';
+}
+
+function renderPlaying() {
+  // Background
+  ctx.fillStyle = PALETTE.bg; ctx.fillRect(0, 0, W, H);
+  bgLayers.forEach(l => {
+    ctx.drawImage(l.canvas, 0, l.y - H);
+    ctx.drawImage(l.canvas, 0, l.y);
+  });
+
+  // [FILL: draw background decorations, nebulae, etc.]
+
+  // ── Enemies ───────────────────────────────────────────────────
+  enemyPool.active.forEach(e => {
+    ctx.globalAlpha = e.flashTimer > 0 ? 0.35 : 1.0;
+    // [FILL: draw each enemy type with distinct visual]
+    // RULE: Use ctx.beginPath()/arc() or lineTo() NOT plain fillRect()
+    // Example:
+    // ctx.fillStyle = e.flashTimer > 0 ? '#fff' : (ENEMY_TYPES[e.type]?.color || PALETTE.enemy);
+    // ctx.beginPath(); ctx.arc(e.x+e.w/2, e.y+e.h/2, e.w/2, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = e.flashTimer > 0 ? '#fff' : PALETTE.enemy;
+    ctx.fillRect(e.x, e.y, e.w, e.h);
+    ctx.globalAlpha = 1;
+    // HP bar (for tough enemies)
+    if (e.maxHp > 1) drawBar(e.x, e.y - 6, e.w, 4, e.hp, e.maxHp, '#0f0', '#400');
+  });
+
+  // ── Bullets ───────────────────────────────────────────────────
+  bulletPool.active.forEach(b => {
+    ctx.fillStyle = b.isEnemy ? PALETTE.eBullet : PALETTE.bullet;
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+  });
+
+  // ── Power-ups ─────────────────────────────────────────────────
+  powerupPool.active.forEach(p => {
+    const colors = { hp:'#0f0', spread:'#ff0', shield:'#0af' };
+    ctx.fillStyle = colors[p.type] || '#fff';
+    const bob = Math.sin(p.bobTimer * 3) * 3;
+    ctx.beginPath(); ctx.arc(p.x + p.w/2, p.y + p.h/2 + bob, p.w/2, 0, Math.PI*2); ctx.fill();
+  });
+
+  // ── Player ────────────────────────────────────────────────────
+  const blink = player.iframes > 0 && Math.floor(player.iframes / 0.08) % 2 === 0;
+  if (!blink) {
+    ctx.globalAlpha = player.iframes > 0 ? 0.55 : 1.0;
+    // [FILL: draw player ship with a distinctive triangle/shape]
+    // RULE: Must use ctx.beginPath()/lineTo(), NOT fillRect()
+    // Example fighter triangle:
+    ctx.fillStyle = player.powerup === 'shield' ? '#0df' : PALETTE.player;
+    const cx = player.x + player.w/2, cy = player.y + player.h/2;
+    ctx.shadowBlur = 12; ctx.shadowColor = PALETTE.player;
+    ctx.beginPath(); ctx.moveTo(cx, player.y); ctx.lineTo(player.x + player.w, player.y + player.h); ctx.lineTo(player.x, player.y + player.h); ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    if (player.powerup === 'shield') {
+      ctx.strokeStyle = '#0af'; ctx.lineWidth = 2; ctx.globalAlpha = 0.5;
+      ctx.beginPath(); ctx.arc(cx, cy, player.w/2 + 6, 0, Math.PI*2); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.lineWidth = 1;
+    }
+  }
+
+  // ── HUD ───────────────────────────────────────────────────────
+  drawText(`SCORE: ${GAME_SCORE}`, 10, 22, PALETTE.ui, 14);
+  drawText(`WAVE ${waveManager.wave}`, W/2, 22, '#aaa', 13, 'center');
+  drawText(`BEST: ${_hiScore}`, W - 10, 22, '#888', 12, 'right');
+  // HP hearts or bar
+  drawBar(10, H - 16, 100, 8, player.hp, player.maxHp, '#0f0', '#300');
+  drawText('HP', 115, H - 8, '#666', 11);
+  // [FILL: draw lives, powerup status, boss HP bar, etc.]
+  // Wave countdown between waves
+  if (waveManager.enemiesLeft <= 0 && enemyPool.active.length === 0) {
+    const countdown = Math.ceil(waveManager.betweenDelay - waveManager.waveTimer);
+    drawText(`WAVE ${waveManager.wave + 1} IN ${countdown}s`, W/2, H*0.88, '#ff8', 15, 'center');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// START
+// ══════════════════════════════════════════════════════════════════
+initGame();
+requestAnimationFrame(t => { lastTime = t; requestAnimationFrame(loop); });
+</script>
+</body></html>

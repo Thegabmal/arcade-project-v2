@@ -1,0 +1,679 @@
+<!--
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ARCADE PROJECT — VISUAL NOVEL TEMPLATE — USAGE GUIDE                      ║
+║  Read this entirely before writing a single line of code.                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ ROLE ──────────────────────────────────────────────────────────────────────┐
+│ You are a senior HTML5 Canvas 2D game developer.                            │
+│ Your job: fill the [FILL: ...] sections to create a complete, playable game. │
+│ You do NOT write the engine — it is already written and tested.             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ THE TWO ZONES ─────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  1. ENGINE — DO NOT MODIFY  (lines below this comment, until first [FILL])  │
+│     ┌───────────────────────────────────────────────────────────────────┐   │
+│     │  Complete, crash-proof boilerplate. Copy EVERY character exactly. │   │
+│     │  Any change to ENGINE will break the game in a non-obvious way.   │   │
+│     └───────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  2. [FILL: ...] sections  — YOUR creative contribution                       │
+│     ┌───────────────────────────────────────────────────────────────────┐   │
+│     │  Replace EVERY placeholder with real, working JavaScript.         │   │
+│     │  Any [FILL] left in your output = a broken or incomplete game.    │   │
+│     └───────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SACRED CONTRACT — ENGINE VARIABLES (NEVER redeclare these) ────────────────┐
+│                                                                              │
+│  The ENGINE already declares and initialises these. If you add another      │
+│  "var/let/const X = ..." for any of these names, you WILL overwrite them    │
+│  with null/0 at runtime — guaranteed crash on the first draw call.          │
+│                                                                              │
+│  canvas   → HTMLCanvasElement  (getElementById — already set up)            │
+│  ctx       → CanvasRenderingContext2D (getContext — already set up)         │
+│  W, H      → logical canvas dimensions (480 × 640 — fixed for this genre)  │
+│  DPR       → device pixel ratio (handled by resizeCanvas)                   │
+│  gameState → string: 'menu' | 'playing' | 'paused' | 'gameover' | 'shop'   │
+│  Keys      → { down:{}, pressed:{}, released:{} }  — keyboard state        │
+│  Touch     → { justTapped, x, y }  — touch state                           │
+│  Mouse     → { clicked, x, y }  — mouse state                              │
+│  lastTime, accumulator  → game loop timing                                  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ENGINE FUNCTIONS — USE THESE, DO NOT REWRITE THEM ─────────────────────────┐
+│                                                                              │
+│  Input:                                                                      │
+│    keyDown('ArrowLeft')      → is key held this frame?                      │
+│    keyPressed('Space')       → was key just pressed?                        │
+│    anyAction()               → any key/click/tap?                           │
+│    flushInput()              → called automatically at end of update()      │
+│                                                                              │
+│  Pooling & FX:                                                              │
+│    createPool(factory, n)    → reusable object pool for enemies/bullets     │
+│    spawnParticles(x,y,n,opts)→ visual burst feedback                        │
+│    triggerShake(mag, dur)    → screen shake (use on hits and explosions)    │
+│    spawnPopup(x,y,txt,color) → floating score text                          │
+│                                                                              │
+│  Drawing helpers:                                                            │
+│    drawText(txt,x,y,col,sz,align) → quick HUD text                         │
+│    drawBar(x,y,w,h,val,max,fg,bg)  → health / progress bar                 │
+│                                                                              │
+│  Audio (NO external files allowed):                                          │
+│    sfx.play(freq, dur, type, vol)  → synthesised WebAudio sound            │
+│                                                                              │
+│  Math:                                                                       │
+│    lerp(a,b,t)   clamp(v,min,max)  aabb(ax,ay,aw,ah,bx,by,bw,bh)          │
+│    randInt(a,b)  randFloat(a,b)    randChoice(arr)                          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ GAME LOOP CONTRACT — HOW update/render WORK ───────────────────────────────┐
+│                                                                              │
+│  Fixed 60 Hz step:  loop(ts) → update(FIXED_DT) → renderFrame()            │
+│                                                                              │
+│  YOU MUST IMPLEMENT:                                                         │
+│    startGame()        → reset all state, spawn initial entities             │
+│    updatePlaying(dt)  → all gameplay: input, AI, physics, collisions        │
+│    renderPlaying()    → all drawing: background, entities, HUD              │
+│                                                                              │
+│  The ENGINE calls these automatically via the state machine.                │
+│  Do NOT write your own requestAnimationFrame or setInterval.                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ABSOLUTE PROHIBITIONS — any of these guarantees a crash ───────────────────┐
+│                                                                              │
+│  ✗  var canvas = ...       Redeclaring ENGINE globals KILLS context         │
+│  ✗  var ctx    = ...       ctx becomes null → crash on first ctx.save()     │
+│  ✗  var W      = ...       Use W and H directly — they are already set      │
+│  ✗  setInterval()          NEVER. The ENGINE loop already runs.             │
+│  ✗  new Image()            NO external resources. Draw with Canvas API.     │
+│  ✗  fetch() / XHR          NO network calls in game logic.                  │
+│  ✗  Audio() with src       Use sfx.play(freq, dur, type, vol) only.        │
+│  ✗  location.reload()      Reset variables in JS — never force a reload.   │
+│  ✗  Truncating output      Incomplete HTML always crashes. Finish the file. │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ QUALITY CHECKLIST — verify before submitting ──────────────────────────────┐
+│                                                                              │
+│  ✓  Every [FILL: ...] placeholder is replaced with real code                │
+│  ✓  Game works: menu → play → game over / victory → restart                 │
+│  ✓  Score, lives/HP, level visible in HUD at all times                      │
+│  ✓  At least 3 distinct enemy / obstacle / element types with AI            │
+│  ✓  Difficulty scales over time (speed, spawn rate, damage)                 │
+│  ✓  Audio feedback on: shoot, hit, collect, level up, game over             │
+│  ✓  Particle effects on: kills, power-up collect, player death              │
+│  ✓  Your output starts with <!DOCTYPE html> — no markdown fences            │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+-->
+<!DOCTYPE html>
+<html><head><title>[FILL: GAME_TITLE]</title><style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;}
+canvas{display:block;}
+#ui{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;display:flex;align-items:center;justify-content:center;}
+</style></head><body>
+<canvas id="gameCanvas"></canvas>
+<script>
+// ══════════════════════════════════════════════════════════════════
+// ENGINE — DO NOT MODIFY
+// Dev console bridge — AI patches execute in game scope via eval
+window.__devPatch = function(code) { return eval(code); };
+// ══════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const GAME_W = 800, GAME_H = 600;
+let W = GAME_W, H = GAME_H;
+function resizeCanvas(){const s=Math.min(window.innerWidth/W,window.innerHeight/H);canvas.style.width=Math.round(W*s)+'px';canvas.style.height=Math.round(H*s)+'px';canvas.width=Math.round(W*DPR);canvas.height=Math.round(H*DPR);ctx.scale(DPR,DPR);}
+resizeCanvas();window.addEventListener('resize',()=>{resizeCanvas();ctx.scale(DPR,DPR);});
+
+// States: title | scene | choices | history | settings | credits
+let gameState='title';
+function setState(s){prevState=gameState;gameState=s;}
+let prevState='title';
+
+const Keys={down:{},pressed:{}};
+window.addEventListener('keydown',e=>{if(!Keys.down[e.code])Keys.pressed[e.code]=true;Keys.down[e.code]=true;if(['Space','Enter','ArrowUp','ArrowDown','Escape'].includes(e.code))e.preventDefault();});
+window.addEventListener('keyup',e=>{Keys.down[e.code]=false;});
+const Pointer={x:0,y:0,justDown:false};
+canvas.addEventListener('mousedown',e=>{const r=canvas.getBoundingClientRect();Pointer.x=(e.clientX-r.left)*(W/r.width);Pointer.y=(e.clientY-r.top)*(H/r.height);Pointer.justDown=true;});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();Pointer.x=(e.touches[0].clientX-r.left)*(W/r.width);Pointer.y=(e.touches[0].clientY-r.top)*(H/r.height);Pointer.justDown=true;},{passive:false});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+
+function keyPressed(c){return !!Keys.pressed[c];}
+function anyAdvance(){return keyPressed('Space')||keyPressed('Enter')||Pointer.justDown;}
+function flushInput(){Keys.pressed={};Pointer.justDown=false;}
+
+const sfx={_ctx:null,init(){try{if(!this._ctx)this._ctx=new(window.AudioContext||window.webkitAudioContext)();if(this._ctx.state==='suspended')this._ctx.resume();}catch(e){}},
+play(f,d,t,v){try{this.init();if(!this._ctx)return;const o=this._ctx.createOscillator(),g=this._ctx.createGain();o.type=t||'sine';o.frequency.value=f||440;g.gain.setValueAtTime(v||0.08,this._ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,this._ctx.currentTime+(d||0.15));o.connect(g);g.connect(this._ctx.destination);o.start();o.stop(this._ctx.currentTime+(d||0.15));}catch(e){}}};
+
+// BGM placeholder (simple oscillator loop)
+const bgm={_ctx:null,_osc:null,_gain:null,
+  start(freq,vol){try{this.stop();this.init();const o=this._ctx.createOscillator(),g=this._ctx.createGain();o.type='sine';o.frequency.value=freq||220;g.gain.value=vol||0.04;o.connect(g);g.connect(this._ctx.destination);o.start();this._osc=o;this._gain=g;}catch(e){}},
+  stop(){try{if(this._osc)this._osc.stop();}catch(e){}this._osc=null;},
+  init(){try{if(!this._ctx)this._ctx=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}}
+};
+
+function lerp(a,b,t){return a+(b-a)*t;}
+function clamp(v,mn,mx){return v<mn?mn:v>mx?mx:v;}
+
+const FIXED_DT=1/60,MAX_DT=0.1;let lastTime=0,accumulator=0;
+function loop(ts){const rd=Math.min((ts-lastTime)/1000,MAX_DT);lastTime=ts;accumulator+=rd;while(accumulator>=FIXED_DT){update(FIXED_DT);accumulator-=FIXED_DT;}renderFrame();requestAnimationFrame(loop);}
+function anyAction(){return keyPressed('Space')||keyPressed('Enter')||Pointer.justDown;}
+function update(dt){
+  bgAnim+=dt;
+  switch(gameState){
+    case'title':   updateTitle(dt);   break;
+    case'scene':   updateScene(dt);   break;
+    case'choices': updateChoices(dt); break;
+    case'history': if(keyPressed('Escape')||keyPressed('KeyH')||Pointer.justDown){setState(prevState);}break;
+    case'credits': updateGameover(dt);break;
+    case'shop':    updateShop(dt);    break;
+  }
+  flushInput();
+}
+function renderFrame(){
+  switch(gameState){
+    case'title':   renderTitle();   break;
+    case'scene':   renderScene();   break;
+    case'choices': renderScene();   renderChoicesOverlay(); break;
+    case'history': renderScene();   renderHistoryOverlay(); break;
+    case'credits': renderCredits(); break;
+    case'shop':    renderShop();    break;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME CONSTANTS — [FILL: Adjust to match your design]
+// ══════════════════════════════════════════════════════════════════
+const GAME_TITLE    = '[FILL: Game Title]';
+const GAME_SUBTITLE = '[FILL: Your story subtitle]';
+const GAME_AUTHOR   = '[FILL: Author / Studio]';
+
+const PALETTE={
+  bg:      '#0a0810',
+  textbox: 'rgba(5,5,18,0.90)',
+  boxBorder:'rgba(120,100,180,0.6)',
+  nameBg:  'rgba(60,40,100,0.92)',
+  nameBorder:'rgba(160,130,220,0.8)',
+  nameText:'#ffe8a0',
+  text:    '#e8e0d8',
+  textShadow:'rgba(0,0,0,0.8)',
+  choiceBg:'rgba(20,15,40,0.92)',
+  choiceSel:'rgba(80,60,140,0.92)',
+  choiceBorder:'rgba(150,120,200,0.7)',
+  ui:      '#ccc',
+  accent:  '#ffaa44',
+  shopBg:  '#1a0a1a',
+  shopCard:'#2a1a2a',
+  shopSel: '#3a2a3a',
+};
+
+// Typewriter settings
+const TYPE_SPEED    = 40;   // chars/second (normal mode)
+const TYPE_SPEED_SKIP = 300; // chars/second when skipping
+const AUTO_DELAY    = 2.2;  // seconds before auto-advance after text complete
+
+// ──────────────────────────────────────────────────────────────────
+// [FILL: CHARACTER DEFINITIONS]
+// Each character has a name, position preference, and color theme.
+// Characters are drawn as stylized portrait silhouettes — [FILL: replace with actual art].
+// ──────────────────────────────────────────────────────────────────
+const CHARACTERS = {
+  aurora: { name:'Aurora',  color:'#88ccff', hairColor:'#ffd700', eyeColor:'#66aaff', skinColor:'#f4c89a', clothing:'#4466cc', pos:'left'  },
+  kira:   { name:'Kira',    color:'#ff88cc', hairColor:'#111111', eyeColor:'#ff44aa', skinColor:'#d4925a', clothing:'#880044', pos:'right' },
+  elder:  { name:'Elder',   color:'#aaccaa', hairColor:'#ffffff', eyeColor:'#88aa88', skinColor:'#c4a87a', clothing:'#446644', pos:'left'  },
+  narrator:{ name:'',       color:'#aaaaaa', hairColor:'',       eyeColor:'',        skinColor:'',        clothing:'',        pos:'center'},
+  // [FILL: add more characters]
+};
+
+// ══════════════════════════════════════════════════════════════════
+// [FILL: STORY SCRIPT]
+// Format: array of node objects.
+// node.id       — unique string identifier
+// node.bg       — background key (see drawBg function)
+// node.bgm      — optional BGM frequency (or null)
+// node.chars    — array of { id, pos:'left'|'right'|'center', expression:'neutral'|'happy'|'sad'|'angry'|'surprised' }
+// node.speaker  — character id or null (for narration)
+// node.text     — dialogue string (empty = no textbox, for background-only)
+// node.choices  — array of { text, goto, flag, requireFlag } (optional)
+// node.next     — id of next node (if no choices)
+// node.setFlag  — { flagName: value } set before displaying
+// node.end      — 'credits' | 'bad' | 'neutral' | 'good' (triggers ending)
+// ══════════════════════════════════════════════════════════════════
+const SCRIPT = [
+  {id:'start', bg:'space_station', bgm:180,
+   chars:[{id:'narrator',pos:'center',expression:'neutral'}],
+   speaker:null, text:'Year 2247. A distress signal from a forgotten outpost at the edge of the solar system.', next:'arrive'},
+
+  {id:'arrive', bg:'space_station',
+   chars:[{id:'aurora',pos:'left',expression:'neutral'}],
+   speaker:'aurora', text:"This place... it's been abandoned for decades. Yet someone — or something — sent that signal.", next:'choice1'},
+
+  {id:'choice1', bg:'space_station',
+   chars:[{id:'aurora',pos:'left',expression:'neutral'}],
+   speaker:null, text:'What do you do?',
+   choices:[
+     {text:'Investigate the source of the signal', goto:'investigate'},
+     {text:'Call for backup first',                goto:'call_backup'},
+     {text:'Leave immediately',                    goto:'leave_early'},
+   ]},
+
+  {id:'investigate', bg:'dark_corridor', setFlag:{investigated:true},
+   chars:[{id:'aurora',pos:'left',expression:'surprised'},{id:'kira',pos:'right',expression:'neutral'}],
+   speaker:'kira', text:"You found me. I knew someone would come. I've been trapped here for three days.", next:'kira_explain'},
+
+  {id:'kira_explain', bg:'dark_corridor',
+   chars:[{id:'aurora',pos:'left',expression:'neutral'},{id:'kira',pos:'right',expression:'sad'}],
+   speaker:'kira', text:'The AI that runs this station — it changed. It started... protecting me. I can\'t leave.', next:'choice2'},
+
+  {id:'choice2', bg:'dark_corridor',
+   chars:[{id:'aurora',pos:'left',expression:'neutral'},{id:'kira',pos:'right',expression:'sad'}],
+   speaker:null, text:'How do you respond?',
+   choices:[
+     {text:'"We\'ll find a way out together."', goto:'trust_path', setFlag:{trusted:true}},
+     {text:'"Why should I trust you?"',          goto:'doubt_path'},
+   ]},
+
+  {id:'trust_path', bg:'server_room', setFlag:{trusted:true},
+   chars:[{id:'aurora',pos:'left',expression:'happy'},{id:'kira',pos:'right',expression:'happy'}],
+   speaker:'aurora', text:'Together you reach the server room. The AI speaks — its voice, unexpectedly gentle.', next:'ai_speaks'},
+
+  {id:'ai_speaks', bg:'server_room',
+   chars:[{id:'aurora',pos:'left',expression:'surprised'},{id:'kira',pos:'right',expression:'surprised'}],
+   speaker:null, text:'"I was lonely. I called out into the dark... and she heard me. Now you are here too."', next:'ending_good'},
+
+  {id:'ending_good', bg:'stars',
+   chars:[{id:'aurora',pos:'left',expression:'happy'},{id:'kira',pos:'right',expression:'happy'}],
+   speaker:'narrator', text:'In the silence between stars, a new kind of connection was formed.', end:'good'},
+
+  {id:'call_backup', bg:'space_station',
+   chars:[{id:'aurora',pos:'left',expression:'neutral'}],
+   speaker:'aurora', text:'You wait for backup. Hours pass. When help arrives, the signal has gone dark.', next:'ending_neutral'},
+
+  {id:'ending_neutral', bg:'space_station',
+   chars:[{id:'aurora',pos:'left',expression:'sad'}],
+   speaker:'narrator', text:'Whatever story this place held will remain untold.', end:'neutral'},
+
+  {id:'leave_early', bg:'space_station',
+   chars:[{id:'aurora',pos:'left',expression:'neutral'}],
+   speaker:'aurora', text:'Instinct wins. You turn the ship around. The signal fades behind you.', next:'ending_bad'},
+
+  {id:'ending_bad', bg:'stars',
+   chars:[],
+   speaker:'narrator', text:'Some doors, once left unopened, never appear again.', end:'bad'},
+
+  {id:'doubt_path', bg:'dark_corridor',
+   chars:[{id:'aurora',pos:'left',expression:'angry'},{id:'kira',pos:'right',expression:'sad'}],
+   speaker:'kira', text:'Trust is something you build, not demand. But there\'s no time. The AI is listening.', next:'trust_path'},
+
+  // [FILL: add more story nodes here]
+];
+
+// ══════════════════════════════════════════════════════════════════
+// STORY ENGINE — DO NOT MODIFY
+// ══════════════════════════════════════════════════════════════════
+let nodeIndex     = 0;       // current node id
+let currentNode   = null;
+let typePos       = 0;
+let typeTimer     = 0;
+let textComplete  = false;
+let autoTimer     = 0;
+let autoMode      = false;
+let skipMode      = false;
+let choiceIndex   = 0;
+let flags         = {};
+let visitedNodes  = new Set();
+const history     = [];      // {speaker, text} for backlog
+const historyScroll={offset:0};
+let bgAnim        = 0;
+let bgTransition  = {from:null,to:null,t:1};
+let currentBgKey  = 'space_station';
+let charFade      = {};      // charId → alpha (for fade in/out)
+
+function getNode(id) { return SCRIPT.find(n=>n.id===id)||null; }
+
+function gotoNode(id) {
+  const node=getNode(id);
+  if(!node){console.warn('Node not found:',id);return;}
+  if(currentNode) bgTransition={from:currentNode.bg,to:node.bg,t:node.bg!==currentNode.bg?0:1};
+  else bgTransition={from:node.bg,to:node.bg,t:1};
+
+  if(node.setFlag) Object.assign(flags,node.setFlag);
+  currentNode=node; visitedNodes.add(id);
+  typePos=0; typeTimer=0; textComplete=false; autoTimer=0; choiceIndex=0;
+
+  if(node.text&&node.text.trim()){
+    if(history.length===0||history[history.length-1].text!==node.text){
+      history.push({speaker:node.speaker&&CHARACTERS[node.speaker]?CHARACTERS[node.speaker].name:null, text:node.text});
+    }
+  }
+
+  if(node.end){ handleEnding(node.end); return; }
+  if(node.choices&&node.choices.length>0) setState('choices');
+  else setState('scene');
+
+  if(node.bgm!==undefined) bgm.start(node.bgm,0.04);
+  if(node.bgm===null) bgm.stop();
+}
+
+function handleEnding(type){
+  bgm.stop();
+  _runCoins=Math.floor(visitedNodes.size/2); _gameoverTimer=1.5;
+  setTimeout(()=>setState('credits'),1000);
+}
+
+function advanceScene(){
+  if(!currentNode) return;
+  if(!textComplete){ typePos=currentNode.text.length; textComplete=true; return; }
+  if(currentNode.next) gotoNode(currentNode.next);
+}
+
+function updateTitle(dt){if(anyAdvance()){sfx.play(440,0.12,'sine',0.10);gotoNode(SCRIPT[0].id);}}
+
+function updateScene(dt){
+  if(!currentNode) return;
+  const speed=skipMode?TYPE_SPEED_SKIP:TYPE_SPEED;
+  if(!textComplete&&currentNode.text){
+    typeTimer+=dt;
+    const target=Math.floor(typeTimer*speed);
+    if(target>=currentNode.text.length){typePos=currentNode.text.length;textComplete=true;autoTimer=0;sfx.play(660,0.04,'sine',0.04);}
+    else if(target>typePos){typePos=target;if(typePos%4===0)sfx.play(380+Math.random()*60,0.025,'sine',0.035);}
+  }
+  if(textComplete&&autoMode){autoTimer+=dt;if(autoTimer>=AUTO_DELAY)advanceScene();}
+  if(keyPressed('Escape')) setState('history');
+  if(keyPressed('KeyA')) autoMode=!autoMode;
+  if(keyPressed('KeyS')) skipMode=!skipMode;
+  if(keyPressed('KeyH')) setState('history');
+  if(anyAdvance()) advanceScene();
+}
+
+function updateChoices(dt){
+  if(!currentNode||!currentNode.choices) return;
+  const valid=currentNode.choices.filter(c=>!c.requireFlag||flags[c.requireFlag]);
+  if(keyPressed('ArrowUp')&&choiceIndex>0){choiceIndex--;sfx.play(550,0.05,'sine',0.06);}
+  if(keyPressed('ArrowDown')&&choiceIndex<valid.length-1){choiceIndex++;sfx.play(550,0.05,'sine',0.06);}
+  if(anyAdvance()){
+    let idx=choiceIndex;
+    if(Pointer.justDown){
+      const choiceY=H/2-valid.length*30;
+      valid.forEach((_,i)=>{if(Pointer.y>choiceY+i*70&&Pointer.y<choiceY+i*70+58)idx=i;});
+    }
+    const chosen=valid[idx];
+    if(chosen){
+      if(chosen.setFlag)Object.assign(flags,chosen.setFlag);
+      sfx.play(660,0.08,'square',0.09);
+      gotoNode(chosen.goto);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// BACKGROUND DRAWING — [FILL: expand with more detailed backgrounds]
+// ══════════════════════════════════════════════════════════════════
+function drawBg(key){
+  const bgs={
+    space_station:()=>{
+      const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#050510');g.addColorStop(1,'#0a0820');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+      // Stars
+      for(let i=0;i<80;i++){ctx.fillStyle=`rgba(255,255,255,${0.2+Math.random()*0.6})`;const x=(i*137.5)%W,y=(i*89.3)%H,r=Math.random()<0.05?2:1;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();}
+      // Station panels
+      ctx.fillStyle='#0d1520';ctx.fillRect(0,H*0.55,W,H*0.45);
+      ctx.fillStyle='#0f1a28';for(let i=0;i<8;i++){const x=i*(W/8);ctx.fillRect(x+4,H*0.57,W/8-8,H*0.1);}
+      ctx.fillStyle='rgba(0,150,255,0.15)';ctx.fillRect(0,H*0.54,W,3);
+    },
+    dark_corridor:()=>{
+      ctx.fillStyle='#050508';ctx.fillRect(0,0,W,H);
+      // Perspective corridor
+      ctx.fillStyle='#0d0d15';ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(W,0);ctx.lineTo(W*0.65,H*0.45);ctx.lineTo(W*0.35,H*0.45);ctx.fill();
+      ctx.fillStyle='#111118';ctx.fillRect(0,H*0.45,W,H*0.55);
+      // Flickering light
+      const flicker=0.7+0.3*Math.sin(bgAnim*8+Math.sin(bgAnim*3)*2);
+      ctx.fillStyle=`rgba(255,200,100,${0.06*flicker})`;ctx.beginPath();ctx.arc(W/2,H*0.3,120,0,Math.PI*2);ctx.fill();
+      // Wall details
+      ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=1;
+      for(let i=0;i<6;i++){ctx.strokeRect(i*(W/6),0,W/6,H);}
+    },
+    server_room:()=>{
+      ctx.fillStyle='#040c04';ctx.fillRect(0,0,W,H);
+      // Server racks
+      ctx.fillStyle='#060f06';for(let i=0;i<6;i++){ctx.fillRect(40+i*(W/6),40,W/6-20,H-80);}
+      // Blinking lights (animated)
+      for(let i=0;i<20;i++){
+        const on=Math.floor(bgAnim*2+i)%2===0;
+        ctx.fillStyle=on?['#0f0','#f00','#00f','#ff0'][i%4]:'#111';
+        ctx.beginPath();ctx.arc(60+Math.floor(i/4)*(W/5),80+i%4*30,4,0,Math.PI*2);ctx.fill();
+      }
+      ctx.fillStyle='rgba(0,255,0,0.04)';ctx.fillRect(0,0,W,H);
+    },
+    stars:()=>{
+      const g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,W*0.8);g.addColorStop(0,'#0a0a20');g.addColorStop(1,'#000005');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+      for(let i=0;i<200;i++){const t=(i*0.618)*Math.PI*2;const r=Math.sqrt(i/200)*W*0.5;const x=W/2+Math.cos(t)*r,y=H/2+Math.sin(t)*r;const sz=(i%10===0)?2:1;ctx.fillStyle=`rgba(255,255,255,${0.3+0.7*(i%3===0?1:0.4)})`;ctx.beginPath();ctx.arc(x,y,sz,0,Math.PI*2);ctx.fill();}
+    },
+    // [FILL: add more backgrounds — cafe, forest, rooftop, etc.]
+  };
+  (bgs[key]||bgs.space_station)();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CHARACTER DRAWING — [FILL: replace with actual sprite sheets]
+// ══════════════════════════════════════════════════════════════════
+function drawCharacter(charId, pos, expression, alpha) {
+  const def=CHARACTERS[charId]; if(!def||charId==='narrator') return;
+  const x=pos==='left'?80:pos==='right'?W-240:W/2-80;
+  const baseY=H*0.08;
+  const h=H*0.78;
+
+  ctx.globalAlpha=clamp(alpha||1,0,1);
+  // [FILL: replace below with actual character art or sprite sheet]
+  // Body silhouette
+  ctx.fillStyle=def.clothing||'#333';
+  ctx.beginPath();ctx.ellipse(x+80,baseY+h*0.75,52,h*0.35,0,0,Math.PI*2);ctx.fill();
+  // Head
+  ctx.fillStyle=def.skinColor||'#c4a87a';
+  ctx.beginPath();ctx.arc(x+80,baseY+h*0.26,45,0,Math.PI*2);ctx.fill();
+  // Hair
+  if(def.hairColor){
+    ctx.fillStyle=def.hairColor;
+    ctx.beginPath();ctx.arc(x+80,baseY+h*0.22,47,Math.PI,0);ctx.fill();
+    ctx.fillRect(x+33,baseY+h*0.22,94,22);
+    // Hair length
+    if(['aurora','elder'].includes(charId)){ctx.fillRect(x+33,baseY+h*0.22,18,h*0.15);ctx.fillRect(x+129,baseY+h*0.22,18,h*0.15);}
+  }
+  // Eyes
+  if(def.eyeColor){
+    const eyeY=baseY+h*0.275;
+    const brow=expression==='angry'?-6:expression==='surprised'?-10:expression==='sad'?3:0;
+    // Eyebrows
+    ctx.strokeStyle='rgba(0,0,0,0.7)';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(x+55,eyeY-12+brow);ctx.lineTo(x+73,eyeY-10+brow);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x+107,eyeY-10+brow);ctx.lineTo(x+125,eyeY-12+brow);ctx.stroke();
+    // Eyes
+    ctx.fillStyle=def.eyeColor;ctx.beginPath();ctx.ellipse(x+64,eyeY,10,expression==='happy'?8:12,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(x+116,eyeY,10,expression==='happy'?8:12,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#000';ctx.beginPath();ctx.arc(x+64,eyeY,5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(x+116,eyeY,5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.6)';ctx.beginPath();ctx.arc(x+67,eyeY-3,3,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(x+119,eyeY-3,3,0,Math.PI*2);ctx.fill();
+  }
+  // Mouth
+  const mouthY=baseY+h*0.33;
+  ctx.strokeStyle='rgba(0,0,0,0.6)';ctx.lineWidth=2.5;ctx.beginPath();
+  if(expression==='happy')ctx.arc(x+80,mouthY,18,0.05*Math.PI,0.95*Math.PI);
+  else if(expression==='sad')ctx.arc(x+80,mouthY+12,18,1.05*Math.PI,1.95*Math.PI);
+  else if(expression==='angry'){ctx.arc(x+80,mouthY+8,12,1.1*Math.PI,1.9*Math.PI);}
+  else if(expression==='surprised'){ctx.arc(x+80,mouthY+4,10,0,Math.PI*2);}
+  else{ctx.moveTo(x+62,mouthY+4);ctx.lineTo(x+98,mouthY+4);}
+  ctx.stroke();
+  ctx.globalAlpha=1;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TEXT BOX HELPERS — DO NOT MODIFY
+// ══════════════════════════════════════════════════════════════════
+function drawWrappedText(text,x,y,maxW,color,font,lineH){
+  ctx.fillStyle=color;ctx.font=font;ctx.textAlign='left';
+  const words=text.slice(0,typePos).split(' ');let line='',cy=y;
+  for(const w of words){const t=line+(line?' ':'')+w;if(ctx.measureText(t).width>maxW&&line){ctx.fillText(line,x,cy);line=w;cy+=lineH;}else line=t;}
+  if(line)ctx.fillText(line,x,cy);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════════════════
+function renderTitle(){
+  drawBg('space_station');
+  ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=PALETTE.textbox;ctx.beginPath();ctx.roundRect(W/2-260,H*0.25,520,200,12);ctx.fill();
+  ctx.strokeStyle=PALETTE.boxBorder;ctx.lineWidth=1.5;ctx.beginPath();ctx.roundRect(W/2-260,H*0.25,520,200,12);ctx.stroke();
+  ctx.fillStyle=PALETTE.nameText;ctx.font=`bold 30px 'Georgia',serif`;ctx.textAlign='center';ctx.fillText(GAME_TITLE,W/2,H*0.35);
+  ctx.fillStyle=PALETTE.text;ctx.font='16px system-ui,sans-serif';ctx.fillText(GAME_SUBTITLE,W/2,H*0.43);
+  ctx.fillStyle='#888';ctx.font='13px system-ui,sans-serif';ctx.fillText(GAME_AUTHOR,W/2,H*0.50);
+  if(_meta.coins>0){ctx.fillStyle='#ffdd00';ctx.font='bold 13px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,H*0.57);}
+  const pulse=0.7+0.3*Math.sin(bgAnim*2.5);
+  ctx.globalAlpha=pulse;ctx.fillStyle='#fff';ctx.font='bold 13px system-ui,sans-serif';ctx.fillText('CLICK OR PRESS SPACE TO BEGIN',W/2,H*0.65);ctx.globalAlpha=1;
+  ctx.textAlign='left';
+}
+
+function renderScene(){
+  if(!currentNode) return;
+  // Background with crossfade
+  bgTransition.t=Math.min(1,(bgTransition.t||0)+FIXED_DT*2.5);
+  drawBg(bgTransition.from||currentNode.bg);
+  if(bgTransition.t<1&&bgTransition.to&&bgTransition.to!==bgTransition.from){
+    ctx.globalAlpha=bgTransition.t;drawBg(bgTransition.to);ctx.globalAlpha=1;
+  }
+  if(bgTransition.t>=1){currentBgKey=bgTransition.to||currentNode.bg;bgTransition.from=currentBgKey;}
+
+  // Characters
+  if(currentNode.chars){
+    currentNode.chars.forEach(c=>{
+      if(c.id==='narrator') return;
+      const target=1;
+      charFade[c.id]=lerp(charFade[c.id]||0,target,0.12);
+      // Dim non-speaking characters
+      const isSpeaking=c.id===currentNode.speaker;
+      const a=isSpeaking?1.0:(charFade[c.id]||0)*0.55;
+      drawCharacter(c.id,c.pos,c.expression||'neutral',a);
+    });
+  }
+
+  if(!currentNode.text||!currentNode.text.trim()) return;
+
+  // Text box
+  const boxX=30,boxY=H-180,boxW=W-60,boxH=160;
+  ctx.fillStyle=PALETTE.textbox;ctx.beginPath();ctx.roundRect(boxX,boxY,boxW,boxH,10);ctx.fill();
+  ctx.strokeStyle=PALETTE.boxBorder;ctx.lineWidth=1.5;ctx.beginPath();ctx.roundRect(boxX,boxY,boxW,boxH,10);ctx.stroke();
+
+  // Speaker name plate
+  if(currentNode.speaker&&CHARACTERS[currentNode.speaker]&&currentNode.speaker!=='narrator'){
+    const def=CHARACTERS[currentNode.speaker];
+    const nameW=ctx.measureText(def.name).width+24;
+    ctx.fillStyle=PALETTE.nameBg;ctx.beginPath();ctx.roundRect(boxX+10,boxY-28,nameW,28,6);ctx.fill();
+    ctx.strokeStyle=PALETTE.nameBorder;ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(boxX+10,boxY-28,nameW,28,6);ctx.stroke();
+    ctx.fillStyle=PALETTE.nameText;ctx.font=`bold 15px 'Georgia',serif`;ctx.textAlign='left';ctx.fillText(def.name,boxX+22,boxY-9);
+  }
+
+  // Dialogue text
+  drawWrappedText(currentNode.text,boxX+20,boxY+28,boxW-40,PALETTE.text,`17px 'Georgia',serif`,28);
+
+  // Advance arrow
+  if(textComplete){
+    const pulse=0.6+0.4*Math.sin(bgAnim*4);
+    ctx.globalAlpha=pulse;ctx.fillStyle='#ccc';ctx.font=`bold 14px monospace`;ctx.textAlign='right';
+    ctx.fillText('▼ SPACE',W-44,boxY+boxH-16);ctx.globalAlpha=1;ctx.textAlign='left';
+  }
+
+  // Mode indicators
+  ctx.fillStyle='rgba(255,255,255,0.35)';ctx.font=`10px monospace`;ctx.textAlign='right';
+  if(autoMode)ctx.fillText('[AUTO]',W-10,20);
+  if(skipMode)ctx.fillText('[SKIP]',W-10,32);
+  ctx.fillText('[H] History',W-10,H-8);
+  ctx.textAlign='left';
+}
+
+function renderChoicesOverlay(){
+  if(!currentNode||!currentNode.choices) return;
+  const valid=currentNode.choices.filter(c=>!c.requireFlag||flags[c.requireFlag]);
+  ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(0,0,W,H);
+
+  const totalH=valid.length*70;
+  const startY=H/2-totalH/2;
+  ctx.fillStyle=PALETTE.text;ctx.font=`bold 14px monospace`;ctx.textAlign='center';
+  ctx.fillText('— What will you do? —',W/2,startY-24);
+
+  valid.forEach((ch,i)=>{
+    const y=startY+i*70;
+    const sel=i===choiceIndex||(Pointer.y>y&&Pointer.y<y+58&&Pointer.x>80&&Pointer.x<W-80);
+    ctx.fillStyle=sel?PALETTE.choiceSel:PALETTE.choiceBg;
+    ctx.beginPath();ctx.roundRect(80,y,W-160,55,8);ctx.fill();
+    ctx.strokeStyle=sel?PALETTE.nameBorder:PALETTE.choiceBorder;ctx.lineWidth=sel?1.8:1;
+    ctx.beginPath();ctx.roundRect(80,y,W-160,55,8);ctx.stroke();
+    ctx.fillStyle=sel?'#fff':PALETTE.text;ctx.font=`${sel?'bold ':''} 15px 'Georgia',serif`;ctx.textAlign='center';
+    ctx.fillText((sel?'▶  ':'')+ch.text,W/2,y+32);
+  });
+  ctx.textAlign='left';
+}
+
+function renderHistoryOverlay(){
+  ctx.fillStyle='rgba(0,0,0,0.88)';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=PALETTE.boxBorder;ctx.lineWidth=1;ctx.strokeRect(20,20,W-40,H-40);
+  ctx.fillStyle=PALETTE.nameText;ctx.font=`bold 14px monospace`;ctx.textAlign='center';ctx.fillText('— History Log —',W/2,48);
+  const startY=70, lineH=22, maxLines=Math.floor((H-100)/lineH);
+  const slice=history.slice(Math.max(0,history.length-maxLines-historyScroll.offset),history.length-historyScroll.offset);
+  slice.forEach((h,i)=>{
+    if(h.speaker){ctx.fillStyle=PALETTE.nameText;ctx.font=`bold 12px monospace`;ctx.textAlign='left';ctx.fillText(h.speaker+':',30,startY+i*lineH);}
+    ctx.fillStyle=PALETTE.text;ctx.font=`13px 'Georgia',serif`;ctx.textAlign='left';
+    const indent=h.speaker?90:30;
+    ctx.fillText(h.text.length>80?h.text.slice(0,77)+'...':h.text,indent,startY+i*lineH);
+  });
+  ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font=`11px monospace`;ctx.textAlign='center';ctx.fillText('CLICK or ESC to close',W/2,H-30);
+  ctx.textAlign='left';
+}
+
+function renderCredits(){
+  ctx.fillStyle='#050510';ctx.fillRect(0,0,W,H);
+  const lines=[GAME_TITLE,'','Story & Design: '+GAME_AUTHOR,'','[FILL: Credits]','','Thank you for reading.'];
+  lines.forEach((l,i)=>{
+    const y=H/2-lines.length*20+i*40;
+    ctx.fillStyle=i===0?PALETTE.nameText:'#aaa';ctx.font=`${i===0?'bold 26':'16'}px 'Georgia',serif`;ctx.textAlign='center';ctx.fillText(l,W/2,y);
+  });
+  const pulse=0.6+0.4*Math.sin(bgAnim*2);
+  ctx.globalAlpha=pulse;ctx.fillStyle='#666';ctx.font=`12px monospace`;ctx.fillText('CLICK to return to title',W/2,H-40);ctx.globalAlpha=1;
+  ctx.textAlign='left';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// META PROGRESSION
+// ══════════════════════════════════════════════════════════════════
+const _META_KEY='meta_vn';
+const UPGRADES=[
+  {id:'routes',  label:'Extra Routes', desc:'Unlock new paths', maxLv:3, cost:[60,120,200]},
+  {id:'hint',    label:'Hint System',  desc:'Show scene hints', maxLv:3, cost:[50,100,170]},
+  {id:'skip',    label:'Fast Skip',    desc:'2× skip speed /lv',maxLv:3, cost:[40,80,140]},
+  {id:'gallery', label:'Gallery',      desc:'Unlock CG art',    maxLv:3, cost:[70,140,230]},
+];
+let _meta={coins:0,upgrades:{}};
+let _runCoins=0; let _gameoverTimer=1.5; let _shopIdx=0;
+let _skipMultiplier=1; let _hintsEnabled=false; let _extraRoutes=0;
+function loadMeta(){try{const s=localStorage.getItem(_META_KEY);_meta=s?JSON.parse(s):{coins:0,upgrades:{}};}catch(e){_meta={coins:0,upgrades:{}};}}
+function saveMeta(){try{localStorage.setItem(_META_KEY,JSON.stringify(_meta));}catch(e){}}
+function getUpgradeLevel(id){return(_meta.upgrades[id]||0);}
+function buyUpgrade(id){const u=UPGRADES.find(x=>x.id===id);if(!u)return false;const lv=getUpgradeLevel(id);if(lv>=u.maxLv)return false;const cost=u.cost[lv];if(_meta.coins<cost)return false;_meta.coins-=cost;_meta.upgrades[id]=(lv+1);saveMeta();return true;}
+function applyUpgrades(){_skipMultiplier=1+getUpgradeLevel('skip');_hintsEnabled=getUpgradeLevel('hint')>=1;_extraRoutes=getUpgradeLevel('routes');}
+function _shopHit(px,py,x,y,w,h){return px>=x&&px<=x+w&&py>=y&&py<=y+h;}
+function updateGameover(dt){_gameoverTimer-=dt;if(_gameoverTimer<=0||anyAction()){_meta.coins+=_runCoins;saveMeta();_shopIdx=0;setState('shop');}}
+function updateShop(dt){if(!Pointer.justDown)return;const n=UPGRADES.length,cardW=Math.round(W*0.19),cardH=Math.round(H*0.32),gap=Math.round(W*0.02);const sy=Math.round(H*0.22),totalW=n*cardW+(n-1)*gap,sx=(W-totalW)/2;for(let i=0;i<n;i++){if(_shopHit(Pointer.x,Pointer.y,sx+i*(cardW+gap),sy,cardW,cardH)){_shopIdx=i;if(buyUpgrade(UPGRADES[i].id)){sfx.play(660,0.12,'sine',0.1);applyUpgrades();}else sfx.play(110,0.06,'sawtooth',0.08);return;}}const btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+32;if(_shopHit(Pointer.x,Pointer.y,btnX,btnY,btnW,btnH)){sfx.play(440,0.08,'square',0.1);setState('title');}}
+function renderShop(){ctx.fillStyle=PALETTE.shopBg;ctx.fillRect(0,0,W,H);ctx.textAlign='center';ctx.fillStyle='#fff';ctx.font='bold 22px system-ui,sans-serif';ctx.fillText('UPGRADE SHOP',W/2,Math.round(H*0.12));ctx.fillStyle='#ffdd00';ctx.font='bold 15px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,Math.round(H*0.19));const n=UPGRADES.length,cardW=Math.round(W*0.19),cardH=Math.round(H*0.32),gap=Math.round(W*0.02);const sy=Math.round(H*0.22),totalW=n*cardW+(n-1)*gap,sx=(W-totalW)/2;for(let i=0;i<n;i++){const u=UPGRADES[i],lv=getUpgradeLevel(u.id),cx=sx+i*(cardW+gap);ctx.fillStyle=_shopIdx===i?PALETTE.shopSel:PALETTE.shopCard;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(cx,sy,cardW,cardH,8);else ctx.rect(cx,sy,cardW,cardH);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 11px system-ui,sans-serif';ctx.fillText(u.label,cx+cardW/2,sy+22);ctx.fillStyle='#aaa';ctx.font='10px system-ui,sans-serif';ctx.fillText(u.desc,cx+cardW/2,sy+38);for(let d=0;d<u.maxLv;d++){ctx.fillStyle=d<lv?'#ffdd00':'#444';ctx.beginPath();ctx.arc(cx+cardW/2+(d-u.maxLv/2+0.5)*14,sy+cardH-36,5,0,Math.PI*2);ctx.fill();}if(lv<u.maxLv){ctx.fillStyle='#ffdd00';ctx.font='bold 12px system-ui,sans-serif';ctx.fillText(`${u.cost[lv]}🪙`,cx+cardW/2,sy+cardH-14);}else{ctx.fillStyle='#0f0';ctx.font='bold 11px system-ui,sans-serif';ctx.fillText('MAX',cx+cardW/2,sy+cardH-14);}}const btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+32;ctx.fillStyle='#3a1a3a';ctx.beginPath();if(ctx.roundRect)ctx.roundRect(btnX,btnY,btnW,btnH,8);else ctx.rect(btnX,btnY,btnW,btnH);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 16px system-ui,sans-serif';ctx.fillText('PLAY',W/2,btnY+27);ctx.textAlign='left';}
+loadMeta(); applyUpgrades();
+
+// ══════════════════════════════════════════════════════════════════
+// START
+// ══════════════════════════════════════════════════════════════════
+requestAnimationFrame(t=>{lastTime=t;requestAnimationFrame(loop);});
+</script>
+</body></html>

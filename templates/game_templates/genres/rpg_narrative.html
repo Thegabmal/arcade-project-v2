@@ -1,0 +1,750 @@
+<!--
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ARCADE PROJECT — RPG / NARRATIVE TEMPLATE — USAGE GUIDE                      ║
+║  Read this entirely before writing a single line of code.                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ ROLE ──────────────────────────────────────────────────────────────────────┐
+│ You are a senior HTML5 Canvas 2D game developer.                            │
+│ Your job: fill the [FILL: ...] sections to create a complete, playable game. │
+│ You do NOT write the engine — it is already written and tested.             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ THE TWO ZONES ─────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  1. ENGINE — DO NOT MODIFY  (lines below this comment, until first [FILL])  │
+│     ┌───────────────────────────────────────────────────────────────────┐   │
+│     │  Complete, crash-proof boilerplate. Copy EVERY character exactly. │   │
+│     │  Any change to ENGINE will break the game in a non-obvious way.   │   │
+│     └───────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  2. [FILL: ...] sections  — YOUR creative contribution                       │
+│     ┌───────────────────────────────────────────────────────────────────┐   │
+│     │  Replace EVERY placeholder with real, working JavaScript.         │   │
+│     │  Any [FILL] left in your output = a broken or incomplete game.    │   │
+│     └───────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SACRED CONTRACT — ENGINE VARIABLES (NEVER redeclare these) ────────────────┐
+│                                                                              │
+│  The ENGINE already declares and initialises these. If you add another      │
+│  "var/let/const X = ..." for any of these names, you WILL overwrite them    │
+│  with null/0 at runtime — guaranteed crash on the first draw call.          │
+│                                                                              │
+│  canvas   → HTMLCanvasElement  (getElementById — already set up)            │
+│  ctx       → CanvasRenderingContext2D (getContext — already set up)         │
+│  W, H      → logical canvas dimensions (480 × 640 — fixed for this genre)  │
+│  DPR       → device pixel ratio (handled by resizeCanvas)                   │
+│  gameState → string: 'menu' | 'playing' | 'paused' | 'gameover' | 'shop'   │
+│  Keys      → { down:{}, pressed:{}, released:{} }  — keyboard state        │
+│  Touch     → { justTapped, x, y }  — touch state                           │
+│  Mouse     → { clicked, x, y }  — mouse state                              │
+│  lastTime, accumulator  → game loop timing                                  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ENGINE FUNCTIONS — USE THESE, DO NOT REWRITE THEM ─────────────────────────┐
+│                                                                              │
+│  Input:                                                                      │
+│    keyDown('ArrowLeft')      → is key held this frame?                      │
+│    keyPressed('Space')       → was key just pressed?                        │
+│    anyAction()               → any key/click/tap?                           │
+│    flushInput()              → called automatically at end of update()      │
+│                                                                              │
+│  Pooling & FX:                                                              │
+│    createPool(factory, n)    → reusable object pool for enemies/bullets     │
+│    spawnParticles(x,y,n,opts)→ visual burst feedback                        │
+│    triggerShake(mag, dur)    → screen shake (use on hits and explosions)    │
+│    spawnPopup(x,y,txt,color) → floating score text                          │
+│                                                                              │
+│  Drawing helpers:                                                            │
+│    drawText(txt,x,y,col,sz,align) → quick HUD text                         │
+│    drawBar(x,y,w,h,val,max,fg,bg)  → health / progress bar                 │
+│                                                                              │
+│  Audio (NO external files allowed):                                          │
+│    sfx.play(freq, dur, type, vol)  → synthesised WebAudio sound            │
+│                                                                              │
+│  Math:                                                                       │
+│    lerp(a,b,t)   clamp(v,min,max)  aabb(ax,ay,aw,ah,bx,by,bw,bh)          │
+│    randInt(a,b)  randFloat(a,b)    randChoice(arr)                          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ GAME LOOP CONTRACT — HOW update/render WORK ───────────────────────────────┐
+│                                                                              │
+│  Fixed 60 Hz step:  loop(ts) → update(FIXED_DT) → renderFrame()            │
+│                                                                              │
+│  YOU MUST IMPLEMENT:                                                         │
+│    startGame()        → reset all state, spawn initial entities             │
+│    updatePlaying(dt)  → all gameplay: input, AI, physics, collisions        │
+│    renderPlaying()    → all drawing: background, entities, HUD              │
+│                                                                              │
+│  The ENGINE calls these automatically via the state machine.                │
+│  Do NOT write your own requestAnimationFrame or setInterval.                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ABSOLUTE PROHIBITIONS — any of these guarantees a crash ───────────────────┐
+│                                                                              │
+│  ✗  var canvas = ...       Redeclaring ENGINE globals KILLS context         │
+│  ✗  var ctx    = ...       ctx becomes null → crash on first ctx.save()     │
+│  ✗  var W      = ...       Use W and H directly — they are already set      │
+│  ✗  setInterval()          NEVER. The ENGINE loop already runs.             │
+│  ✗  new Image()            NO external resources. Draw with Canvas API.     │
+│  ✗  fetch() / XHR          NO network calls in game logic.                  │
+│  ✗  Audio() with src       Use sfx.play(freq, dur, type, vol) only.        │
+│  ✗  location.reload()      Reset variables in JS — never force a reload.   │
+│  ✗  Truncating output      Incomplete HTML always crashes. Finish the file. │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ QUALITY CHECKLIST — verify before submitting ──────────────────────────────┐
+│                                                                              │
+│  ✓  Every [FILL: ...] placeholder is replaced with real code                │
+│  ✓  Game works: menu → play → game over / victory → restart                 │
+│  ✓  Score, lives/HP, level visible in HUD at all times                      │
+│  ✓  At least 3 distinct enemy / obstacle / element types with AI            │
+│  ✓  Difficulty scales over time (speed, spawn rate, damage)                 │
+│  ✓  Audio feedback on: shoot, hit, collect, level up, game over             │
+│  ✓  Particle effects on: kills, power-up collect, player death              │
+│  ✓  Your output starts with <!DOCTYPE html> — no markdown fences            │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+-->
+<!DOCTYPE html>
+<html><head><title>[FILL: GAME_TITLE]</title><style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;}
+canvas{display:block;}
+</style></head><body>
+<canvas id="gameCanvas"></canvas>
+<script>
+// ══════════════════════════════════════════════════════════════════
+// ENGINE — DO NOT MODIFY
+// Dev console bridge — AI patches execute in game scope via eval
+window.__devPatch = function(code) { return eval(code); };
+// ══════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const GAME_W = 800, GAME_H = 600;
+let W = GAME_W, H = GAME_H;
+function resizeCanvas() {
+  const s=Math.min(window.innerWidth/W,window.innerHeight/H);
+  canvas.style.width=Math.round(W*s)+'px';canvas.style.height=Math.round(H*s)+'px';
+  canvas.width=Math.round(W*DPR);canvas.height=Math.round(H*DPR);ctx.scale(DPR,DPR);
+}
+resizeCanvas(); window.addEventListener('resize',()=>{resizeCanvas();ctx.scale(DPR,DPR);});
+
+// States: title | scene | battle | levelup | victory | gameover
+let gameState='title';
+function setState(s){gameState=s;}
+
+const Keys={down:{},pressed:{}};
+window.addEventListener('keydown',e=>{if(!Keys.down[e.code])Keys.pressed[e.code]=true;Keys.down[e.code]=true;if(['Space','Enter','ArrowUp','ArrowDown'].includes(e.code))e.preventDefault();});
+window.addEventListener('keyup',e=>{Keys.down[e.code]=false;});
+const Pointer={x:0,y:0,justDown:false};
+canvas.addEventListener('mousedown',e=>{const r=canvas.getBoundingClientRect();Pointer.x=(e.clientX-r.left)*(W/r.width);Pointer.y=(e.clientY-r.top)*(H/r.height);Pointer.justDown=true;});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();Pointer.x=(e.touches[0].clientX-r.left)*(W/r.width);Pointer.y=(e.touches[0].clientY-r.top)*(H/r.height);Pointer.justDown=true;},{passive:false});
+
+function keyPressed(c){return !!Keys.pressed[c];}
+function anyAction(){return keyPressed('Space')||keyPressed('Enter')||Pointer.justDown;}
+function flushInput(){Keys.pressed={};Pointer.justDown=false;}
+
+const sfx={_ctx:null,init(){try{if(!this._ctx)this._ctx=new(window.AudioContext||window.webkitAudioContext)();if(this._ctx.state==='suspended')this._ctx.resume();}catch(e){}},
+play(f,d,t,v){try{this.init();if(!this._ctx)return;const o=this._ctx.createOscillator(),g=this._ctx.createGain();o.type=t||'sine';o.frequency.value=f||440;g.gain.setValueAtTime(v||0.10,this._ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,this._ctx.currentTime+(d||0.15));o.connect(g);g.connect(this._ctx.destination);o.start();o.stop(this._ctx.currentTime+(d||0.15));}catch(e){}}};
+
+function lerp(a,b,t){return a+(b-a)*t;}
+function clamp(v,mn,mx){return v<mn?mn:v>mx?mx:v;}
+function randInt(a,b){return a+Math.floor(Math.random()*(b-a+1));}
+function drawText(t,x,y,c,s,a){ctx.fillStyle=c||'#fff';ctx.font=`${s||14}px 'Georgia',serif`;ctx.textAlign=a||'left';ctx.fillText(t,x,y);}
+function drawTextB(t,x,y,c,s,a){ctx.fillStyle=c||'#fff';ctx.font=`bold ${s||14}px monospace`;ctx.textAlign=a||'left';ctx.fillText(t,x,y);}
+function drawBar(x,y,w,h,v,m,fg,bg){ctx.fillStyle=bg||'#333';ctx.fillRect(x,y,w,h);ctx.fillStyle=fg||'#0f0';ctx.fillRect(x,y,Math.round(w*clamp(v/m,0,1)),h);ctx.strokeStyle='rgba(0,0,0,0.4)';ctx.lineWidth=1;ctx.strokeRect(x,y,w,h);}
+
+const FIXED_DT=1/60,MAX_DT=0.1;let lastTime=0,accumulator=0;
+function loop(ts){const rd=Math.min((ts-lastTime)/1000,MAX_DT);lastTime=ts;accumulator+=rd;while(accumulator>=FIXED_DT){update(FIXED_DT);accumulator-=FIXED_DT;}renderFrame();requestAnimationFrame(loop);}
+function update(dt){
+  switch(gameState){
+    case 'title':  updateTitle(dt);  break;
+    case 'scene':  updateScene(dt);  break;
+    case 'battle': updateBattle(dt); break;
+    case 'levelup':updateLevelUp(dt);break;
+    case 'gameover':updateGameover(dt);break;
+    case 'shop':   updateShop(dt);  break;
+    case 'victory':if(anyAction()){restartGame();}break;
+  }
+  flushInput();
+}
+function renderFrame(){
+  switch(gameState){
+    case 'title':  renderTitle();  break;
+    case 'scene':  renderScene();  break;
+    case 'battle': renderBattle(); break;
+    case 'levelup':renderLevelUp();break;
+    case 'gameover':renderGameover();break;
+    case 'shop':   renderShop();   break;
+    case 'victory':renderVictory();break;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME CONSTANTS — [FILL: Adjust to match your design]
+// ══════════════════════════════════════════════════════════════════
+const GAME_TITLE = '[FILL: Game Title]';
+const GAME_SUBTITLE = '[FILL: Subtitle / tagline]';
+
+// [FILL: color palette]
+const PALETTE = {
+  bg:      '#0a0812',
+  textbox: 'rgba(5,5,20,0.88)',
+  border:  '#4a3a6a',
+  name:    '#ffdd88',
+  text:    '#e8e0d0',
+  hp:      '#ff4444',
+  mp:      '#4488ff',
+  choice:  '#224',
+  choiceHover:'#446',
+  accent:  '#ffaa44',
+  xp:      '#44ffaa',
+  shopBg:  '#1a0d0d',
+  shopCard:'#2a1a1a',
+  shopSel: '#3a2a2a',
+};
+
+// ── Character colors (portrait fills) ────────────────────────────
+// [FILL: customize character appearances]
+const CHAR_COLORS = {
+  hero:    { body:'#0088cc', hair:'#222', eye:'#00ccff', name:'Hero'       },
+  sage:    { body:'#884400', hair:'#fff', eye:'#ffaa00', name:'Sage'       },
+  villain: { body:'#660022', hair:'#111', eye:'#ff0033', name:'???'        },
+  // [FILL: add more characters]
+};
+
+// ══════════════════════════════════════════════════════════════════
+// PLAYER STATS
+// ══════════════════════════════════════════════════════════════════
+const hero = {
+  hp:100, maxHp:100,
+  mp:40,  maxMp:40,
+  atk:18, def:8,
+  xp:0,   level:1,
+  gold:0,
+  // [FILL: equipment slots, abilities list]
+  abilities: ['Attack','Magic','Defend','Item'],
+};
+
+// ══════════════════════════════════════════════════════════════════
+// [FILL: SCENE GRAPH]
+// Each scene: { id, bg, chars, lines, choices, auto }
+// bg:      string key for drawBackground() — 'forest','dungeon','village',...
+// chars:   [{ id, side:'left'|'right'|'center', mood:'neutral'|'happy'|'angry' }]
+// lines:   [{ speaker: charId|null, text: string, sfxPitch: optional }]
+// choices: [{ text, goto, condition }] — after last line
+// auto:    scene id to auto-advance to (if no choices)
+// battle:  enemy def to fight (triggers battle before auto/choices)
+// ══════════════════════════════════════════════════════════════════
+const SCENES = {
+  start: {
+    id:'start', bg:'village',
+    chars:[{id:'sage',side:'left',mood:'neutral'}],
+    lines:[
+      {speaker:'sage', text:'The darkness spreads across the land. You must find the ancient crystal before it is too late.'},
+      {speaker:null,   text:'[The old sage hands you a worn map. Somewhere in those ruins lies your destiny.]'},
+      {speaker:'hero', text:"I'm ready. I'll leave at dawn."},
+    ],
+    choices:[
+      {text:'Head to the ruins immediately', goto:'forest'},
+      {text:'Ask the sage for more information', goto:'sage_advice'},
+    ],
+  },
+  sage_advice: {
+    id:'sage_advice', bg:'village',
+    chars:[{id:'sage',side:'left',mood:'happy'}],
+    lines:[
+      {speaker:'sage', text:'The crystal resonates with pure intent. Only a heart uncorrupted by fear can wield it.'},
+      {speaker:'sage', text:'Also — the guardian within is weakened at dawn. Use that to your advantage.'},
+    ],
+    auto:'forest',
+  },
+  forest: {
+    id:'forest', bg:'forest',
+    chars:[],
+    lines:[
+      {speaker:null, text:'[You enter the dark forest. Shadows move between the trees. A low growl echoes ahead.]'},
+    ],
+    battle: { name:'Forest Wolf', hp:60, maxHp:60, atk:14, def:4, reward:{xp:30,gold:15}, color:'#888', sprite:'wolf' },
+    auto:'ruins_entrance',
+  },
+  ruins_entrance: {
+    id:'ruins_entrance', bg:'dungeon',
+    chars:[{id:'villain',side:'right',mood:'angry'}],
+    lines:[
+      {speaker:'villain', text:"So. You've come this far. I'm impressed — and disappointed."},
+      {speaker:'hero',    text:'Step aside. This ends today.'},
+      {speaker:'villain', text:"Heh. Then show me what you're made of!"},
+    ],
+    battle: { name:'Dark Guardian', hp:180, maxHp:180, atk:22, def:10, reward:{xp:100,gold:50}, color:'#600', sprite:'boss', isBoss:true },
+    auto:'victory_scene',
+  },
+  victory_scene: {
+    id:'victory_scene', bg:'light',
+    chars:[{id:'sage',side:'left',mood:'happy'},{id:'hero',side:'right',mood:'happy'}],
+    lines:[
+      {speaker:null,   text:'[The crystal shines with brilliant light. The darkness retreats.]'},
+      {speaker:'sage', text:'You did it. The land is saved. I always believed in you.'},
+      {speaker:'hero', text:'It was never about me alone. This victory belongs to everyone.'},
+    ],
+    auto:'__VICTORY__',
+  },
+  // [FILL: add more scenes here]
+};
+
+// ══════════════════════════════════════════════════════════════════
+// DIALOGUE SYSTEM — DO NOT MODIFY
+// ══════════════════════════════════════════════════════════════════
+let currentScene  = null;
+let lineIndex     = 0;
+let typeTimer     = 0;
+let typePos       = 0;
+const TYPE_SPEED  = 38;   // chars per second
+let displayedText = '';
+let textComplete  = false;
+let choiceIndex   = 0;
+let storyFlags    = {};    // persistent across scenes: { metSage:true, hasKey:false, ... }
+let scenePhase    = 'dialogue'; // 'dialogue' | 'choices'
+
+function gotoScene(id) {
+  if (id==='__VICTORY__') { setState('victory'); return; }
+  const scene=SCENES[id];
+  if(!scene){console.warn('Scene not found:',id);return;}
+  currentScene=scene; lineIndex=0; typePos=0; typeTimer=0;
+  displayedText=''; textComplete=false; choiceIndex=0; scenePhase='dialogue';
+  // Set background transition
+  bgTransition={from:currentBg,to:scene.bg,t:0};
+  setState('scene');
+}
+
+function getCurrentLine(){return currentScene&&currentScene.lines[lineIndex]||null;}
+function advanceDialogue(){
+  if(!textComplete){typePos=getCurrentLine().text.length;textComplete=true;return;}
+  lineIndex++;
+  if(lineIndex>=currentScene.lines.length){
+    // Last line done — check for battle, choices, or auto
+    if(currentScene.battle&&!storyFlags['battle_'+currentScene.id]){
+      startBattle(currentScene.battle);
+      return;
+    }
+    if(currentScene.choices&&currentScene.choices.length>0){
+      scenePhase='choices'; return;
+    }
+    if(currentScene.auto){gotoScene(currentScene.auto);return;}
+    return;
+  }
+  typePos=0; typeTimer=0; displayedText=''; textComplete=false;
+}
+
+function updateScene(dt) {
+  if(scenePhase==='dialogue'){
+    const line=getCurrentLine();
+    if(!line) return;
+    if(!textComplete){
+      typeTimer+=dt;
+      const target=Math.floor(typeTimer*TYPE_SPEED);
+      if(target>=line.text.length){typePos=line.text.length;textComplete=true;sfx.play(660,0.04,'sine',0.05);}
+      else if(target>typePos){typePos=target;if(typePos%3===0)sfx.play(440+Math.random()*80,0.03,'sine',0.04);}
+      displayedText=line.text.slice(0,typePos);
+    }
+    if(anyAction()) advanceDialogue();
+  } else {
+    // Choices
+    if(keyPressed('ArrowUp')&&choiceIndex>0){choiceIndex--;sfx.play(550,0.05,'sine',0.06);}
+    if(keyPressed('ArrowDown')&&choiceIndex<currentScene.choices.length-1){choiceIndex++;sfx.play(550,0.05,'sine',0.06);}
+    if(anyAction()){
+      const choice=currentScene.choices[choiceIndex];
+      if(choice){sfx.play(660,0.08,'square',0.09);gotoScene(choice.goto);}
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TURN-BASED BATTLE — DO NOT MODIFY core flow
+// ══════════════════════════════════════════════════════════════════
+let enemy=null;
+let battleState='player_turn'; // player_turn | player_anim | enemy_turn | enemy_anim | result
+let battleLog=[];
+let battleMenu={selected:0,open:true};
+let battleTimer=0;
+let battleResult='';
+let returnToScene='';
+
+function startBattle(def) {
+  storyFlags['battle_'+currentScene.id]=true;
+  returnToScene=currentScene.auto||'';
+  enemy={...def,hp:def.hp,maxHp:def.hp,animX:0,animY:0,shakeTimer:0};
+  hero.hp=Math.min(hero.hp,hero.maxHp);
+  battleLog=[`A ${def.name} appears!`];
+  battleState='player_turn'; battleMenu.selected=0; battleMenu.open=true;
+  battleTimer=0;
+  setState('battle');
+  sfx.play(220,0.25,'sawtooth',0.12);
+}
+
+function battleAction(action) {
+  battleMenu.open=false;
+  let dmg=0,log='';
+  if(action===0){ // Attack
+    dmg=Math.max(1,hero.atk+randInt(-3,3)-enemy.def);
+    log=`You attack! ${dmg} damage.`;
+    enemy.hp=Math.max(0,enemy.hp-dmg);
+    enemy.shakeTimer=0.25;
+    sfx.play(330,0.10,'sawtooth',0.12);
+  } else if(action===1){ // Magic
+    if(hero.mp>=10){
+      dmg=Math.max(1,hero.atk*1.8+randInt(-2,2));
+      hero.mp-=10;
+      log=`Magic spell! ${Math.floor(dmg)} damage.`;
+      enemy.hp=Math.max(0,enemy.hp-Math.floor(dmg));
+      sfx.play(880,0.15,'sine',0.12);
+    } else {log='Not enough MP!';battleMenu.open=true;return;}
+  } else if(action===2){ // Defend
+    log='You defend. Next hit reduced.'; hero._defending=true;
+  } else if(action===3){ // Item
+    if(hero._potions>0){hero._potions--;const heal=randInt(25,40);hero.hp=Math.min(hero.maxHp,hero.hp+heal);log=`Used potion! +${heal} HP.`;}
+    else{log='No items!';battleMenu.open=true;return;}
+  }
+  battleLog.push(log);
+  if(battleLog.length>4)battleLog.shift();
+
+  if(enemy.hp<=0){battleState='result';battleResult='win';battleTimer=1.5;return;}
+  battleState='enemy_turn'; battleTimer=0.9;
+}
+
+function updateBattle(dt) {
+  if(enemy.shakeTimer>0){enemy.shakeTimer-=dt;enemy.animX=(Math.random()*2-1)*5;}else{enemy.animX=0;}
+
+  if(battleState==='player_turn'&&battleMenu.open){
+    if(keyPressed('ArrowUp'))battleMenu.selected=Math.max(0,battleMenu.selected-1);
+    if(keyPressed('ArrowDown'))battleMenu.selected=Math.min(hero.abilities.length-1,battleMenu.selected+1);
+    if(keyPressed('Space')||keyPressed('Enter')||Pointer.justDown){
+      // Check pointer over menu
+      let idx=battleMenu.selected;
+      if(Pointer.justDown){
+        const menuY=H-160;
+        hero.abilities.forEach((_,i)=>{if(Pointer.y>menuY+i*36&&Pointer.y<menuY+i*36+32)idx=i;});
+      }
+      battleAction(idx);
+    }
+    return;
+  }
+  if(battleState==='enemy_turn'){
+    battleTimer-=dt;
+    if(battleTimer<=0){
+      const def=hero._defending?Math.floor(hero.def*1.8):hero.def;
+      hero._defending=false;
+      const dmg=Math.max(1,enemy.atk+randInt(-3,3)-def);
+      hero.hp=Math.max(0,hero.hp-dmg);
+      battleLog.push(`${enemy.name} attacks! -${dmg} HP`);
+      if(battleLog.length>4)battleLog.shift();
+      sfx.play(150,0.18,'sawtooth',0.12);
+      if(hero.hp<=0){battleState='result';battleResult='lose';battleTimer=1.5;return;}
+      battleState='player_turn'; battleMenu.open=true; battleMenu.selected=0;
+    }
+    return;
+  }
+  if(battleState==='result'){
+    battleTimer-=dt;
+    if(battleTimer<=0){
+      if(battleResult==='win'){
+        hero.xp+=enemy.reward.xp; hero.gold+=enemy.reward.gold;
+        sfx.play(660,0.2,'sine',0.10);
+        if(hero.xp>=hero.level*80){
+          hero.xp-=hero.level*80; hero.level++;
+          hero.maxHp+=15; hero.hp=Math.min(hero.hp+25,hero.maxHp);
+          hero.atk+=3; hero.def+=2; hero.maxMp+=8;
+          setState('levelup');
+        } else {
+          if(returnToScene) gotoScene(returnToScene);
+          else setState('scene');
+        }
+      } else {
+        _runCoins=hero.gold||Math.floor(GAME_SCORE/100); _gameoverTimer=1.5;
+        setState('gameover');
+      }
+    }
+  }
+}
+
+let levelupTimer=0;
+function updateLevelUp(dt){levelupTimer+=dt;if(anyAction()||levelupTimer>3){levelupTimer=0;if(returnToScene)gotoScene(returnToScene);else setState('scene');}}
+
+// ══════════════════════════════════════════════════════════════════
+// BACKGROUND RENDERING — [FILL: add more background types]
+// ══════════════════════════════════════════════════════════════════
+let currentBg='village';
+let bgTransition={from:'village',to:'village',t:1};
+
+function drawBackground(bg) {
+  const bgs = {
+    village: ()=>{
+      const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#87ceeb');g.addColorStop(1,'#5a8a3a');
+      ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+      // Houses
+      ctx.fillStyle='#8B4513';ctx.fillRect(50,300,120,180);ctx.fillRect(250,320,100,160);ctx.fillRect(600,280,140,200);
+      ctx.fillStyle='#a0522d';ctx.beginPath();ctx.moveTo(40,300);ctx.lineTo(110,220);ctx.lineTo(180,300);ctx.fill();
+      ctx.fillStyle='#654321';ctx.beginPath();ctx.moveTo(240,320);ctx.lineTo(300,250);ctx.lineTo(360,320);ctx.fill();
+      // Ground
+      ctx.fillStyle='#4a7a2a';ctx.fillRect(0,H-80,W,80);
+    },
+    forest: ()=>{
+      const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0d1f0d');g.addColorStop(1,'#1a3a1a');
+      ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+      // Trees
+      [50,180,320,460,600,700].forEach((tx,i)=>{
+        const th=200+i*20;
+        ctx.fillStyle='#2a1a0a';ctx.fillRect(tx+22,H-th,16,th);
+        ctx.fillStyle=`hsl(${120+i*10},40%,15%)`;ctx.beginPath();ctx.arc(tx+30,H-th,40,0,Math.PI*2);ctx.fill();
+      });
+      ctx.fillStyle='#1a2a1a';ctx.fillRect(0,H-60,W,60);
+    },
+    dungeon: ()=>{
+      ctx.fillStyle='#050510';ctx.fillRect(0,0,W,H);
+      // Stone walls
+      for(let r=0;r<H;r+=40) for(let c=0;c<W;c+=80+(r%80===0?40:0)){ctx.fillStyle=`hsl(260,15%,${8+Math.random()*4}%)`;ctx.fillRect(c,r,78,38);}
+      // Torches
+      [200,600].forEach(tx=>{ctx.fillStyle='#885500';ctx.fillRect(tx-4,200,8,30);ctx.fillStyle='#ffaa00';ctx.shadowBlur=20;ctx.shadowColor='#ff6600';ctx.beginPath();ctx.arc(tx,198,12,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;});
+    },
+    light: ()=>{
+      const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#fff9e6');g.addColorStop(1,'#ffd700');
+      ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+      ctx.shadowBlur=60;ctx.shadowColor='#fff';ctx.fillStyle='rgba(255,255,255,0.4)';ctx.beginPath();ctx.arc(W/2,H*0.35,120,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    },
+    // [FILL: add more backgrounds — cave, castle, marketplace, etc.]
+  };
+  (bgs[bg]||bgs.village)();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CHARACTER PORTRAIT DRAWING — [FILL: improve art style]
+// ══════════════════════════════════════════════════════════════════
+function drawCharacter(charId, side, mood, alpha) {
+  const def=CHAR_COLORS[charId]; if(!def) return;
+  const x=side==='left'?100:side==='right'?W-180:W/2-80;
+  const y=H-280;
+  ctx.globalAlpha=alpha||1;
+  // Body
+  ctx.fillStyle=def.body;ctx.beginPath();ctx.ellipse(x+80,y+260,55,110,0,0,Math.PI*2);ctx.fill();
+  // Head
+  ctx.fillStyle=def.body;ctx.beginPath();ctx.arc(x+80,y+100,55,0,Math.PI*2);ctx.fill();
+  // Hair
+  ctx.fillStyle=def.hair;ctx.beginPath();ctx.arc(x+80,y+78,57,Math.PI,0);ctx.fill();
+  ctx.fillRect(x+23,y+75,114,30);
+  // Eyes
+  const eyeOff=mood==='angry'?-4:mood==='happy'?2:0;
+  ctx.fillStyle=def.eye;ctx.beginPath();ctx.arc(x+60,y+105+eyeOff,10,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(x+100,y+105+eyeOff,10,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#000';ctx.beginPath();ctx.arc(x+62,y+106+eyeOff,5,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(x+102,y+106+eyeOff,5,0,Math.PI*2);ctx.fill();
+  // Mouth
+  ctx.strokeStyle='#000';ctx.lineWidth=2;ctx.beginPath();
+  if(mood==='happy'){ctx.arc(x+80,y+125,16,0.1*Math.PI,0.9*Math.PI);}
+  else if(mood==='angry'){ctx.arc(x+80,y+135,16,1.1*Math.PI,1.9*Math.PI);}
+  else{ctx.moveTo(x+64,y+130);ctx.lineTo(x+96,y+130);}
+  ctx.stroke();
+  // [FILL: replace with actual sprite sheets or more detailed drawings]
+  ctx.globalAlpha=1;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER FUNCTIONS
+// ══════════════════════════════════════════════════════════════════
+let bgAnim=0;
+function updateTitle(dt){bgAnim+=dt;if(anyAction()){sfx.play(440,0.10,'sine',0.10);gotoScene('start');}}
+
+function renderTitle(){
+  drawBackground('village');
+  // Dark overlay
+  ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(0,0,W,H);
+  drawTextB(GAME_TITLE,W/2,H*0.35,PALETTE.name,36,'center');
+  ctx.textAlign='center';ctx.fillStyle=PALETTE.text;ctx.font='16px system-ui,sans-serif';ctx.fillText(GAME_SUBTITLE,W/2,H*0.46);
+  if(_meta.coins>0){ctx.fillStyle='#ffdd00';ctx.font='bold 13px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,H*0.57);}
+  // Pulsing start prompt
+  const pulse=0.7+0.3*Math.sin(bgAnim*2.5);
+  ctx.globalAlpha=pulse;ctx.fillStyle='#fff';ctx.font='bold 13px system-ui,sans-serif';ctx.fillText('PRESS SPACE OR TAP TO BEGIN',W/2,H*0.65);ctx.globalAlpha=1;
+  ctx.textAlign='left';
+}
+
+function renderScene(){
+  if(!currentScene) return;
+  // Background with transition
+  bgTransition.t=Math.min(1,(bgTransition.t||0)+1/60*3);
+  drawBackground(bgTransition.from||currentScene.bg);
+  if(bgTransition.t<1&&bgTransition.to!==bgTransition.from){
+    ctx.globalAlpha=bgTransition.t;
+    drawBackground(bgTransition.to);
+    ctx.globalAlpha=1;
+    if(bgTransition.t>=1)currentBg=bgTransition.to;
+  }
+
+  // Characters
+  currentScene.chars&&currentScene.chars.forEach(c=>{
+    const fade=bgTransition.t;
+    drawCharacter(c.id,c.side,c.mood||'neutral',fade);
+  });
+
+  // Text box background
+  const boxY=H-190, boxH=180, boxX=20, boxW=W-40;
+  ctx.fillStyle=PALETTE.textbox;
+  ctx.beginPath();ctx.roundRect(boxX,boxY,boxW,boxH,8);ctx.fill();
+  ctx.strokeStyle=PALETTE.border;ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.roundRect(boxX,boxY,boxW,boxH,8);ctx.stroke();
+
+  if(scenePhase==='dialogue'){
+    const line=getCurrentLine();
+    if(line){
+      // Speaker name
+      if(line.speaker&&CHAR_COLORS[line.speaker]){
+        const def=CHAR_COLORS[line.speaker];
+        ctx.fillStyle=PALETTE.name;
+        ctx.font=`bold 15px monospace`;ctx.textAlign='left';
+        ctx.fillText(def.name||line.speaker,boxX+16,boxY+22);
+      }
+      // Dialogue text (word-wrapped)
+      drawWrappedText(displayedText,boxX+16,boxY+42,boxW-32,PALETTE.text,15,26);
+      // Advance hint
+      if(textComplete){ctx.globalAlpha=0.7;drawTextB('▼',W-40,boxY+boxH-16,'#aaa',12,'right');ctx.globalAlpha=1;}
+    }
+  } else {
+    // Choices
+    drawTextB('What will you do?',boxX+16,boxY+20,PALETTE.name,14);
+    currentScene.choices.forEach((ch,i)=>{
+      const cy=boxY+45+i*36;
+      const isHover=i===choiceIndex||
+        (Pointer.justDown===false&&Pointer.y>cy&&Pointer.y<cy+30&&Pointer.x>boxX+12&&Pointer.x<boxW+boxX-12);
+      ctx.fillStyle=i===choiceIndex?PALETTE.choiceHover:PALETTE.choice;
+      ctx.beginPath();ctx.roundRect(boxX+12,cy,boxW-24,30,4);ctx.fill();
+      ctx.strokeStyle=i===choiceIndex?PALETTE.border:'transparent';ctx.lineWidth=1;
+      ctx.beginPath();ctx.roundRect(boxX+12,cy,boxW-24,30,4);ctx.stroke();
+      drawText((i===choiceIndex?'▶ ':'')+ch.text,boxX+24,cy+20,i===choiceIndex?'#fff':PALETTE.text,14);
+    });
+  }
+}
+
+function drawWrappedText(text,x,y,maxW,color,size,lineH){
+  ctx.fillStyle=color; ctx.font=`${size}px 'Georgia',serif`; ctx.textAlign='left';
+  const words=text.split(' ');let line='',lineY=y;
+  for(const w of words){
+    const test=line+(line?' ':'')+w;
+    if(ctx.measureText(test).width>maxW&&line){ctx.fillText(line,x,lineY);line=w;lineY+=lineH;}
+    else line=test;
+  }
+  if(line)ctx.fillText(line,x,lineY);
+}
+
+function renderBattle(){
+  // Background
+  drawBackground('dungeon');
+  ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fillRect(0,0,W,H);
+
+  // ── Enemy ─────────────────────────────────────────────────────
+  const ex=W*0.65+enemy.animX, ey=H*0.25;
+  // [FILL: draw enemy sprite — use shapes for now]
+  ctx.fillStyle=enemy.color||'#f44';
+  ctx.shadowBlur=20;ctx.shadowColor=enemy.color||'#f44';
+  ctx.beginPath();
+  if(enemy.isBoss){ctx.arc(ex,ey+60,80,0,Math.PI*2);}
+  else{ctx.arc(ex,ey+40,50,0,Math.PI*2);}
+  ctx.fill();ctx.shadowBlur=0;
+  // Enemy name & HP
+  drawTextB(enemy.name,ex,ey-20,PALETTE.name,16,'center');
+  drawBar(ex-80,ey-8,160,10,enemy.hp,enemy.maxHp,'#f44','#300');
+  drawTextB(`${enemy.hp}/${enemy.maxHp}`,ex,ey+8,'#f88',11,'center');
+
+  // ── Hero stats panel ──────────────────────────────────────────
+  ctx.fillStyle='rgba(5,5,20,0.85)';ctx.beginPath();ctx.roundRect(10,10,220,130,6);ctx.fill();
+  ctx.strokeStyle=PALETTE.border;ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(10,10,220,130,6);ctx.stroke();
+  drawTextB(`LV ${hero.level} Hero`,20,32,PALETTE.name,14);
+  drawBar(20,40,200,10,hero.hp,hero.maxHp,'#f44','#300');drawTextB(`HP ${hero.hp}/${hero.maxHp}`,20,64,'#f88',12);
+  drawBar(20,70,200,8,hero.mp,hero.maxMp,'#44f','#003');drawTextB(`MP ${hero.mp}/${hero.maxMp}`,20,90,'#88f',12);
+  drawTextB(`ATK ${hero.atk}  DEF ${hero.def}`,20,110,'#ccc',11);
+  drawTextB(`XP ${hero.xp}/${hero.level*80}`,20,128,'#4fa',11);
+
+  // ── Battle log ────────────────────────────────────────────────
+  ctx.fillStyle='rgba(0,0,0,0.7)';ctx.beginPath();ctx.roundRect(10,H-200,320,100,6);ctx.fill();
+  battleLog.slice(-3).forEach((l,i)=>{drawText(l,18,H-190+i*28,i===battleLog.slice(-3).length-1?'#fff':'#888',12);});
+
+  // ── Action menu ───────────────────────────────────────────────
+  if(battleState==='player_turn'&&battleMenu.open){
+    const menuX=10, menuY=H-160;
+    hero.abilities.forEach((ab,i)=>{
+      ctx.fillStyle=i===battleMenu.selected?'#446':'#224';
+      ctx.beginPath();ctx.roundRect(menuX,menuY+i*36,180,32,4);ctx.fill();
+      ctx.strokeStyle=i===battleMenu.selected?PALETTE.border:'transparent';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(menuX,menuY+i*36,180,32,4);ctx.stroke();
+      const extra=i===1?`(${hero.mp}MP)`:i===3?`(${hero._potions||0})`:''
+      drawTextB(`${i===battleMenu.selected?'▶ ':'  '}${ab} ${extra}`,menuX+10,menuY+i*36+21,i===battleMenu.selected?'#fff':'#aaa',13);
+    });
+  }
+
+  if(battleState==='enemy_turn'){ctx.fillStyle='rgba(255,0,0,0.12)';ctx.fillRect(0,0,W,H);}
+
+  if(battleState==='result'){
+    ctx.fillStyle=`rgba(0,0,0,0.6)`;ctx.fillRect(0,0,W,H);
+    if(battleResult==='win'){
+      drawTextB('VICTORY!',W/2,H/2-20,'#ff0',32,'center');
+      drawTextB(`+${enemy.reward.xp} XP   +${enemy.reward.gold} Gold`,W/2,H/2+20,PALETTE.accent,16,'center');
+    } else {
+      drawTextB('DEFEATED...',W/2,H/2,'#f44',32,'center');
+    }
+  }
+}
+
+function renderLevelUp(){
+  ctx.fillStyle='#050510';ctx.fillRect(0,0,W,H);
+  const pulse=1+0.08*Math.sin(levelupTimer*4);
+  ctx.save();ctx.translate(W/2,H/2);ctx.scale(pulse,pulse);
+  drawTextB('LEVEL UP!',0,-40,'#ff0',36,'center');
+  drawTextB(`Now Level ${hero.level}`,0,10,PALETTE.text,20,'center');
+  drawTextB(`HP +15  ATK +3  DEF +2  MP +8`,0,50,'#4fa',14,'center');
+  ctx.restore();
+  ctx.globalAlpha=0.7;drawTextB('SPACE / TAP to continue',W/2,H-40,'#aaa',12,'center');ctx.globalAlpha=1;
+}
+function renderGameover(){ctx.fillStyle='#050510';ctx.fillRect(0,0,W,H);ctx.textAlign='center';ctx.fillStyle='#f44';ctx.font='bold 34px system-ui,sans-serif';ctx.fillText('GAME OVER',W/2,H*0.35);ctx.fillStyle=PALETTE.text;ctx.font='14px system-ui,sans-serif';ctx.fillText('Your journey ends here.',W/2,H*0.47);if(_runCoins>0){ctx.fillStyle='#ffdd00';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText(`🪙 ${_runCoins} coins earned`,W/2,H*0.56);}ctx.fillStyle='#aaa';ctx.font='13px system-ui,sans-serif';ctx.fillText('Waiting for shop...',W/2,H*0.66);ctx.textAlign='left';}
+function renderVictory(){ctx.fillStyle='#fffbe6';ctx.fillRect(0,0,W,H);drawBackground('light');ctx.fillStyle='rgba(255,251,230,0.7)';ctx.fillRect(0,0,W,H);drawTextB('THE END',W/2,H*0.30,'#553300',38,'center');drawTextB('Peace is restored.',W/2,H*0.44,PALETTE.text,16,'center');drawTextB(`Final Level: ${hero.level}   Gold: ${hero.gold}`,W/2,H*0.55,'#885500',13,'center');drawTextB('SPACE / TAP to play again',W/2,H*0.70,'#885500',13,'center');}
+
+// ══════════════════════════════════════════════════════════════════
+// META PROGRESSION
+// ══════════════════════════════════════════════════════════════════
+const _META_KEY='meta_rpg';
+const UPGRADES=[
+  {id:'gold',  label:'Gold Purse',  desc:'+20g start /lv', maxLv:3, cost:[50,100,170]},
+  {id:'xp',    label:'XP Bonus',   desc:'+25% XP /lv',    maxLv:3, cost:[70,140,230]},
+  {id:'hp',    label:'Vitality',   desc:'+20 max HP /lv',  maxLv:3, cost:[60,120,200]},
+  {id:'equip', label:'Equipment',  desc:'Bonus ATK/DEF',   maxLv:3, cost:[90,160,260]},
+];
+let _meta={coins:0,upgrades:{}};
+let _runCoins=0; let _gameoverTimer=1.5; let _shopIdx=0;
+let _xpMultiplier=1.0; let _startGold=0; let _bonusHp=0;
+function loadMeta(){try{const s=localStorage.getItem(_META_KEY);_meta=s?JSON.parse(s):{coins:0,upgrades:{}};}catch(e){_meta={coins:0,upgrades:{}};}}
+function saveMeta(){try{localStorage.setItem(_META_KEY,JSON.stringify(_meta));}catch(e){}}
+function getUpgradeLevel(id){return(_meta.upgrades[id]||0);}
+function buyUpgrade(id){const u=UPGRADES.find(x=>x.id===id);if(!u)return false;const lv=getUpgradeLevel(id);if(lv>=u.maxLv)return false;const cost=u.cost[lv];if(_meta.coins<cost)return false;_meta.coins-=cost;_meta.upgrades[id]=(lv+1);saveMeta();return true;}
+function applyUpgrades(){_xpMultiplier=1+getUpgradeLevel('xp')*0.25;_startGold=getUpgradeLevel('gold')*20;_bonusHp=getUpgradeLevel('hp')*20;const equipLv=getUpgradeLevel('equip');hero.maxHp=100+_bonusHp;hero.hp=hero.maxHp;hero.gold=_startGold;hero.atk=18+equipLv*4;hero.def=8+equipLv*2;}
+function _shopHit(px,py,x,y,w,h){return px>=x&&px<=x+w&&py>=y&&py<=y+h;}
+function updateGameover(dt){_gameoverTimer-=dt;if(_gameoverTimer<=0||anyAction()){_meta.coins+=_runCoins;saveMeta();_shopIdx=0;setState('shop');}}
+function updateShop(dt){if(!Pointer.justDown)return;const n=UPGRADES.length,cardW=Math.round(W*0.19),cardH=Math.round(H*0.32),gap=Math.round(W*0.02);const sy=Math.round(H*0.22),totalW=n*cardW+(n-1)*gap,sx=(W-totalW)/2;for(let i=0;i<n;i++){if(_shopHit(Pointer.x,Pointer.y,sx+i*(cardW+gap),sy,cardW,cardH)){_shopIdx=i;if(buyUpgrade(UPGRADES[i].id)){sfx.play(660,0.12,'sine',0.1);applyUpgrades();}else sfx.play(110,0.06,'sawtooth',0.08);return;}}const btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+32;if(_shopHit(Pointer.x,Pointer.y,btnX,btnY,btnW,btnH)){sfx.play(440,0.08,'square',0.1);restartGame();setState('title');}}
+function renderShop(){ctx.fillStyle=PALETTE.shopBg;ctx.fillRect(0,0,W,H);ctx.textAlign='center';ctx.fillStyle='#fff';ctx.font='bold 22px system-ui,sans-serif';ctx.fillText('UPGRADE SHOP',W/2,Math.round(H*0.12));ctx.fillStyle='#ffdd00';ctx.font='bold 15px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,Math.round(H*0.19));const n=UPGRADES.length,cardW=Math.round(W*0.19),cardH=Math.round(H*0.32),gap=Math.round(W*0.02);const sy=Math.round(H*0.22),totalW=n*cardW+(n-1)*gap,sx=(W-totalW)/2;for(let i=0;i<n;i++){const u=UPGRADES[i],lv=getUpgradeLevel(u.id),cx=sx+i*(cardW+gap);ctx.fillStyle=_shopIdx===i?PALETTE.shopSel:PALETTE.shopCard;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(cx,sy,cardW,cardH,8);else ctx.rect(cx,sy,cardW,cardH);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 11px system-ui,sans-serif';ctx.fillText(u.label,cx+cardW/2,sy+22);ctx.fillStyle='#aaa';ctx.font='10px system-ui,sans-serif';ctx.fillText(u.desc,cx+cardW/2,sy+38);for(let d=0;d<u.maxLv;d++){ctx.fillStyle=d<lv?'#ffdd00':'#444';ctx.beginPath();ctx.arc(cx+cardW/2+(d-u.maxLv/2+0.5)*14,sy+cardH-36,5,0,Math.PI*2);ctx.fill();}if(lv<u.maxLv){ctx.fillStyle='#ffdd00';ctx.font='bold 12px system-ui,sans-serif';ctx.fillText(`${u.cost[lv]}🪙`,cx+cardW/2,sy+cardH-14);}else{ctx.fillStyle='#0f0';ctx.font='bold 11px system-ui,sans-serif';ctx.fillText('MAX',cx+cardW/2,sy+cardH-14);}}const btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+32;ctx.fillStyle='#4a1a1a';ctx.beginPath();if(ctx.roundRect)ctx.roundRect(btnX,btnY,btnW,btnH,8);else ctx.rect(btnX,btnY,btnW,btnH);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 16px system-ui,sans-serif';ctx.fillText('PLAY',W/2,btnY+27);ctx.textAlign='left';}
+
+// ══════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════
+loadMeta();
+function restartGame(){
+  loadMeta(); _runCoins=0; _gameoverTimer=1.5;
+  Object.assign(hero,{hp:100,maxHp:100,mp:40,maxMp:40,atk:18,def:8,xp:0,level:1,gold:0,_potions:2,_defending:false});
+  applyUpgrades();
+  storyFlags={};
+  setState('title');
+}
+restartGame();
+requestAnimationFrame(t=>{lastTime=t;requestAnimationFrame(loop);});
+</script>
+</body></html>

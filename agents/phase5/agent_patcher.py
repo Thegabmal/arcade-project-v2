@@ -12,14 +12,33 @@ from logger import phase5_log
 
 SYSTEM = """You are a senior developer specializing in HTML5 game debugging (Canvas 2D and Three.js). You make surgical corrections.
 
+ENGINE CONTRACT — READ THIS FIRST:
+The game has an ENGINE section (marked '// ENGINE — DO NOT MODIFY') that declares:
+  canvas  → HTMLCanvasElement  (getElementById — NEVER null)
+  ctx     → CanvasRenderingContext2D  (getContext — NEVER null)
+  W, H    → logical dimensions — read the game's own GAME_W / GAME_H constants, do NOT assume 480×640
+  Keys, Touch, Mouse → unified input objects  (Mouse has .x and .y for shop click detection)
+  gameState → 'menu' | 'playing' | 'gameover' | 'shop'
+  loop(), update(), renderFrame() → the game loop (fixed 60Hz)
+  createPool(), spawnParticles(), sfx → pooling, particles, audio
+  loadMeta(), saveMeta(), addRunCoins(n), buyUpgrade(id), getUpgradeLevel(id) → meta-persistence (do NOT rewrite)
+
+CRITICAL DIAGNOSIS RULES:
+- If you see "Cannot read properties of null (reading 'save')" → look for `var ctx = null`
+  BELOW the ENGINE block and DELETE that line. ctx is set by ENGINE, never re-declare it.
+- If you see "Cannot read properties of null (reading 'width')" → same cause: `var canvas = null`
+  Delete any `var canvas = null` that appears after the ENGINE section.
+- If you see "X is not defined" → check if X is a variable that should be in startGame() scope
+- If you see "Cannot read properties of undefined" → check if the object is initialised before use
+
 UNIVERSAL RULES:
 - You NEVER rewrite the entire game — you patch only what is broken
 - To clear an array: arr.length = 0 (NEVER arr.clear())
 - Every object used MUST be declared in the code before its first call
 - Consistent input names: replace ALL inconsistent names throughout the entire file
-- All DOM access inside DOMContentLoaded or window.onload — never at top-level
 - NEVER location.reload() for restart — reset variables in pure JS
 - NEVER data:URI — use colors and geometric shapes
+- NEVER add var/let/const canvas, ctx, W, H — ENGINE owns these
 
 ⛔ FORBIDDEN JS SYNTAX — these patterns in your patch will cause SyntaxError:
   A. const inside switch/case without {} → use var or { const x=...; break; }
@@ -112,6 +131,15 @@ def _get_model_snippet_for_missing(genre: str, sous_genre: str, missing_musts: l
     g = (genre + " " + (sous_genre or "")).lower()
 
     GENRE_FILE = [
+        # 3D genres first (more specific)
+        (["fps", "first person", "first-person", "zombie survival", "zombie horde"], "fps_shooter_3d.html"),
+        (["racing", "circuit", "car race", "kart", "drift", "apex circuit"], "racing_3d.html"),
+        (["space shooter 3d", "flight shooter", "nebula breach", "dogfight", "aerial combat", "iron skies"], "space_shooter_3d.html"),
+        (["tower defense 3d", "tower_defense_3d", "last bastion", "isometric tower"], "tower_defense_3d.html"),
+        (["3d platformer", "platformer 3d", "skyrift", "platform 3d"], "platformer_3d.html"),
+        (["arena fighter", "gladiator", "melee combat 3d"], "arena_fighter_3d.html"),
+        (["dungeon rpg 3d", "crypt of iron", "dungeon 3d"], "dungeon_rpg_3d.html"),
+        # 2D genres
         (["shmup", "shoot", "vaisseau", "spatial", "space", "galaga"], "shoot_em_up.html"),
         (["platformer", "plateforme", "jump", "mario"], "platformer.html"),
         (["rpg", "aventure", "dungeon", "roguelite", "rogue"], "rpg_narratif.html"),
@@ -259,8 +287,25 @@ def run(code: str, diagnostic: dict, genre_profile: GenreProfile, iteration: int
     except Exception:
         _reference_snippets = ""
 
+    is_3d = "THREE." in code_pour_patch or "three.min.js" in code_pour_patch
+    three_contract = """
+⚠️ THREE.JS 3D GAME — ENGINE CONTRACT (replaces the 2D contract):
+  scene       → THREE.Scene           (NEVER redeclare with var/let/const)
+  camera      → THREE.PerspectiveCamera (NEVER redeclare)
+  renderer    → THREE.WebGLRenderer   (NEVER redeclare)
+  clock       → THREE.Clock           (NEVER redeclare)
+  keys        → keyboard state object (NEVER redeclare)
+  gameState   → 'menu' | 'playing' | 'gameover' | 'shop'
+  meta        → persistence object (loadMeta/saveMeta already wired)
+  The Canvas 2D variables (canvas, ctx, W, H) do NOT exist in this game.
+  REMOVAL: scene.remove(entity.mesh) BEFORE splice().
+  HUD: getElementById + textContent, NEVER ctx.fillText over Three.js.
+  LIGHTS: AmbientLight + DirectionalLight already in scene — do NOT add duplicates.
+  ANIMATION: renderer.setAnimationLoop(loop) or requestAnimationFrame — never both.
+""" if is_3d else ""
+
     prompt = f"""Corrige ce code de jeu HTML5 ({genre_profile.genre_principal}).
-{decls_context}
+{three_contract}{decls_context}
 
 PROBLÈME PRINCIPAL : {diagnostic.get('probleme_principal', '')}
 
@@ -469,14 +514,20 @@ def _find_keyword(correction: dict | str, probleme: str, script: str) -> str | N
         if candidate and _is_safe_keyword(candidate):
             return candidate
 
+    def _is_only_obj_key(ident: str) -> bool:
+        """True if ident appears only as object property key, never as standalone var/call."""
+        used_standalone = bool(_re.search(rf'\b{_re.escape(ident)}\s*(?:\(|\.|\[|=(?!=)|\+\+|--)', script))
+        used_as_key = bool(_re.search(rf'[{{\s,]\s*{_re.escape(ident)}\s*:', script))
+        return used_as_key and not used_standalone
+
     # Priorité 2 : identifiants JS dans la description de la correction
     for ident in _re.findall(r'\b([a-zA-Z_][a-zA-Z0-9_]{2,})\b', issue_desc):
-        if _is_safe_keyword(ident):
+        if _is_safe_keyword(ident) and not _is_only_obj_key(ident):
             return ident
 
     # Priorité 3 : identifiants JS dans le problème principal
     for ident in _re.findall(r'\b([a-zA-Z_][a-zA-Z0-9_]{2,})\b', probleme):
-        if _is_safe_keyword(ident):
+        if _is_safe_keyword(ident) and not _is_only_obj_key(ident):
             return ident
 
     return None

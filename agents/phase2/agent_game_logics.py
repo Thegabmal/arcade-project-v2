@@ -39,6 +39,7 @@ def run(genre_profile: GenreProfile, gdd: dict) -> str:
         (genre_profile.sous_genre or "").lower(),
         genre_profile,
         context,
+        titre,
     )
 
     # Appels parallèles — 1 prompt focalisé par section
@@ -73,7 +74,7 @@ def _call_sections_parallel(sections: list[tuple[str, str]]) -> list[tuple[str, 
     return results
 
 
-def _build_sections_list(genre: str, sous_genre: str, gp: GenreProfile, context: str) -> list[tuple[str, str]]:
+def _build_sections_list(genre: str, sous_genre: str, gp: GenreProfile, context: str, titre: str = "Arcade Game") -> list[tuple[str, str]]:
     """
     Retourne une liste de (titre_section, prompt_focalisé) à appeler en parallèle.
     Chaque prompt est court et ciblé sur UNE seule responsabilité.
@@ -200,35 +201,54 @@ Dans update() : if (gameState === 'shop') {{ updateShop(); return; }}
     elif is_shooter:
         sections.append(("SYSTÈMES DE TIR & POWER-UPS", f"""{context}
 
+Begin your response with this JS constants block (use ACTUAL themed names from the game "{titre}", not generic names):
+
+=== JS CONSTANTS (copy-paste into [FILL:] sections) ===
+// META_KEY — unique, no spaces, based on game title:
+const META_KEY = "[title_slug]_v1";
+
+// ENEMY_TYPES — 3 normal enemies + 1 elite + 1 boss, themed names:
+const ENEMY_TYPES = {{
+  [enemy1]: {{ hp: X, speed: X, color: '#XXXXXX', score: X, fireRate: 0 }},
+  [enemy2]: {{ hp: X, speed: X, color: '#XXXXXX', score: X, fireRate: X }},
+  [enemy3]: {{ hp: X, speed: X, color: '#XXXXXX', score: X, fireRate: X }},
+  [elite]:  {{ hp: X, speed: X, color: '#XXXXXX', score: X, fireRate: X, isElite: true }},
+  [boss]:   {{ hp: X, speed: X, color: '#XXXXXX', score: X, fireRate: X, isBoss: true }},
+}};
+
+// POWERUP_TYPES — 4 entries, themed labels:
+const POWERUP_TYPES = [
+  {{ type: 'spread3', label: '[Themed Triple Shot]', color: '#XXXXXX', duration: 12 }},
+  {{ type: 'laser',   label: '[Themed Laser]',       color: '#XXXXXX', duration: 10 }},
+  {{ type: 'bomb',    label: '[Themed Bomb]',         color: '#XXXXXX', duration: 0  }},
+  {{ type: 'shield',  label: '[Themed Shield]',       color: '#XXXXXX', duration: 8  }},
+];
+
+// WAVE_PLAN (enemy type names per wave, 8 waves min):
+// Wave 1: 3x [enemy1]
+// Wave 2: 4x [enemy1] + 1x [enemy2]
+// Wave 3: 3x [enemy2] + 2x [enemy3]
+// ...
+// Wave 8+: boss [boss]
+=== END JS CONSTANTS ===
+
+Then add prose details:
+
 JOUEUR — ARME DE BASE :
 - Tir de base : cadence 0.25s (4 tirs/s), vitesse projectile 250 px/s, dégâts 10/tir
-- Direction : toujours vers le haut (vertical scroller) OU 8 directions (top-down)
 - Hitbox projectile : 4×12px (vertical) ou 6×6px (circulaire)
-
-4 POWER-UPS collectables (dropés par ennemis élites, durée 12s sauf bouclier) :
-1. TRIPLE SHOT — 3 projectiles en éventail (angles -15°, 0°, +15°), dégâts 8/tir
-2. LASER — rayon continu (damage 3/frame, range GH), cooldown interne 0.08s
-3. BOMBE — explosion AOE (rayon 60px, dégâts 60, knockback 80px), cooldown 3s
-4. BOUCLIER — absorbe 2 coups avant de disparaître, pulse bleu animé autour du joueur
 
 PATTERNS D'ATTAQUE ENNEMIS (valeurs pour résolution 256×240) :
 1. TIRS CIRCULAIRES — 8 projectiles à 45° chacun, vitesse 80 px/s, cooldown 2.5s
-   code: for(let a=0;a<8;a++){{spawnBullet(e.x,e.y,Math.cos(a*Math.PI/4)*80,Math.sin(a*Math.PI/4)*80)}}
 2. ÉVENTAIL 5 BALLES — spread 60° autour de la direction joueur, vitesse 100 px/s, cooldown 1.8s
-3. TIR VISÉ — projectile unique qui trace vers la position du joueur, vitesse 120 px/s, cooldown 1.2s
+3. TIR VISÉ — projectile unique, vitesse 120 px/s, cooldown 1.2s
 4. SPIRALE — 1 projectile/frame pendant 3s, angle +15° par tir, vitesse 90 px/s
-5. SALVE RAPIDE — 5 tirs en 0.5s (burst), pause 3s
 
 BOSS PATTERN (3 phases) :
 Phase 1 (100%→60%) : tir circulaire 6 balles toutes les 2s
-Phase 2 (60%→30%) : alterne tir visé + éventail, invocateur (2 minions toutes les 5s)
+Phase 2 (60%→30%) : alterne tir visé + éventail, invoque 2 minions toutes les 5s
 Phase 3 (<30%) : spirale continue + déplacement aléatoire rapide, rage mode
 
-VAGUES (si vertical/horizontal scroller) :
-Vague 1-3 : ennemis formation V, déplacement simple
-Vague 4-6 : ennemis kamikazes + tirs simples
-Vague 7-9 : ennemis élites avec tirs complexes + mid-boss toutes les 3 vagues
-Vague 10+ : boss complet
 {instr} Inspire-toi de Galaga, Ikaruga, Touhou, Gradius."""))
 
     elif is_platformer:
@@ -269,6 +289,30 @@ ENNEMIS TYPIQUES (en plus de la section ENNEMIS) :
     elif is_puzzle:
         sections.append(("MÉCANIQUES PUZZLE & PROGRESSION", f"""{context}
 
+Begin with JS constants (use themed names from "{titre}"):
+
+=== JS CONSTANTS ===
+// GEM/TILE types (6 types for match-3):
+const GEM_TYPES = [
+  {{ type: '[name1]', color: '#XXXXXX' }},
+  {{ type: '[name2]', color: '#XXXXXX' }},
+  {{ type: '[name3]', color: '#XXXXXX' }},
+  {{ type: '[name4]', color: '#XXXXXX' }},
+  {{ type: '[name5]', color: '#XXXXXX' }},
+  {{ type: '[name6]', color: '#XXXXXX' }},
+];
+// BOOSTER_TYPES (5 boosters with effects):
+const BOOSTER_TYPES = [
+  {{ id: 'row_clear',   label: '...', color: '#XXXXXX' }},
+  {{ id: 'col_clear',   label: '...', color: '#XXXXXX' }},
+  {{ id: 'bomb',        label: '...', color: '#XXXXXX' }},
+  {{ id: 'color_clear', label: '...', color: '#XXXXXX' }},
+  {{ id: 'shuffle',     label: '...', color: '#XXXXXX' }},
+];
+// Score: X pts per gem, combo mult: x2/x3/x5 for 4/5/6 matches
+=== END JS CONSTANTS ===
+
+Then prose:
 Mécanique fondamentale avec règles précises. Progression de difficulté sur 10 niveaux.
 5 boosters avec effets immédiats. Système de score avec multiplicateurs de combo.
 {instr}"""))
@@ -276,6 +320,25 @@ Mécanique fondamentale avec règles précises. Progression de difficulté sur 1
     elif is_tower:
         sections.append(("TOURS & VAGUES", f"""{context}
 
+Begin with JS constants (use themed names from "{titre}"):
+
+=== JS CONSTANTS ===
+const TOWER_TYPES = {{
+  [tower1]: {{ cost: X, range: X, fireRate: X, damage: X, color: '#XXXXXX', label: '...' }},
+  [tower2]: {{ cost: X, range: X, fireRate: X, damage: X, color: '#XXXXXX', label: '...' }},
+  [tower3]: {{ cost: X, range: X, fireRate: X, damage: X, color: '#XXXXXX', label: '...' }},
+  [tower4]: {{ cost: X, range: X, fireRate: X, damage: X, color: '#XXXXXX', label: '...' }},
+}};
+const ENEMY_TYPES = {{
+  [enemy1]: {{ hp: X, speed: X, color: '#XXXXXX', reward: X, armor: 0 }},
+  [enemy2]: {{ hp: X, speed: X, color: '#XXXXXX', reward: X, armor: X }},
+  [enemy3]: {{ hp: X, speed: X, color: '#XXXXXX', reward: X, armor: 0, isBoss: true }},
+}};
+// Starting gold: X — Gold per kill: X-Y — Gold per wave: X
+// Wave structure: Wave N → enemy type + count
+=== END JS CONSTANTS ===
+
+Then prose:
 4-5 types de tours (coût, portée px, cadence tirs/s, dégâts, 2 niveaux d'upgrade).
 Structure de 10 vagues (composition, timing, boss toutes les 5 vagues).
 Économie : or de départ, revenus par kill/vague, coûts placement.
@@ -349,7 +412,7 @@ Toutes les valeurs doivent être directement implémentables en JavaScript Canva
     if is_3d:
         sections.insert(0, ("ARCHITECTURE 3D", f"""{context}
 
-Architecture Three.js r128 pour ce jeu :
+Architecture Three.js r160 pour ce jeu :
 Caméra : type exact (FPS/TPS/top-down), FOV, position initiale, lerp factor.
 Mouvements joueur : vitesse (units/s), saut impulsion Y, gravité, friction.
 Collisions : THREE.Box3 ou sphère (rayon), sol detection.
@@ -381,7 +444,7 @@ def _build_genre_sections(genre: str, sous_genre: str, gp: GenreProfile) -> str:
 
     # ── Section 3D spécifique ──
     if is_3d:
-        sections.append("""SECTION 0 — ARCHITECTURE 3D (Three.js r128)
+        sections.append("""SECTION 0 — ARCHITECTURE 3D (Three.js r160)
 Précise l'architecture 3D adaptée au genre :
 
 CAMÉRA :
@@ -854,4 +917,4 @@ GAME FEEL :
 @with_fallback(None)
 def _call_section(prompt: str) -> str:
     """Appel focalisé sur une seule section — prompt court, réponse ciblée."""
-    return call_gemini(prompt, system_instruction=SYSTEM, max_tokens=8192, temperature=0.5)
+    return call_gemini(prompt, system_instruction=SYSTEM, max_tokens=8192, temperature=0.5, disable_thinking=True)

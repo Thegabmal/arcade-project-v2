@@ -12,9 +12,9 @@ from logger import phase2_log
 
 SYSTEM = """You are an engineer specialized in HTML5 JavaScript game development.
 You define precise technical architectures, adapted to the genre and achievable in a single HTML file.
-For 2D games you use Canvas 2D API. For 3D games you use Three.js r128 via CDN.
+For 2D games you use Canvas 2D API. For 3D games you use Three.js r160 via CDN.
 
-3D TECHNICAL CONSTRAINTS (Three.js r128):
+3D TECHNICAL CONSTRAINTS (Three.js r160):
 - All code inside document.addEventListener('DOMContentLoaded', function() { ... })
 - THREE.WebGLRenderer + renderer.shadowMap.enabled = true
 - THREE.Clock for delta time (clock.getDelta(), capped at 0.05)
@@ -52,7 +52,7 @@ def run(genre_profile: GenreProfile, gdd: dict) -> dict:
         or "first-person" in _sg
     )
     techno_hint = (
-        "three.js via CDN (https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js)"
+        "three.js via CDN (https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js)"
         if est_3d else "HTML5 Canvas 2D API, JavaScript vanilla"
     )
 
@@ -72,7 +72,7 @@ CONTRAINTES :
 - Un seul fichier HTML (tout inline)
 - Technologie de rendu : {techno_hint}
 - Doit fonctionner dans un navigateur moderne sans serveur
-- {"Three.js r128 via CDN obligatoire — tout le code dans DOMContentLoaded" if est_3d else "Canvas 2D API vanilla — pas de bibliothèques externes"}
+- {"Three.js r160 via CDN obligatoire — tout le code dans DOMContentLoaded" if est_3d else "Canvas 2D API vanilla — pas de bibliothèques externes"}
 
 Définis précisément :
 

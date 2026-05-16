@@ -14,6 +14,7 @@ import re
 import os
 import subprocess
 import tempfile
+import time
 from config import call_gemini, call_gemini_paid, MODEL_NAME_PRO
 from logger import phase3_log
 
@@ -49,63 +50,78 @@ var ctx = canvas.getContext('2d');
 ctx.scale(_dpr, _dpr);
 var dt = 0, lastTime = 0;
 var gameState = 'menu';
+// Dev console bridge — AI patches execute in game scope via eval
+window.__devPatch = function(code) {{ return eval(code); }};
 
 {js_body}
 </script>
 </body></html>"""
 
 _LAYER_SYSTEM = (
-    "Tu es un développeur senior JavaScript Canvas 2D. "
-    "Tu generes du code JS pur — pas de HTML, pas de balises <script>, pas de markdown.\n\n"
-    "REGLES ABSOLUES :\n"
-    "- Output = JavaScript pur uniquement (pas de <!DOCTYPE>, <html>, <script>, ```)\n"
-    "- Jamais de `const` dans un switch/case sans accolades -> utilise `var`\n"
-    "- Jamais de `for(const i=0;...)` -> utilise `let`\n"
-    "- Jamais de `const` pour une variable reassignee -> utilise `let`\n"
-    "- Chaque fonction doit etre COMPLETE avec un vrai corps — pas de stubs, pas de TODO\n"
-    "- Pas de limite de lignes — prends autant d'espace que necessaire pour etre complet\n"
-    "- CRITIQUE : ta reponse DOIT se terminer sur une instruction complete "
-    "(accolade fermante '}' ou point-virgule ';'). "
-    "Si tu dois t'arreter, ferme proprement la fonction en cours avant.\n"
-    "- F1 localStorage : toujours entourer d'un try/catch "
-    "(ex: try { localStorage.setItem('score', score); } catch(e) {} )\n"
-    "  SecurityError en mode prive/iframe sinon.\n"
-    "- INTERDIT ABSOLU : new Image(), img.src, Image(), fetch(), XMLHttpRequest, "
-    "import(), require(), new Audio(), Audio() — tout doit etre dessine/joue en Canvas 2D pur "
-    "sans ressources externes. Pour le son : utilise WebAudio API (AudioContext) uniquement.\n"
+    "You are a senior JavaScript Canvas 2D developer. "
+    "You generate pure JS code — no HTML tags, no <script> tags, no markdown.\n\n"
+
+    "SACRED CONTRACT — NEVER REDECLARE THESE (already declared in the HTML header):\n"
+    "  canvas, ctx, W, H, DPR, gameState, lastTime, accumulator, Keys, Touch, Mouse\n"
+    "  Writing `var canvas = null` or `var ctx = null` overwrites the real canvas and "
+    "crashes every draw call with 'Cannot read properties of null (reading save)'.\n"
+    "  Write ONLY new variables specific to this layer. Never repeat what the header declared.\n\n"
+
+    "ABSOLUTE RULES:\n"
+    "- Output = pure JavaScript only (no <!DOCTYPE>, <html>, <script>, ```)\n"
+    "- Never `const` inside switch/case without braces → use `var`\n"
+    "- Never `for(const i=0;...)` → use `let`\n"
+    "- Never `const` for a reassigned variable → use `let`\n"
+    "- Every function must be COMPLETE with a real body — no stubs, no TODO\n"
+    "- No line limit — take as much space as needed to be complete\n"
+    "- CRITICAL: your response MUST end on a complete instruction "
+    "(closing brace '}' or semicolon ';'). Close any open function cleanly before stopping.\n"
+    "- F1 localStorage: always wrap in try/catch "
+    "(e.g. try { localStorage.setItem('score', score); } catch(e) {} )\n"
+    "  SecurityError in private/iframe contexts otherwise.\n"
+    "- ABSOLUTE FORBIDDEN: new Image(), img.src, Image(), fetch(), XMLHttpRequest, "
+    "import(), require(), new Audio(), Audio() — everything must be drawn/played in pure Canvas 2D "
+    "with no external resources. For sound: use WebAudio API (AudioContext) only.\n"
     "- FORBIDDEN in draw* functions: fillRect() as the ONLY render for any entity (player/enemy/projectile).\n"
     "  Use arc(), bezierCurveTo(), gradient, or compound shapes — rectangle sprites = visual score <= 6.\n"
 )
 
 _LAYER_SYSTEM_GRAPHIQUE = (
-    "Tu es un directeur artistique senior specialise en jeux HTML5 Canvas 2D. "
-    "Tu crees des visuels exceptionnels — beaux, coherents, expressifs et memorables.\n\n"
-    "MISSION : Reecris les fonctions draw* existantes pour les rendre visuellement remarquables. "
-    "En JavaScript, la derniere definition d'une fonction ecrase la precedente — tu peux redefinir "
-    "les memes noms de fonctions pour les ameliorer.\n\n"
-    "TECHNIQUES OBLIGATOIRES :\n"
-    "- ctx.save()/ctx.restore() pour toute transformation (translate, rotate, scale)\n"
-    "- shadowBlur + shadowColor pour les effets glow (joueur, boss, bullets, particules)\n"
-    "- createLinearGradient / createRadialGradient pour les entites importantes\n"
-    "- globalAlpha pour la transparence, overlays, et effets de fondu\n"
-    "- Animations basees sur une variable timer globale dediee avec +=dt (ex: _bgTimer+=dt) — JAMAIS Date.now() pour animer\n"
-    "- Fond riche et anime : etoiles, grille, nebuleuse, parallaxe — jamais un fond uni\n"
-    "- Boss visuellement exceptionnel : plus grand, aura, couleur unique par phase, barre HP stylisee\n"
-    "- Particules belles : taille et opacite qui diminuent avec life, couleurs variees\n"
+    "You are a senior art director specialising in HTML5 Canvas 2D games. "
+    "You create exceptional visuals — beautiful, coherent, expressive, and memorable.\n\n"
+
+    "SACRED CONTRACT — NEVER REDECLARE THESE (already declared in the HTML header):\n"
+    "  canvas, ctx, W, H, DPR, gameState, lastTime\n"
+    "  Writing `var canvas = null` or `var ctx = null` crashes every draw call.\n\n"
+
+    "MISSION: Rewrite the existing draw* functions to be visually outstanding. "
+    "In JavaScript, the last definition of a function overrides the previous one — "
+    "you can redefine the same function names to improve them.\n\n"
+
+    "REQUIRED TECHNIQUES:\n"
+    "- ctx.save()/ctx.restore() for every transformation (translate, rotate, scale)\n"
+    "- shadowBlur + shadowColor for glow effects (player, boss, bullets, particles)\n"
+    "- createLinearGradient / createRadialGradient for important entities\n"
+    "- globalAlpha for transparency, overlays, and fade effects\n"
+    "- Animations based on a dedicated global timer with +=dt (e.g. _bgTimer+=dt) — NEVER Date.now() to animate\n"
+    "- Rich animated background: stars, grid, nebula, parallax — never a flat solid color\n"
+    "- Visually exceptional boss: larger, aura, unique colour per phase, styled HP bar\n"
+    "- Beautiful particles: size and opacity decrease with life, varied colours\n"
     "- ABSOLUTE FORBIDDEN: fillRect() as the ONLY visual for player, enemy, or projectile.\n"
     "  Every entity MUST use arc(), bezierCurveTo(), or a composition of 3+ draw calls.\n\n"
-    "REGLES ABSOLUES :\n"
-    "- Output = JavaScript pur uniquement\n"
-    "- Utilise UNIQUEMENT les proprietes du contrat de schema fourni\n"
-    "- Chaque fonction redefinite doit etre COMPLETE et auto-suffisante\n"
-    "- Jamais de new Image(), fetch(), import()\n"
-    "- Pas de limite de lignes — la beaute prend du temps\n"
-    "- INTERDIT ABSOLU : rgba() appelee comme une fonction JavaScript — cause ReferenceError et ecran noir.\n"
-    "  FAUX : ctx.fillStyle = rgba(255, 0, 0, 0.5)          ← CRASH\n"
-    "  FAUX : ctx.fillStyle = rgba(r, g, b, alpha)           ← CRASH\n"
-    "  VRAI : ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';        ← string CSS directe OK\n"
-    "  VRAI : ctx.globalAlpha = 0.5; ctx.fillStyle = '#f00'; ← alpha separe OK\n"
-    "  Meme regle pour rgb(), hsl(), hsla() — toujours entre guillemets simples ou doubles.\n"
+
+    "ABSOLUTE RULES:\n"
+    "- Output = pure JavaScript only\n"
+    "- Use ONLY properties from the schema contract provided\n"
+    "- Every redefined function must be COMPLETE and self-contained\n"
+    "- Never new Image(), fetch(), import()\n"
+    "- No line limit — beauty takes time\n"
+    "- ABSOLUTE FORBIDDEN: rgba() called as a JavaScript function — causes ReferenceError and black screen.\n"
+    "  WRONG: ctx.fillStyle = rgba(255, 0, 0, 0.5)          ← CRASH\n"
+    "  WRONG: ctx.fillStyle = rgba(r, g, b, alpha)           ← CRASH\n"
+    "  RIGHT: ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';        ← direct CSS string OK\n"
+    "  RIGHT: ctx.globalAlpha = 0.5; ctx.fillStyle = '#f00'; ← separate alpha OK\n"
+    "  Same rule for rgb(), hsl(), hsla() — always in single or double quotes.\n"
 )
 
 # Canvas mock pour la validation Node.js (Axe 2)
@@ -1510,9 +1526,23 @@ def _call_layer(system: str, prompt: str, max_tokens: int = 6000,
     Utilise call_gemini_paid — clé payante exclusive pour la génération de code critique.
     model=MODEL_NAME_PRO pour L4/L7 (couches les plus complexes).
     """
-    raw = call_gemini_paid(prompt, temperature=temperature, system_instruction=system,
-                           max_tokens=max_tokens, disable_thinking=disable_thinking,
-                           model=model)
+    _last_err = None
+    for _attempt in range(2):  # 1 retry after 503 exhaustion (3 min pause)
+        try:
+            raw = call_gemini_paid(prompt, temperature=temperature, system_instruction=system,
+                                   max_tokens=max_tokens, disable_thinking=disable_thinking,
+                                   model=model)
+            break
+        except RuntimeError as e:
+            _last_err = e
+            _estr = str(e).lower()
+            if _attempt == 0 and ('503' in _estr or 'unavailable' in _estr):
+                phase3_log.warning("[layer] 503 exhausted — waiting 3 min then retrying layer")
+                time.sleep(180)
+            else:
+                raise
+    else:
+        raise _last_err
     if not raw:
         return ""
     # Retirer les balises markdown / script / html
@@ -1922,15 +1952,18 @@ def coherence_check(html: str) -> list:
     js = js_match.group(1)
 
     # 1. Fonctions essentielles présentes
-    if 'function gameLoop' not in js:
+    # Accept both the layered-route names (gameLoop/init) and the template-route names (loop/initGame/startGame)
+    has_loop = 'function gameLoop' in js or 'function loop' in js
+    has_init = bool(re.search(r'function init\s*\(', js)) or 'function initGame' in js or 'function startGame' in js
+    if not has_loop:
         issues.append("gameLoop() manquant — le jeu ne démarrera pas")
-    if not re.search(r'function init\s*\(', js):
+    if not has_init:
         issues.append("init() manquant — le jeu ne s'initialise pas")
     if 'requestAnimationFrame' not in js:
         issues.append("requestAnimationFrame manquant — pas de boucle de rendu")
 
-    # 2. Fonctions appelées dans gameLoop → toutes définies ?
-    gl_m = re.search(r'function gameLoop\b[^{]*\{', js)
+    # 2. Fonctions appelées dans gameLoop (or loop) → toutes définies ?
+    gl_m = re.search(r'function (?:gameLoop|loop)\b[^{]*\{', js)
     if gl_m:
         depth, start = 0, gl_m.end() - 1
         end = start
@@ -1986,14 +2019,20 @@ def coherence_check(html: str) -> list:
             issues.append("img.src='%s' détecté — fichier local → ERR_FILE_NOT_FOUND" % src_val[:40])
             break
     if re.search(r'\bfetch\s*\(', js):
-        issues.append("fetch() détecté — provoque un crash silencieux (404)")
+        # Auto-remove fetch() calls programmatically — no LLM needed
+        js = re.sub(r'\bfetch\s*\([^)]*\)\s*\.then\([^)]*\)\s*\.catch\([^)]*\)\s*;?', '/* fetch() removed */', js)
+        js = re.sub(r'\bfetch\s*\([^)]*\)\s*;?', '/* fetch() removed */', js)
+        issues.append("fetch() auto-removed (standalone HTML — no server)")
     if re.search(r'new\s+Audio\s*\(["\']', js):
         issues.append("new Audio('fichier') détecté — 404 navigateur")
 
     # 4. Variables critiques initialisées
-    for var in ('score', 'lives', 'gameState'):
-        if not re.search(r'\b' + var + r'\b', js):
-            issues.append("Variable '%s' non déclarée" % var)
+    # gameState is always required; score only required when hi-score system is present
+    if not re.search(r'\bgameState\b', js):
+        issues.append("Variable 'gameState' non déclarée")
+    # Only check for score/GAME_SCORE in score-based genres (saveHiScore present)
+    if re.search(r'\bsaveHiScore\b', js) and not re.search(r'\b(?:score|GAME_SCORE)\b', js):
+        issues.append("Variable 'score' non déclarée (saveHiScore présent mais aucune variable score/GAME_SCORE)")
 
     return issues
 
@@ -2033,7 +2072,16 @@ def _deep_review_assembled_code(html: str) -> list:
     _top_level_fns = re.findall(r'^function\s+([a-zA-Z][a-zA-Z0-9_]+)\s*\(', js, re.MULTILINE)
     _game_critical = {'init', 'gameLoop', 'animate', 'loop', 'tick', 'update', 'draw', 'render',
                       'drawBackground', 'drawPlayer', 'drawEnemies', 'drawHUD', 'drawMenu',
-                      'drawGameOver', 'drawBoss', 'resetGame', 'initGame'}
+                      'drawGameOver', 'drawBoss', 'resetGame', 'initGame',
+                      # ENGINE helper functions — always defined, used by LLM FILL code
+                      'keyDown', 'keyPressed', 'anyAction', 'flushInput', 'resizeCanvas',
+                      'triggerShake', 'spawnParticles', 'spawnPopup', 'updateShake',
+                      'updateParticles', 'drawParticles', 'updatePopups', 'drawPopups',
+                      'randInt', 'randChoice', 'lerp', 'clamp', 'aabb',
+                      'createPool', 'setState', 'saveHiScore',
+                      # Template FILL hooks — defined in ENGINE, expected to be called by FILL
+                      'buyUpgrade', 'createBoss', 'spawnBoss', 'startGame',
+                      'applyUpgrades', 'loadMeta', 'saveMeta',}
     for fn in _top_level_fns:
         if fn in _game_critical:
             continue
@@ -2509,17 +2557,40 @@ def _get_model_game_reference(genre: str, sous_genre: str) -> str:
 
     genre_l = (genre + " " + (sous_genre or "")).lower()
 
+    import random as _random
+
     GENRE_MAP = [
-        (["shmup", "shoot", "vaisseau", "spatial", "space", "bullet hell", "galaga"], "shoot_em_up.html"),
-        (["platformer", "plateforme", "jump", "mario"], "platformer.html"),
-        (["rpg", "aventure", "zelda", "action-rpg", "action rpg"], "rpg_narratif.html"),
+        # Bullet-hell roguelite → prefer v2 variant
+        (["bullet hell roguelite", "bullet-hell roguelite", "bullet hell rogue"], "roguelite_2.html"),
+        # Sci-fi narrative → prefer v2 variant
+        (["sci-fi narrative", "sci_fi narrative", "science fiction rpg", "space rpg narrative"], "rpg_narratif_2.html"),
+        # Sci-fi dungeon → prefer v2 variant
+        (["sci-fi dungeon", "science fiction dungeon", "sector zero", "space dungeon"], "dungeon_crawler_2.html"),
+        # Sci-fi tower defense → prefer v2 variant
+        (["sci-fi tower", "cyber tower", "drone defense", "cyber grid"], "tower_defense_2.html"),
+        # Fantasy shmup → prefer v2 variant
+        (["fantasy shmup", "fantasy shoot", "dragon shoot", "dragon veil"], "shoot_em_up_2.html"),
+        # Generic genres — randomly rotate between v1 and v2 for diversity
+        (["shmup", "shoot", "vaisseau", "spatial", "space", "galaga"],
+         _random.choice(["shoot_em_up.html", "shoot_em_up_2.html"])),
+        (["platformer", "plateforme", "jump", "mario", "platform"], "platformer.html"),
+        (["bullet hell", "bullet-hell"], "roguelite_2.html"),
+        (["roguelite", "rogue-lite", "rogue lite", "roguelike"],
+         _random.choice(["roguelite.html", "roguelite_2.html"])),
+        (["dungeon", "crawler", "dungeon_crawler", "donjon"],
+         _random.choice(["dungeon_crawler.html", "dungeon_crawler_2.html"])),
+        (["rpg", "aventure", "zelda", "action-rpg", "action rpg"],
+         _random.choice(["rpg_narratif.html", "rpg_narratif_2.html"])),
         (["puzzle", "match3", "match-3", "match 3", "correspondance"], "puzzle_match3.html"),
         (["runner", "endless", "infini", "course infinie"], "endless_runner.html"),
         (["arcade", "breakout", "casse-briques", "brique", "pong", "balle"], "breakout.html"),
-        (["tower defense", "tower_defense", "tour de défense", "defense"], "tower_defense.html"),
+        (["tower defense", "tower_defense", "tour de défense", "defense"],
+         _random.choice(["tower_defense.html", "tower_defense_2.html"])),
         (["visual novel", "visual_novel", "roman visuel", "vn"], "visual_novel.html"),
-        (["dungeon", "crawler", "dungeon_crawler", "donjon"], "dungeon_crawler.html"),
-        (["roguelite", "rogue-lite", "rogue lite", "roguelike"], "roguelite.html"),
+        # 3D genres — used when run_layered is called as fallback for 3D
+        (["fps", "first person", "first-person", "zombie survival"], "fps_shooter_3d.html"),
+        (["racing", "circuit racing", "car race", "kart"], "racing_3d.html"),
+        (["flight shooter", "dogfight", "aerial combat"], "flight_shooter_3d.html"),
     ]
 
     filename = None
@@ -2564,6 +2635,655 @@ def _get_model_game_reference(genre: str, sous_genre: str) -> str:
         excerpt = excerpt[:last_nl]
 
     return excerpt.strip()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE ADAPTATION — single-call customization of pre-built templates
+# ─────────────────────────────────────────────────────────────────────────────
+
+_TEMPLATE_ADAPT_SYSTEM = (
+    "You are a senior HTML5 Canvas 2D game developer tasked with customizing a proven template.\n\n"
+    "THE TEMPLATE you receive starts with a USAGE GUIDE (HTML comment) — READ IT FIRST.\n"
+    "That guide defines exactly what you can and cannot do. Here is a summary of the critical rules:\n\n"
+    "SACRED CONTRACT — NEVER redeclare these ENGINE-owned identifiers in [FILL] sections:\n"
+    "  VARIABLES: canvas, ctx, W, H, DPR, gameState, Keys, Touch, Shake, Particles, Popups,\n"
+    "             sfx, lastTime, FIXED_DT, MAX_DT, accumulator, TILE, GAME_W, GAME_H,\n"
+    "             PALETTE, GAME_TITLE, cam, player\n"
+    "  FUNCTIONS: loop(), update(), renderFrame(), flushInput(), resizeCanvas(),\n"
+    "             triggerShake(), spawnParticles(), spawnPopup(), updateParticles(),\n"
+    "             drawParticles(), updatePopups(), drawPopups(), updateShake(),\n"
+    "             randInt(), randChoice(), lerp(), clamp(), aabb(),\n"
+    "             keyDown(), keyPressed(), anyAction(), createPool()\n"
+    "  Writing `var canvas = null` or redeclaring any of the above WILL crash the game.\n\n"
+    "ABSOLUTE RULES:\n"
+    "1. Output = complete HTML file starting with <!DOCTYPE html>, no markdown fences\n"
+    "2. ENGINE section (marked '// ENGINE — DO NOT MODIFY'): copy EVERY character EXACTLY as-is\n"
+    "3. Replace EVERY [FILL:...] placeholder — any remaining [FILL] = broken game. "
+    "This includes [FILL:] tokens inside comment lines (e.g. '// Section — [FILL: desc]'). "
+    "When you fill a section, also edit or remove the comment line that contained [FILL:]. "
+    "Example: '// GAME CONSTANTS — [FILL: Adjust to match your game design]' → '// GAME CONSTANTS'\n"
+    "4. Keep ALL ENGINE function names (loop, update, renderFrame, startGame, createPool, etc.) — "
+    "implement updatePlaying(), renderPlaying(), updateMenu(), renderMenu(), startGame() etc. "
+    "in your [FILL] sections; do NOT rewrite loop() or update() themselves.\n"
+    "5. FORBIDDEN: new Image(), fetch(), Audio() with src, setInterval(), location.reload()\n"
+    "6. Sound: use only sfx.play(freq, dur, type, vol) already defined in ENGINE\n"
+    "7. Output MUST be 100% complete — no truncation, no '...', no TODO comments\n"
+    "8. Game flow: menu → play → game over/victory → restart (all states functional)\n"
+    "9. Implement ALL [FILL] logic fully: enemy AI, level data, upgrades, collision, HUD\n"
+    "10. DO NOT add a second <script> tag — all your code goes inside the existing <script>\n"
+    "11. HTML STRUCTURE IS FIXED: <canvas id='gameCanvas'></canvas> is in the HTML <body> BEFORE "
+    "<script>. NEVER copy, move, or repeat it inside the <script> block. Any HTML tag inside "
+    "<script> is a fatal JS syntax error (SyntaxError: Unexpected token '<').\n"
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEV CONSOLE INJECTION — post-generation, genre-aware
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CONSOLES_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'templates', 'game_templates', 'consoles')
+)
+
+_GENRE_TO_CONSOLE = [
+    (['shoot', 'shmup', 'bullet hell', 'space shooter'],         'shooter_2d'),
+    (['platform', 'side scroller', 'mario', 'jump'],             'platformer_2d'),
+    (['breakout', 'arkanoid', 'brick', 'casse', 'paddle'],       'breakout'),
+    (['runner', 'endless', 'infinite run'],                      'endless_runner'),
+    (['match', 'puzzle', 'bejeweled', 'gem', 'candy'],           'puzzle_match3'),
+    (['tower defense', 'tower defence', 'td game', 'tourelle'],  'tower_defense'),
+    (['dungeon', 'crawler', 'hack and slash', 'arpg'],           'dungeon_crawler'),
+    (['roguelite', 'roguelike', 'rogue', 'procédural'],          'roguelite'),
+    (['rpg', 'role playing', 'narrative', 'jrpg'],               'rpg_narrative'),
+    (['visual novel', 'kinetic novel', 'dating sim'],            'visual_novel'),
+]
+
+
+def _inject_dev_console(html: str, genre: str) -> str:
+    """
+    Inject the genre-specific dev console (CSS + HTML + JS IIFE) before </body></html>.
+    The __devPatch bridge is already in the ENGINE section of every template.
+    Falls back silently if no console file is found.
+    """
+    genre_lower = (genre or '').lower()
+    console_file = 'shooter_2d'  # default
+    for keywords, filename in _GENRE_TO_CONSOLE:
+        if any(kw in genre_lower for kw in keywords):
+            console_file = filename
+            break
+
+    console_path = os.path.join(_CONSOLES_DIR, f'{console_file}.html')
+    if not os.path.exists(console_path):
+        phase3_log.warning(f"[console] Console file not found: {console_path}")
+        return html
+
+    try:
+        with open(console_path, 'r', encoding='utf-8') as f:
+            console_html = f.read()
+    except Exception as e:
+        phase3_log.warning(f"[console] Could not read console file: {e}")
+        return html
+
+    end_tag = '</body></html>'
+    if end_tag in html:
+        html = html.replace(end_tag, '\n' + console_html + '\n' + end_tag, 1)
+    else:
+        html = html.rstrip() + '\n' + console_html + '\n</body></html>'
+
+    phase3_log.info(f"[console] Dev console injected ({console_file}, {len(console_html)} chars)")
+    return html
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE INTEGRITY VALIDATOR — post-adaptation structural check
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _validate_template_integrity(html: str, template_html: str) -> tuple:
+    """
+    10-point structural check after LLM template adaptation.
+    Returns (score: int, checks: dict). Fall back to layered if score < 7.
+    """
+    checks = {
+        'engine_marker':     '// ENGINE — DO NOT MODIFY' in html,
+        'canvas_setup':      "document.getElementById('gameCanvas')" in html,
+        'ctx_setup':         'getContext' in html,
+        'resize_fn':         'resizeCanvas' in html,
+        'game_loop':         'requestAnimationFrame' in html,
+        'state_machine':     'gameState' in html,
+        'pool_system':       'createPool' in html,
+        'fills_replaced':    html.count('[FILL:') == 0,
+        'size_reasonable':   len(html) > max(len(template_html) * 0.55, 5000),
+        'no_null_overrides': 'var canvas = null' not in html and 'var ctx = null' not in html,
+    }
+    score = sum(checks.values())
+    return score, checks
+
+
+_ENGINE_MARKER  = '// ENGINE — DO NOT MODIFY'
+_ENGINE_SEP     = '// ══════════════════════════════════════════════════════════════════'
+
+
+def _extract_engine_section(html: str) -> tuple[int, int] | None:
+    """
+    Locate ENGINE section in *html* and return (start, end) byte offsets.
+    The section spans from the opening separator (before ENGINE marker) through
+    the real closing separator (before the first game-data section).
+
+    The ENGINE block has a 3-separator structure:
+      // ══...══          ← opening (before marker)
+      // ENGINE — DO NOT MODIFY
+      // ══...══          ← inner (closes the header comment)
+      const canvas = ...  ← engine code
+      ...
+      // ══...══          ← outer closing (before first [FILL:] / game constants)
+
+    _extract_engine_section must skip the inner separator and return the outer one.
+    Returns None if the ENGINE marker is not present.
+    """
+    marker_pos = html.find(_ENGINE_MARKER)
+    if marker_pos == -1:
+        return None
+
+    # Opening separator is the last _ENGINE_SEP before the marker
+    open_sep = html.rfind(_ENGINE_SEP, 0, marker_pos)
+    if open_sep == -1:
+        open_sep = marker_pos  # no opening separator — start at marker itself
+
+    # Inner separator: the first _ENGINE_SEP after the marker (closes the header block)
+    inner_sep = html.find(_ENGINE_SEP, marker_pos + len(_ENGINE_MARKER))
+    if inner_sep == -1:
+        # No separators at all after marker — estimate
+        return open_sep, min(open_sep + len(_ENGINE_SEP) + 3000, len(html))
+
+    # Outer (real closing) separator: the next _ENGINE_SEP after the inner one.
+    # This is the separator that ends the ENGINE code block and opens game data.
+    outer_sep = html.find(_ENGINE_SEP, inner_sep + len(_ENGINE_SEP))
+    if outer_sep != -1:
+        end = outer_sep + len(_ENGINE_SEP)
+    else:
+        # Only one separator after marker — it IS the closing separator
+        end = inner_sep + len(_ENGINE_SEP)
+
+    # Consume the trailing newline so splices produce clean output
+    if end < len(html) and html[end] == '\n':
+        end += 1
+
+    return open_sep, end
+
+
+_SCRIPT_BLOCK_RE = re.compile(
+    r'(<script(?:\s[^>]*)?>)(.*?)(</script>)',
+    re.DOTALL | re.IGNORECASE,
+)
+_HTML_ELEMENT_IN_JS_RE = re.compile(
+    r'^\s*<[a-zA-Z][a-zA-Z0-9]*[^>]*>.*?</[a-zA-Z][a-zA-Z0-9]*>\s*\n?',
+    re.MULTILINE | re.DOTALL,
+)
+_HTML_SELFCLOSE_IN_JS_RE = re.compile(
+    r'^\s*<[a-zA-Z][a-zA-Z0-9]*[^>]*/>\s*\n?',
+    re.MULTILINE,
+)
+# Remove [FILL:...] tokens from comment lines — these are section headers the LLM forgot to clean
+_FILL_IN_COMMENT_RE = re.compile(r'([ \t]*//[^\n]*?)\s*\[FILL:[^\]]*\]\s*([^\n]*)')
+
+
+def _strip_html_from_script_blocks(html: str) -> tuple[str, int]:
+    """
+    Remove stray HTML elements (e.g. <canvas>) accidentally placed inside <script> blocks,
+    and strip [FILL:] tokens from comment lines (section headers the LLM forgot to clean).
+    Returns (fixed_html, count_removed).
+    """
+    total_removed = 0
+
+    def _clean_block(m: re.Match) -> str:
+        nonlocal total_removed
+        open_tag, content, close_tag = m.group(1), m.group(2), m.group(3)
+        cleaned, n1 = _HTML_ELEMENT_IN_JS_RE.subn('', content)
+        cleaned, n2 = _HTML_SELFCLOSE_IN_JS_RE.subn('', cleaned)
+        total_removed += n1 + n2
+
+        # Strip [FILL:] from comment lines — keep the surrounding comment text
+        def _clean_comment(cm: re.Match) -> str:
+            nonlocal total_removed
+            total_removed += 1
+            prefix = cm.group(1)  # "  // Section name —"
+            suffix = cm.group(2).strip()  # text after [FILL:]
+            combined = (prefix.rstrip(' —') + (' ' + suffix if suffix else '')).rstrip()
+            return combined if combined.replace('/', '').strip() else ''
+
+        cleaned = _FILL_IN_COMMENT_RE.sub(_clean_comment, cleaned)
+        return open_tag + cleaned + close_tag
+
+    fixed = _SCRIPT_BLOCK_RE.sub(_clean_block, html)
+    return fixed, total_removed
+
+
+def _ensure_engine_intact(adapted_html: str, template_html: str) -> tuple[str, bool]:
+    """
+    Guarantee that the ENGINE section in *adapted_html* is byte-for-byte identical
+    to the one in *template_html*.
+
+    Steps:
+    1. Extract the canonical ENGINE section from the template (opening separator →
+       closing separator before the first [FILL:] zone).
+    2. Locate the ENGINE section in the adapted output.
+    3. If missing or modified → splice the template ENGINE back in.
+
+    Returns (html, was_restored).
+    """
+    # ── Extract canonical ENGINE from template ────────────────────────────────
+    tmpl_bounds = _extract_engine_section(template_html)
+    if tmpl_bounds is None:
+        return adapted_html, False  # template has no ENGINE marker — nothing to enforce
+
+    tmpl_start, tmpl_end = tmpl_bounds
+    # ENGINE ends at the separator that precedes the first [FILL:] section
+    first_fill = template_html.find('[FILL:', tmpl_start)
+    if first_fill != -1:
+        # The closing separator is the one right before [FILL:]
+        sep_before_fill = template_html.rfind(_ENGINE_SEP, tmpl_start, first_fill)
+        if sep_before_fill != -1:
+            tmpl_end = sep_before_fill + len(_ENGINE_SEP)
+            if tmpl_end < len(template_html) and template_html[tmpl_end] == '\n':
+                tmpl_end += 1
+
+    canonical_engine = template_html[tmpl_start:tmpl_end]
+
+    # ── Fast path: ENGINE is already intact ──────────────────────────────────
+    if canonical_engine in adapted_html:
+        return adapted_html, False
+
+    # ── Locate ENGINE in adapted output ──────────────────────────────────────
+    adapted_bounds = _extract_engine_section(adapted_html)
+    if adapted_bounds is None:
+        # ENGINE marker entirely absent — inject after <script> opening tag
+        script_tag = adapted_html.find('<script>')
+        if script_tag == -1:
+            phase3_log.warning("[engine-guard] No <script> tag in adapted HTML — cannot restore ENGINE")
+            return adapted_html, False
+        insert_at = adapted_html.find('\n', script_tag) + 1
+        restored = adapted_html[:insert_at] + canonical_engine + '\n' + adapted_html[insert_at:]
+        phase3_log.info("[engine-guard] ENGINE section was missing — injected after <script>")
+        return restored, True
+
+    a_start, a_end = adapted_bounds
+
+    # Verify the extracted slice is actually different (fast path may have missed it)
+    if adapted_html[a_start:a_end].strip() == canonical_engine.strip():
+        return adapted_html, False
+
+    restored = adapted_html[:a_start] + canonical_engine + adapted_html[a_end:]
+    phase3_log.info("[engine-guard] ENGINE section was modified by LLM — restored from template")
+    return restored, True
+
+
+def run_from_template(
+    context,
+    template_html: str,
+    patterns_reussis=None,
+    erreurs_passees=None,
+    game_logics: str = "",
+) -> str:
+    """
+    Generates a game by having the LLM customize a pre-built crash-proof template.
+    The ENGINE section (marked DO NOT MODIFY) is kept intact; the LLM fills every
+    [FILL] placeholder based on the game design context.
+    Falls back to run_layered() if the adaptation fails validation.
+    """
+    from js_syntax_checker import fix_all_auto
+    from code_validator import validate_and_fix
+
+    gp = context.genre_profile
+    gdd = context.gdd
+    titre = gdd.get('titre', 'Arcade Game')
+    genre = gp.genre_principal or 'arcade'
+    sous_genre = gp.sous_genre or genre
+    style = gp.style_visuel or 'neon dark'
+    mecaniques = ', '.join((gp.mecaniques_obligatoires or [])[:6]) or 'classic gameplay'
+
+    fill_count = template_html.count('[FILL')
+
+    # ── errors context ─────────────────────────────────────────────────────────
+    errors_str = ''
+    if erreurs_passees:
+        errors_str = '\nAVOID these known errors:\n' + '\n'.join(
+            '- ' + str(e)[:80] for e in erreurs_passees[-5:]
+        )
+
+    # ── game_logics context ────────────────────────────────────────────────────
+    logics_str = ''
+    if game_logics and len(game_logics) > 50:
+        logics_str = f'\nGAME MECHANICS SPECIFICATION (implement these in the [FILL] sections):\n{game_logics}\n'
+
+    # ── GDD summary ────────────────────────────────────────────────────────────
+    gdd_desc  = gdd.get('description') or gdd.get('concept') or ''
+    gdd_mechs = gdd.get('mecaniques_principales') or gdd.get('core_mechanics') or []
+    gdd_systems = gdd.get('systemes_jeu') or gdd.get('systemes_principaux') or {}
+
+    prompt = (
+        f'=== GAME DESIGN ===\n'
+        f'Title: {titre}\n'
+        f'Genre: {genre} ({sous_genre})\n'
+        f'Visual style: {style}\n'
+        f'Core mechanics: {mecaniques}\n'
+    )
+    if gdd_desc:
+        prompt += f'Concept: {str(gdd_desc)[:100_000]}\n'
+    if gdd_mechs:
+        mech_list = gdd_mechs if isinstance(gdd_mechs, list) else list(gdd_mechs)
+        prompt += f'Gameplay systems: {", ".join(str(m) for m in mech_list[:6])}\n'
+    if gdd_systems and isinstance(gdd_systems, dict):
+        sys_names = list(gdd_systems.keys())[:5]
+        prompt += f'Game systems: {", ".join(sys_names)}\n'
+
+    # ── RAG patterns ───────────────────────────────────────────────────────────
+    rag_str = ''
+    if patterns_reussis:
+        good = [p for p in patterns_reussis if p.get('score', 0) >= 8.0][:2]
+        if good:
+            parts = [f"- {p.get('genre','')}/{p.get('sous_genre','')}: {p.get('notes','')[:150]}"
+                     for p in good]
+            rag_str = '\nHIGH-SCORE REFERENCE PATTERNS (apply these approaches):\n' + '\n'.join(parts) + '\n'
+
+    # ── Model game reference (DATA_CONSTANTS only) ──────────────────────────
+    ref_str = ''
+    try:
+        _ref_excerpt = _get_model_game_reference(genre, sous_genre)
+        if _ref_excerpt:
+            ref_str = (
+                '\nREFERENCE DATA STRUCTURES (from a high-quality game of the same genre — '
+                'mirror this naming and format in your [FILL] sections):\n'
+                + _ref_excerpt + '\n'
+            )
+    except Exception:
+        pass
+
+    prompt += logics_str + rag_str + ref_str + errors_str
+
+    prompt += (
+        f'\n=== YOUR TEMPLATE ({fill_count} [FILL] sections to replace) ===\n'
+        + template_html
+        + f'\n=== YOUR TASK ===\n'
+        f'Return the COMPLETE customized HTML for "{titre}".\n'
+        f'Replace EVERY [FILL:...] section with working code that fits the game design above.\n'
+        f'Keep all ENGINE code exactly as shown. The game starts immediately on load.\n'
+    )
+
+    phase3_log.info(
+        "[template] Adapting template (%d [FILL] sections) for '%s' (%s)"
+        % (fill_count, titre, genre)
+    )
+
+    # Templates are now ~23KB (console extracted); give LLM enough budget to complete them
+    raw = _call_layer(_TEMPLATE_ADAPT_SYSTEM, prompt, max_tokens=65536, temperature=0.7)
+
+    if not raw or len(raw) < 5000:
+        phase3_log.warning(
+            "[template] Adaptation output too short (%d chars) — falling back to layered"
+            % (len(raw) if raw else 0)
+        )
+        return run_layered(
+            context,
+            patterns_reussis=patterns_reussis,
+            erreurs_passees=erreurs_passees,
+            game_logics=game_logics,
+        )
+
+    # Wrap in HTML if LLM returned bare JS
+    if not raw.strip().startswith('<!'):
+        raw = _HTML_TEMPLATE.format(title=titre, js_body=raw)
+
+    # Auto-fix common issues
+    html, _, _ = fix_all_auto(raw)
+
+    # Strip HTML elements (e.g. <canvas>) accidentally placed inside <script> by the LLM
+    html, _n_stripped = _strip_html_from_script_blocks(html)
+    if _n_stripped:
+        phase3_log.warning(
+            "[template] Removed %d HTML element(s) from inside <script> block (LLM error)" % _n_stripped
+        )
+
+    # ── ENGINE guard: restore ENGINE section if LLM modified or dropped it ───
+    html, engine_restored = _ensure_engine_intact(html, template_html)
+
+    # ── 10-point integrity check — replaces unreliable _js_check ──────────────
+    integrity_score, integrity_checks = _validate_template_integrity(html, template_html)
+    failed = [k for k, v in integrity_checks.items() if not v]
+    if integrity_score < 7:
+        phase3_log.warning(
+            "[template] Integrity check failed (%d/10) — falling back to layered. Failed: %s"
+            % (integrity_score, ', '.join(failed))
+        )
+        return run_layered(
+            context,
+            patterns_reussis=patterns_reussis,
+            erreurs_passees=erreurs_passees,
+            game_logics=game_logics,
+        )
+    if failed:
+        phase3_log.info("[template] Integrity %d/10 — minor issues: %s" % (integrity_score, ', '.join(failed)))
+
+    # Code validator pass (sanitizes null overrides, spawnPlayer, etc.)
+    html, _, _ = validate_and_fix(html)
+
+    remaining_fills = html.count('[FILL:')
+    if remaining_fills > 0:
+        phase3_log.warning(
+            "[template] %d [FILL] placeholder(s) not replaced by LLM — game may have stub sections"
+            % remaining_fills
+        )
+
+    # Dev console injected later by coordinateur AFTER all validation passes
+    # (injecting here would bloat file to ~113K, causing eslint timeouts on validation)
+
+    phase3_log.info(
+        "[template] Adaptation complete: %d chars (integrity %d/10, was %d [FILL] sections)"
+        % (len(html), integrity_score, fill_count)
+    )
+    return html
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3D TEMPLATE ADAPTATION — single-call for Three.js templates
+# ─────────────────────────────────────────────────────────────────────────────
+
+_TEMPLATE_ADAPT_SYSTEM_3D = (
+    "You are a senior Three.js r160 game developer tasked with customizing a proven 3D game template.\n\n"
+    "THE TEMPLATE you receive starts with a USAGE GUIDE (HTML comment) — READ IT ENTIRELY FIRST.\n"
+    "That guide defines exactly what ENGINE globals exist and which [FILL:] sections you must implement.\n\n"
+    "SACRED CONTRACT — NEVER redeclare these ENGINE-owned variables:\n"
+    "  scene, camera, renderer, clock, meta, gameState, keys\n"
+    "  (and any other variable declared between // ═══ ENGINE — DO NOT MODIFY ═══ and // ═══ END ENGINE ═══)\n"
+    "  Redeclaring ENGINE variables will crash the game instantly.\n\n"
+    "ABSOLUTE RULES:\n"
+    "1. Output = complete HTML file starting with <!DOCTYPE html>, no markdown fences\n"
+    "2. ENGINE section (// ═══ ENGINE — DO NOT MODIFY ═══ ... // ═══ END ENGINE ═══): copy EVERY character EXACTLY as-is\n"
+    "3. Replace EVERY [FILL:...] placeholder — any remaining [FILL] = broken game\n"
+    "4. Three.js CDN must remain: https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js\n"
+    "5. FORBIDDEN in [FILL] sections: redeclaring scene/camera/renderer/clock/meta/gameState/keys\n"
+    "6. Meta-progression: META_KEY must be a unique string literal (e.g. 'meta_my_game_title')\n"
+    "7. UPGRADE_DEFS: exactly 4 upgrades with id, name, desc, cost, maxLv\n"
+    "8. applyUpgrades(): reads meta.upgrades[id], applies numeric effects to game variables\n"
+    "9. Build functions (buildArena, buildLevel, buildEnvironment, buildScene): populate scene with THREE.Mesh objects\n"
+    "10. Output MUST be 100% complete — no truncation, no '...', no TODO comments\n"
+    "11. All [FILL] logic fully implemented: enemy types, upgrade effects, level geometry, game loop additions\n"
+    "12. DO NOT add extra <script> tags — all code goes inside the existing <script>\n"
+    "13. GAME_TITLE, GAME_SUBTITLE, START_LABEL, SHOP_TITLE, SHOP_LABEL, RETRY_LABEL, GAMEOVER_SUBTITLE: replace with thematic strings\n"
+    "14. HTML STRUCTURE IS FIXED: the renderer's <canvas> is created by Three.js — NEVER write any "
+    "HTML element (<canvas>, <div>, etc.) inside the <script> block. HTML inside <script> is a fatal "
+    "JS syntax error (SyntaxError: Unexpected token '<').\n"
+)
+
+
+def _validate_template_integrity_3d(html: str, template_html: str) -> tuple:
+    """
+    10-point structural check after 3D template adaptation.
+    Returns (score: int, checks: dict). Fall back to modular if score < 6.
+    """
+    checks = {
+        'engine_start':      '// ═══ ENGINE — DO NOT MODIFY ═══' in html,
+        'engine_end':        '// ═══ END ENGINE ═══' in html,
+        'three_cdn':         'three.min.js' in html,
+        'three_usage':       'THREE.' in html,
+        'webgl_renderer':    'WebGLRenderer' in html,
+        'request_anim':      'requestAnimationFrame' in html,
+        'fills_replaced':    html.count('[FILL:') == 0,
+        'has_scene':         'scene.add(' in html or 'new THREE.Scene' in html,
+        'size_reasonable':   len(html) > max(len(template_html) * 0.60, 20000),
+        'no_engine_clobber': 'var scene' not in html and 'const scene' not in html and 'let scene' not in html,
+    }
+    score = sum(checks.values())
+    return score, checks
+
+
+def run_from_template_3d(
+    context,
+    template_html: str,
+    patterns_reussis: list = None,
+    erreurs_passees: list = None,
+    game_logics: str = "",
+) -> str:
+    """
+    Single LLM call: fill the [FILL:] sections of a 3D (Three.js) template.
+    Falls back to None on validation failure — caller handles fallback to modular.
+    """
+    from code_validator import validate_and_fix
+
+    gp    = context.genre_profile
+    gdd   = context.gdd
+    titre = gdd.get('titre', 'Arcade 3D Game')
+    genre = gp.genre_principal
+    sous_genre = gp.sous_genre or genre
+    style = gp.style_visuel or '3D sci-fi'
+    mecaniques = ', '.join(gp.mecaniques_obligatoires[:6]) if gp.mecaniques_obligatoires else ''
+
+    fill_count = template_html.count('[FILL')
+
+    errors_str = ''
+    if erreurs_passees:
+        errors_str = '\nAVOID these known errors:\n' + '\n'.join(
+            '- ' + str(e)[:80] for e in erreurs_passees[-5:]
+        )
+
+    logics_str = ''
+    if game_logics and len(game_logics) > 50:
+        logics_str = (
+            f'\nGAME MECHANICS SPECIFICATION (implement these in the [FILL] sections):\n'
+            f'{game_logics}\n'
+        )
+
+    # RAG: inject relevant patterns as inspiration
+    patterns_str = ''
+    if patterns_reussis:
+        good = [p for p in patterns_reussis if p.get('score', 0) >= 8.0][:2]
+        if good:
+            patterns_str = '\nREFERENCE PATTERNS (inspiration only, do NOT copy code directly):\n'
+            for p in good:
+                patterns_str += f"- {p.get('genre')}: {p.get('boucle_core', '')} (score {p.get('score', 0):.1f})\n"
+
+    gdd_concept = gdd.get('concept') or gdd.get('description') or ''
+    gdd_systems = gdd.get('systemes_principaux') or []
+    gdd_enemies = gdd.get('ennemis_ou_obstacles') or []
+
+    prompt = (
+        f'=== GAME DESIGN ===\n'
+        f'Title: {titre}\n'
+        f'Genre: {genre} ({sous_genre})\n'
+        f'Visual style: {style}\n'
+        f'Core mechanics: {mecaniques}\n'
+    )
+    if gdd_concept:
+        prompt += f'Concept: {str(gdd_concept)[:100_000]}\n'
+    if gdd_systems:
+        sys_list = gdd_systems if isinstance(gdd_systems, list) else list(gdd_systems)
+        prompt += f'Main systems: {", ".join(str(s)[:60] for s in sys_list[:5])}\n'
+    if gdd_enemies:
+        enemy_list = gdd_enemies if isinstance(gdd_enemies, list) else list(gdd_enemies)
+        prompt += f'Enemies/obstacles: {", ".join(str(e)[:60] for e in enemy_list[:4])}\n'
+
+    prompt += patterns_str + logics_str + errors_str
+
+    prompt += (
+        f'\n=== YOUR 3D TEMPLATE ({fill_count} [FILL] sections to replace) ===\n'
+        + template_html
+        + f'\n=== YOUR TASK ===\n'
+        f'Return the COMPLETE customized HTML for "{titre}".\n'
+        f'Replace EVERY [FILL:...] section with working Three.js code that fits the game design above.\n'
+        f'Keep the ENGINE section EXACTLY as shown — do NOT change any ENGINE code.\n'
+        f'The META_KEY must be unique: use a kebab-case version of the title, e.g. "meta_{titre.lower().replace(" ", "_")[:20]}".\n'
+        f'The game must be immediately playable on load.\n'
+    )
+
+    phase3_log.info(
+        "[template3d] Adapting 3D template (%d [FILL] sections) for '%s' (%s)"
+        % (fill_count, titre, genre)
+    )
+
+    raw = _call_layer(
+        _TEMPLATE_ADAPT_SYSTEM_3D,
+        prompt,
+        max_tokens=65536,
+        temperature=0.7,
+    )
+
+    if not raw or len(raw) < 20000:
+        phase3_log.warning(
+            "[template3d] Output too short (%d chars) — falling back to modular"
+            % (len(raw) if raw else 0)
+        )
+        return None
+
+    # Clean markdown fences if any
+    raw = raw.strip()
+    if raw.startswith('```'):
+        lines = raw.split('\n')
+        raw = '\n'.join(lines[1:(-1 if lines[-1].strip() == '```' else len(lines))])
+    raw = raw.strip()
+
+    # Basic auto-fixes
+    from js_syntax_checker import fix_all_auto
+    html, _, _ = fix_all_auto(raw)
+
+    # Strip HTML elements accidentally placed inside <script> by the LLM
+    html, _n_stripped = _strip_html_from_script_blocks(html)
+    if _n_stripped:
+        phase3_log.warning(
+            "[template3d] Removed %d HTML element(s) from inside <script> block (LLM error)" % _n_stripped
+        )
+
+    # Structural integrity check
+    integrity_score, integrity_checks = _validate_template_integrity_3d(html, template_html)
+    failed = [k for k, v in integrity_checks.items() if not v]
+
+    if integrity_score < 6:
+        phase3_log.warning(
+            "[template3d] Integrity check failed (%d/10) — falling back to modular. Failed: %s"
+            % (integrity_score, ', '.join(failed))
+        )
+        return None
+
+    if failed:
+        phase3_log.info(
+            "[template3d] Integrity %d/10 — minor issues: %s" % (integrity_score, ', '.join(failed))
+        )
+
+    # Code validator pass
+    html, _, _ = validate_and_fix(html)
+
+    remaining_fills = html.count('[FILL:')
+    if remaining_fills > 0:
+        phase3_log.warning(
+            "[template3d] %d [FILL] placeholder(s) not replaced — game may have stub sections"
+            % remaining_fills
+        )
+
+    # Inject dev console
+    html = _inject_dev_console(html, genre)
+
+    phase3_log.info(
+        "[template3d] Adaptation complete: %d chars (integrity %d/10, was %d [FILL] sections)"
+        % (len(html), integrity_score, fill_count)
+    )
+    return html
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2637,6 +3357,53 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
     if erreurs_list:
         # J18 : erreurs récentes en premier ([-6:] au lieu de [:6])
         erreurs_str = "\nEvite ces erreurs connues :\n" + "\n".join("- " + e for e in erreurs_list[-6:])
+
+    # B6: genre-specific recurring error hints — static knowledge injected into every run
+    _B6_GENRE_ERRORS = {
+        "shoot": [
+            "WAVE_DEFS: pass enemy TYPE (string) to spawnEnemy(), not the full def object",
+            "Arrow keys: use e.code==='ArrowLeft' for keys.left, not e.key.toLowerCase()",
+            "bullets array: iterate backwards (i=len-1 to 0) when splicing",
+        ],
+        "platformer": [
+            "Platform collision: resolve Y first, then X — or player falls through",
+            "Coyote time required: add coyoteTimer ≥ 0.08s for edge jumps",
+            "Jump input: check keys.space pressed edge (not held) — add keys.space_prev tracking",
+        ],
+        "rpg": [
+            "ENEMY_DEFS / BOSS_DEFS: declare BEFORE gameLoop function — ReferenceError if after",
+            "Combat: enemy AI must actually attack player each turn (not skip)",
+        ],
+        "tower": [
+            "Tower placement: validate on non-path grid cells only before placing",
+            "Gold system: start with enough gold to place first tower (≥ cheapest tower cost)",
+        ],
+        "puzzle": [
+            "Match detection: check BOTH horizontal AND vertical after each swap",
+            "Cascade: after removing matches, fall tiles before checking new matches",
+        ],
+        "runner": [
+            "Speed increase: multiply obstacle speed by Math.min(1 + distance/5000, 3) cap",
+            "Collision box: use 60-70% of sprite size — tight collision = unfair deaths",
+        ],
+        "racing": [
+            "Steering: use delta-time based rotation (angle += steer * dt * 2) not instant",
+            "Track bounds: wrap or clamp car position — never let it teleport outside",
+        ],
+        "dungeon": [
+            "Room exits: always generate ≥ 1 valid path between rooms — avoid dead maps",
+            "Enemy AI: use simple pathfinding or homing (dx/dist, dy/dist) — not random only",
+        ],
+    }
+    _g_lower = (genre + " " + sous_genre).lower()
+    _genre_hints = []
+    for _gk, _hints in _B6_GENRE_ERRORS.items():
+        if _gk in _g_lower:
+            _genre_hints = _hints
+            break
+    if _genre_hints:
+        erreurs_str += "\nErreurs récurrentes genre '%s' — ÉVITER ABSOLUMENT :\n" % genre
+        erreurs_str += "\n".join("- " + h for h in _genre_hints)
 
     phase3_log.agent_start("Createur Layered", "Generation 9 couches (%s)" % titre)
 
@@ -2781,7 +3548,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '   TD: var WAVE_DEFS = [{enemies:[{type:"basic",count:5,interval:1}]}, ...]\n'
         '   Platformer: var LEVEL_DEFS = [{tiles:[[...]], enemies:[...], spawn:{x,y}}, ...]\n'
         '   RPG: var HERO_CLASSES = [{id:"warrior",hp:100,atk:15,speed:80}, ...]\n'
-        f'{game_logics_entities[:2000] if game_logics_entities else ""}\n'
+        f'{game_logics_entities[:100_000] if game_logics_entities else ""}\n'
         f'{_logics_constants}\n'
         '4. Variables état globales (TOUTES initialisées avec des vraies valeurs) :\n'
         '   var player = null; var enemies = []; var bullets = []; var particles = []; var floatTexts = [];\n'
@@ -2907,7 +3674,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '   NE PAS appeler requestAnimationFrame\n'
         '- resetGame() : remet tout à zéro (score, lives, wave, enemies.length=0, bullets.length=0, etc.)\n'
         '   puis appelle initGame()\n\n'
-        f'{game_logics_entities[:1500] if game_logics_entities else ""}\n\n'
+        f'{game_logics_entities[:100_000] if game_logics_entities else ""}\n\n'
         'RÈGLES CRITIQUES :\n'
         '- Utilise UNIQUEMENT les propriétés du SCHÉMA L1\n'
         '- spawnEnemy(type) doit lire depuis ENEMY_TYPES pour les stats (hp, speed, points, size)\n'
@@ -3030,7 +3797,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '    shakeTimer-=dt; shakeMag*=0.9;\n'
         '  } else { shakeX=0; shakeY=0; }\n'
         '  (utilise dt global — PAS de paramètre dt)\n\n'
-        f'{game_logics_update[:1500] if game_logics_update else ""}\n\n'
+        f'{game_logics_update[:100_000] if game_logics_update else ""}\n\n'
         'RÈGLES STRICTES :\n'
         '- Utilise UNIQUEMENT les propriétés du SCHÉMA L1\n'
         '- Itération inverse pour splice : for(let i=arr.length-1;i>=0;i--){...}\n'
@@ -3234,7 +4001,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '- triggerShake(mag, dur) : shakeMag=mag; shakeTimer=dur;\n'
         '- triggerFlash(col, alpha) : flashColor=col; flashAlpha=alpha;\n\n'
         f'{_genre_extra(genre, 5)}'
-        f'{enrichment_targets[:600]}\n\n'
+        f'{enrichment_targets[:100_000]}\n\n'
         '- Q8 — SYSTÈME DE PROGRESSION JOUEUR (obligatoire) :\n'
         '  function offerUpgrade() — appelée à la fin de chaque vague (après wave++) :\n'
         '    si wave % 2 === 0 : upgradePoints++ et gameState="upgrade_select"\n'
@@ -3803,7 +4570,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         '     ctx.fillText(waveAnnounceTxt,W/2,H/2);\n'
         '     ctx.restore();\n'
         '   }\n\n'
-        f'5. AUTRES ENRICHISSEMENTS SPÉCIFIQUES AU GENRE :\n{enrichment_targets[:500]}\n\n'
+        f'5. AUTRES ENRICHISSEMENTS SPÉCIFIQUES AU GENRE :\n{enrichment_targets[:100_000]}\n\n'
         'RÈGLES :\n'
         '- _AC, sfx, flashAlpha, flashColor sont déjà déclarés en L1 — NE PAS les redéclarer\n'
         '- Appelle _initAudio() dans le keydown/mousedown listener (if(!_AC)_initAudio())\n'
@@ -4056,7 +4823,7 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         f'{layer1_schema}\n\n'
         f'{accumulated_signatures}\n\n'
         f'{game_events}\n\n'
-        f'{draw_code_l6[:3000] if draw_code_l6 else ""}\n\n'
+        f'{draw_code_l6[:100_000] if draw_code_l6 else ""}\n\n'
         'MISSION ARTISTIQUE : Réécris les fonctions draw* pour les rendre visuellement exceptionnelles.\n'
         'En JavaScript, la DERNIÈRE définition d\'une fonction écrase la précédente.\n'
         'Tu peux redéfinir drawBackground, drawPlayer, drawEnemies, drawBoss, drawHUD, drawMenu, drawGameOver.\n\n'
@@ -4520,4 +5287,9 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
         "%d chars finaux — %d lignes JS (%s) [stats: %s]"
         % (len(final_html), total_lines, titre, stats_summary)
     )
+
+    # Inject dev console post-generation (CSS + HTML + IIFE, bridge already in _HTML_TEMPLATE)
+    _genre_layered = context.genre_profile.genre_principal or 'shooter'
+    final_html = _inject_dev_console(final_html, _genre_layered)
+
     return final_html

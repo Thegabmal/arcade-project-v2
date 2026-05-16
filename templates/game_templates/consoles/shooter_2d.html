@@ -1,0 +1,161 @@
+<!-- ═══════════════════════════════════════════════════════════════════════
+     ARCADE DEV CONSOLE — Press ² to toggle | Real-time AI modifications
+     ═══════════════════════════════════════════════════════════════════════ -->
+<style id="dev-console-style">
+#dev-console{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(5,5,15,.97);border-top:2px solid #00ff88;z-index:99999;font-family:'Courier New',monospace;color:#00ff88;box-shadow:0 -6px 30px rgba(0,255,136,.18);padding:10px 14px 8px;gap:5px;flex-direction:column}
+#dev-console.open{display:flex}
+#dev-console-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+#dev-console-ttl{font-size:12px;font-weight:bold;letter-spacing:1px}
+#dev-console-hdr-r{display:flex;gap:6px;align-items:center}
+#dev-console-ctx-btn{background:#0a1a0a;color:#558855;border:1px solid #1a3a1a;font-size:10px;padding:3px 8px;border-radius:3px;cursor:pointer;font-family:monospace;transition:all .15s}
+#dev-console-ctx-btn:hover,#dev-console-ctx-btn.active{color:#00ff88;border-color:#00ff88;background:#051505}
+#dev-console-close{background:none;border:none;color:#333;font-size:16px;cursor:pointer;padding:0 3px;line-height:1;transition:color .15s}
+#dev-console-close:hover{color:#ff4444}
+#dev-console-quick{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:3px}
+.dc-qb{background:#0a1a0a;color:#558855;border:1px solid #1a3a1a;font-size:10px;padding:4px 9px;border-radius:3px;cursor:pointer;font-family:monospace;transition:all .12s;white-space:nowrap}
+.dc-qb:hover{color:#00ff88;border-color:#00ff88;background:#0a2a0a;transform:translateY(-1px)}
+.dc-qb:active{transform:none}
+#dev-console-ctx{display:none;background:#050f05;border:1px solid #0a2a0a;border-radius:4px;padding:8px 10px;font-size:10px;color:#668866;max-height:110px;overflow-y:auto;line-height:1.7;margin-bottom:3px}
+#dev-console-ctx.open{display:block}
+#dev-console-row{display:flex;gap:8px;align-items:flex-start}
+#dev-console-input{flex:1;background:#0a0a0a;border:1px solid #00ff88;color:#00ff88;font-family:'Courier New',monospace;font-size:13px;padding:8px 10px;border-radius:4px;resize:vertical;min-height:38px;max-height:140px;line-height:1.4}
+#dev-console-input::placeholder{color:#1a4a2a}
+#dev-console-input:focus{outline:none;border-color:#00ffcc;box-shadow:0 0 8px rgba(0,255,204,.2)}
+#dev-console-btns{display:flex;flex-direction:column;gap:5px;min-width:90px}
+#dev-console-btn{background:linear-gradient(135deg,#00cc66,#00ff88);color:#000;border:none;font-family:monospace;font-size:12px;font-weight:900;padding:9px 14px;border-radius:4px;cursor:pointer;letter-spacing:.5px;transition:all .15s}
+#dev-console-btn:hover{background:linear-gradient(135deg,#00ff88,#00ffcc);transform:translateY(-1px)}
+#dev-console-btn:disabled{background:#222;color:#444;cursor:wait;transform:none}
+#dev-console-undo{background:#1a1a1a;color:#888;border:1px solid #333;font-family:monospace;font-size:11px;padding:5px 10px;border-radius:4px;cursor:pointer;transition:all .15s}
+#dev-console-undo:hover:not(:disabled){background:#2a2a2a;color:#fff;border-color:#555}
+#dev-console-undo:disabled{opacity:.3;cursor:default}
+#dev-console-status{font-size:11px;min-height:15px;padding:2px 0;line-height:1.5;max-height:48px;overflow-y:auto}
+#dev-console-status.ok{color:#00ff88}#dev-console-status.err{color:#ff4444}#dev-console-status.pending{color:#ffaa00}#dev-console-status.warn{color:#ffcc44}
+#dev-console-cw{display:none;margin-top:2px}
+#dev-console-cw.visible{display:block}
+#dev-console-ctog{background:none;border:none;color:#1a4a2a;font-size:10px;font-family:monospace;cursor:pointer;padding:2px 0;transition:color .15s}
+#dev-console-ctog:hover{color:#00cc66}
+#dev-console-cpre{background:#050f05;border:1px solid #0a2a0a;border-radius:3px;padding:8px 10px;font-size:11px;color:#44aa44;font-family:'Courier New',monospace;white-space:pre-wrap;word-break:break-all;max-height:110px;overflow-y:auto;margin-top:3px;line-height:1.5}
+#dev-console-log{font-size:10px;color:#333;max-height:44px;overflow-y:auto;padding-top:3px;border-top:1px solid #111;display:none;line-height:1.6;margin-top:2px}
+#dev-console-log.visible{display:block}
+#dev-console-hint{font-size:9px;color:#1a3a1a;text-align:right;margin-top:1px}
+</style>
+<div id="dev-console">
+  <div id="dev-console-hdr">
+    <span id="dev-console-ttl">⚡ ARCADE DEV CONSOLE</span>
+    <div id="dev-console-hdr-r">
+      <button id="dev-console-ctx-btn" title="Show live game state">🔍 ctx</button>
+      <span style="color:#1a3a1a;font-size:10px">[ ² ]</span>
+      <button id="dev-console-close" title="Close">✕</button>
+    </div>
+  </div>
+  <div id="dev-console-quick"></div>
+  <div id="dev-console-ctx"></div>
+  <div id="dev-console-row">
+    <textarea id="dev-console-input" rows="2"></textarea>
+    <div id="dev-console-btns">
+      <button id="dev-console-btn">▶ Apply</button>
+      <button id="dev-console-undo" disabled title="Undo last patch">↩ Undo</button>
+    </div>
+  </div>
+  <div id="dev-console-status"></div>
+  <div id="dev-console-cw">
+    <button id="dev-console-ctog">▶ view generated code</button>
+    <pre id="dev-console-cpre"></pre>
+  </div>
+  <div id="dev-console-log"></div>
+  <div id="dev-console-hint">Shift+Enter = new line&nbsp;|&nbsp;Enter = send&nbsp;|&nbsp;↑↓ = history</div>
+</div>
+<script id="dev-console-script">
+(function(){
+'use strict';
+var PLACEHOLDER_TEXT='Describe your modification...\nExamples:\n• make player invincible\n• add new enemy type: crystalline drone with 8 HP that splits on death\n• create spread shot: 5 bullets in a fan\n• add homing missiles as a powerup\n• double enemy speeds from wave 3 onward\n• bullets pierce through 3 enemies\n• add combo multiplier that resets after 2s\n• change background to purple nebula with animated stars\n• spawn 10 enemies of type grunt around the screen edges';
+
+var QUICK_ACTIONS=[
+  {label:'♾ Invincible',desc:'Player takes no damage',code:'player.iframes=99999;player.IFRAME_DUR=99999;',color:'#00ff88'},
+  {label:'❤ Full HP × 9',desc:'Restore HP + 9 lives',code:'player.hp=player.maxHp;player.lives=9;',color:'#ff4466'},
+  {label:'⚡ Rapid Fire',desc:'Fire rate ×10',code:'player.fireRate=0.02;',color:'#ffaa00'},
+  {label:'💥 Nuke',desc:'Destroy all enemies',code:'enemyPool.update(function(){return false;});',color:'#ff6600'},
+  {label:'↩ Skip Wave',desc:'End current wave immediately',code:'waveManager.enemiesLeft=0;enemyPool.clear();waveManager.waveTimer=waveManager.betweenDelay;',color:'#aaaaff'},
+  {label:'⭐ Max Score',desc:'Set score to 99999',code:'GAME_SCORE=99999;',color:'#ffdd00'},
+];
+
+function collectContext(){
+  var ctx={};
+  try{
+    ctx.gameState=typeof gameState!=='undefined'?gameState:'?';
+    ctx.score=typeof GAME_SCORE!=='undefined'?GAME_SCORE:'?';
+    if(typeof waveManager!=='undefined'){ctx.wave=waveManager.wave;ctx.enemiesLeft=waveManager.enemiesLeft;ctx.waveTimer=Math.round(waveManager.waveTimer*10)/10;}
+    if(typeof player!=='undefined')ctx.player={hp:player.hp,maxHp:player.maxHp,speed:player.speed,fireRate:player.fireRate,powerup:player.powerup,lives:player.lives,invincible:player.iframes>0};
+    if(typeof bulletPool!=='undefined')ctx.bullets=bulletPool.active.length;
+    if(typeof enemyPool!=='undefined')ctx.enemies=enemyPool.active.length;
+    if(typeof powerupPool!=='undefined')ctx.powerups=powerupPool.active.length;
+    if(typeof ENEMY_TYPES!=='undefined')ctx.enemy_types=Object.keys(ENEMY_TYPES);
+    if(typeof Particles!=='undefined')ctx.particles=Particles.active.length;
+  }catch(e){}
+  return ctx;
+}
+function takeSnapshot(){
+  try{
+    var s={_ts:Date.now()};
+    if(typeof GAME_SCORE!=='undefined')s.score=GAME_SCORE;
+    if(typeof gameState!=='undefined')s.gameState=gameState;
+    if(typeof waveManager!=='undefined')s.wave=waveManager.wave;
+    if(typeof player!=='undefined')s.player={hp:player.hp,maxHp:player.maxHp,lives:player.lives,speed:player.speed,fireRate:player.fireRate,powerup:player.powerup,iframes:player.iframes};
+    return s;
+  }catch(e){return null;}
+}
+function applySnapshot(s){
+  if(!s)return false;
+  var ok=false;
+  try{
+    if(s.score!==undefined&&typeof GAME_SCORE!=='undefined'){GAME_SCORE=s.score;ok=true;}
+    if(s.gameState!==undefined&&typeof gameState!=='undefined'){gameState=s.gameState;ok=true;}
+    if(s.wave!==undefined&&typeof waveManager!=='undefined'){waveManager.wave=s.wave;ok=true;}
+    if(s.player&&typeof player!=='undefined'){Object.assign(player,s.player);ok=true;}
+  }catch(e){}
+  return ok;
+}
+
+// ── Core console logic ────────────────────────────────────────────────────
+var FILENAME=window.location.pathname.split('/').pop();
+var panel=document.getElementById('dev-console');
+var input=document.getElementById('dev-console-input');
+var btn=document.getElementById('dev-console-btn');
+var undoBtn=document.getElementById('dev-console-undo');
+var statusEl=document.getElementById('dev-console-status');
+var closeBtn=document.getElementById('dev-console-close');
+var ctxBtn=document.getElementById('dev-console-ctx-btn');
+var ctxPanel=document.getElementById('dev-console-ctx');
+var logPanel=document.getElementById('dev-console-log');
+var cw=document.getElementById('dev-console-cw');
+var ctog=document.getElementById('dev-console-ctog');
+var cpre=document.getElementById('dev-console-cpre');
+var quickBar=document.getElementById('dev-console-quick');
+if(!panel||!input||!btn)return;
+input.placeholder=PLACEHOLDER_TEXT;
+QUICK_ACTIONS.forEach(function(qa){
+  var b=document.createElement('button');b.className='dc-qb';b.textContent=qa.label;
+  if(qa.color)b.style.color=qa.color;b.title=qa.desc||'';
+  b.addEventListener('click',function(){var snap=takeSnapshot();execCode(qa.code,qa.label);if(snap)pushSnapshot(snap);});
+  quickBar.appendChild(b);
+});
+var _snapshots=[],_history=[],_histIdx=-1,_actionLog=[],MAX_UNDO=15,MAX_LOG=30;
+if(ctog&&cw&&cpre){ctog.addEventListener('click',function(){var o=cpre.style.display==='block';cpre.style.display=o?'none':'block';ctog.textContent=(o?'▶ view':'▼ hide')+' generated code';});cpre.style.display='none';}
+function showCode(code){if(!cw||!cpre||!ctog)return;cpre.textContent=code||'';cw.classList.add('visible');cpre.style.display='none';ctog.textContent='▶ view generated code ('+(code||'').split('\n').length+' lines)';}
+function hideCode(){if(cw)cw.classList.remove('visible');}
+closeBtn.addEventListener('click',function(){panel.classList.remove('open');input.blur();});
+function setStatus(msg,cls){statusEl.textContent=msg;statusEl.className=cls||'';}
+function addLog(prompt,ok,note){var t=new Date().toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit',second:'2-digit'});var short=prompt.length>55?prompt.slice(0,55)+'…':prompt;_actionLog.unshift({t:t,short:short,ok:ok,note:note||''});if(_actionLog.length>MAX_LOG)_actionLog.pop();renderLog();}
+function renderLog(){if(!_actionLog.length){logPanel.classList.remove('visible');return;}logPanel.classList.add('visible');logPanel.innerHTML=_actionLog.map(function(e){return'<span style="color:#333">'+e.t+'</span> <span style="color:'+(e.ok?'#1a6a1a':'#6a1a1a')+'">●</span> <span style="color:'+(e.ok?'#447744':'#774444')+'">'+e.short+'</span>'+(e.note?'<span style="color:#333"> → '+e.note+'</span>':'');}).join('<br>');}
+function pushSnapshot(snap){if(!snap)return;_snapshots.push(snap);if(_snapshots.length>MAX_UNDO)_snapshots.shift();undoBtn.disabled=false;}
+function updateUndoBtn(){undoBtn.disabled=_snapshots.length===0;}
+undoBtn.addEventListener('click',function(){if(!_snapshots.length)return;var snap=_snapshots.pop();updateUndoBtn();var ok=applySnapshot(snap);var dt=Math.round((Date.now()-snap._ts)/1000);setStatus(ok?'↩ Undone ('+dt+'s ago)':'⚠ Partial undo — complex changes cannot be auto-reverted',ok?'ok':'warn');});
+ctxBtn.addEventListener('click',function(){if(ctxPanel.classList.contains('open')){ctxPanel.classList.remove('open');ctxBtn.classList.remove('active');ctxPanel.innerHTML='';return;}ctxBtn.classList.add('active');var ctx=collectContext();var lines=['<b style="color:#226622">═══ LIVE STATE ═══</b>'];Object.keys(ctx).forEach(function(k){var v=ctx[k];var vs=typeof v==='object'?JSON.stringify(v).slice(0,100):String(v);lines.push('<span style="color:#00cc55">'+k+'</span>: <span style="color:#88aa88">'+vs+'</span>');});if(lines.length===1)lines.push('<span style="color:#1a3a1a">No standard variables detected</span>');ctxPanel.innerHTML=lines.join('<br>');ctxPanel.classList.add('open');});
+function validateSyntax(code){var o=0,c=0,po=0,pc=0,bo=0,bc=0;for(var i=0;i<code.length;i++){var ch=code[i];if(ch==='{')o++;else if(ch==='}')c++;else if(ch==='(')po++;else if(ch===')')pc++;else if(ch==='[')bo++;else if(ch===']')bc++;}if(o!==c)return'Braces: '+o+' { for '+c+' }';if(po!==pc)return'Parens: '+po+' ( for '+pc+' )';if(bo!==bc)return'Brackets: '+bo+' [ for '+bc+' ]';return null;}
+function execCode(code,explanation){var synErr=validateSyntax(code);if(synErr){setStatus('⚠ Invalid syntax: '+synErr,'err');return false;}try{if(typeof window.__devPatch==='function'){window.__devPatch(code);}else{(new Function(code))();}setStatus('✅ '+(explanation||'Patch applied!'),'ok');input.value='';return true;}catch(e){var msg=e.message||String(e);if(msg.indexOf('not defined')!==-1){var vn=(msg.split(' ')[0]||'').replace(/[^a-zA-Z0-9_]/g,'');msg='Variable "'+vn+'" not found. Use 🔍 ctx to see available variables.';}else if(msg.indexOf('is not a function')!==-1){msg='Function unavailable: '+msg;}else if(msg.indexOf('Cannot read')!==-1){msg='Null/undefined: '+msg;}else if(msg.indexOf('Assignment to constant')!==-1){msg='Cannot reassign const — use object property: e.g. PALETTE.bg = "#000"';}setStatus('❌ '+msg,'err');return false;}}
+async function applyPatch(){var prompt=input.value.trim();if(!prompt)return;if(_history[0]!==prompt){_history.unshift(prompt);if(_history.length>50)_history.pop();}_histIdx=-1;btn.disabled=true;hideCode();setStatus('⏳ Generating patch...','pending');var snap=takeSnapshot();try{var resp=await fetch('/api/game-patch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:FILENAME,prompt:prompt,context:collectContext()})});if(!resp.ok){var errText=await resp.text();setStatus('❌ Server '+resp.status+': '+errText.slice(0,80),'err');addLog(prompt,false,'HTTP '+resp.status);return;}var data=await resp.json();if(data.error){setStatus('❌ '+data.error,'err');addLog(prompt,false,data.error.slice(0,40));}else if(data.code){showCode(data.code);var ok=execCode(data.code,data.explanation);if(ok){pushSnapshot(snap);addLog(prompt,true,(data.explanation||'').slice(0,80));}else{if(cpre)cpre.style.display='block';if(ctog)ctog.textContent='▼ hide generated code (error)';addLog(prompt,false,'exec error');}}else{setStatus('⚠ Empty server response','warn');addLog(prompt,false,'empty');}}catch(e){setStatus('❌ Network: '+e.message,'err');addLog(prompt,false,'network');}finally{btn.disabled=false;}}
+btn.addEventListener('click',applyPatch);
+input.addEventListener('keydown',function(e){if(e.code!=='Backquote'&&e.code!=='IntlBackslash')e.stopPropagation();if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();applyPatch();return;}if(e.key==='ArrowUp'&&!e.shiftKey&&_history.length){e.preventDefault();_histIdx=Math.min(_histIdx+1,_history.length-1);input.value=_history[_histIdx];}if(e.key==='ArrowDown'&&!e.shiftKey){e.preventDefault();_histIdx=Math.max(_histIdx-1,-1);input.value=_histIdx>=0?_history[_histIdx]:'';}});
+document.addEventListener('keydown',function(e){if(e.code==='Backquote'||e.code==='IntlBackslash'){e.preventDefault();if(panel.classList.contains('open')){panel.classList.remove('open');input.blur();}else{panel.classList.add('open');input.focus();}}});
+})();
+</script>

@@ -1473,7 +1473,7 @@ def api_health():
         health["checks"]["chromadb"] = {"ok": False, "error": str(e)}
 
     # Check Gemini API key
-    api_key_set = bool(_os.environ.get("GEMINI_API_KEY") or _os.environ.get("GOOGLE_API_KEY"))
+    api_key_set = bool(_os.environ.get("GEMINI_API_KEY") or _os.environ.get("GOOGLE_API_KEY") or _os.environ.get("GEMINI_PAID_KEY"))
     health["checks"]["gemini_api_key"] = {"ok": api_key_set}
 
     # Check memory.json state file

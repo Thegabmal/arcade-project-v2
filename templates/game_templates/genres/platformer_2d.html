@@ -1,0 +1,773 @@
+<!--
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ARCADE PROJECT — PLATFORMER / SIDE-SCROLLER TEMPLATE — USAGE GUIDE                      ║
+║  Read this entirely before writing a single line of code.                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ ROLE ──────────────────────────────────────────────────────────────────────┐
+│ You are a senior HTML5 Canvas 2D game developer.                            │
+│ Your job: fill the [FILL: ...] sections to create a complete, playable game. │
+│ You do NOT write the engine — it is already written and tested.             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ THE TWO ZONES ─────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  1. ENGINE — DO NOT MODIFY  (lines below this comment, until first [FILL])  │
+│     ┌───────────────────────────────────────────────────────────────────┐   │
+│     │  Complete, crash-proof boilerplate. Copy EVERY character exactly. │   │
+│     │  Any change to ENGINE will break the game in a non-obvious way.   │   │
+│     └───────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  2. [FILL: ...] sections  — YOUR creative contribution                       │
+│     ┌───────────────────────────────────────────────────────────────────┐   │
+│     │  Replace EVERY placeholder with real, working JavaScript.         │   │
+│     │  Any [FILL] left in your output = a broken or incomplete game.    │   │
+│     └───────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SACRED CONTRACT — ENGINE VARIABLES (NEVER redeclare these) ────────────────┐
+│                                                                              │
+│  The ENGINE already declares and initialises these. If you add another      │
+│  "var/let/const X = ..." for any of these names, you WILL overwrite them    │
+│  with null/0 at runtime — guaranteed crash on the first draw call.          │
+│                                                                              │
+│  canvas   → HTMLCanvasElement  (getElementById — already set up)            │
+│  ctx       → CanvasRenderingContext2D (getContext — already set up)         │
+│  W, H      → logical canvas dimensions (480 × 640 — fixed for this genre)  │
+│  DPR       → device pixel ratio (handled by resizeCanvas)                   │
+│  gameState → string: 'menu' | 'playing' | 'paused' | 'gameover' | 'shop'   │
+│  Keys      → { down:{}, pressed:{}, released:{} }  — keyboard state        │
+│  Touch     → { justTapped, x, y }  — touch state                           │
+│  Mouse     → { clicked, x, y }  — mouse state                              │
+│  lastTime, accumulator  → game loop timing                                  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ENGINE FUNCTIONS — USE THESE, DO NOT REWRITE THEM ─────────────────────────┐
+│                                                                              │
+│  Input:                                                                      │
+│    keyDown('ArrowLeft')      → is key held this frame?                      │
+│    keyPressed('Space')       → was key just pressed?                        │
+│    anyAction()               → any key/click/tap?                           │
+│    flushInput()              → called automatically at end of update()      │
+│                                                                              │
+│  Pooling & FX:                                                              │
+│    createPool(factory, n)    → reusable object pool for enemies/bullets     │
+│    spawnParticles(x,y,n,opts)→ visual burst feedback                        │
+│    triggerShake(mag, dur)    → screen shake (use on hits and explosions)    │
+│    spawnPopup(x,y,txt,color) → floating score text                          │
+│                                                                              │
+│  Drawing helpers:                                                            │
+│    drawText(txt,x,y,col,sz,align) → quick HUD text                         │
+│    drawBar(x,y,w,h,val,max,fg,bg)  → health / progress bar                 │
+│                                                                              │
+│  Audio (NO external files allowed):                                          │
+│    sfx.play(freq, dur, type, vol)  → synthesised WebAudio sound            │
+│                                                                              │
+│  Math:                                                                       │
+│    lerp(a,b,t)   clamp(v,min,max)  aabb(ax,ay,aw,ah,bx,by,bw,bh)          │
+│    randInt(a,b)  randFloat(a,b)    randChoice(arr)                          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ GAME LOOP CONTRACT — HOW update/render WORK ───────────────────────────────┐
+│                                                                              │
+│  Fixed 60 Hz step:  loop(ts) → update(FIXED_DT) → renderFrame()            │
+│                                                                              │
+│  YOU MUST IMPLEMENT:                                                         │
+│    startGame()        → reset all state, spawn initial entities             │
+│    updatePlaying(dt)  → all gameplay: input, AI, physics, collisions        │
+│    renderPlaying()    → all drawing: background, entities, HUD              │
+│                                                                              │
+│  The ENGINE calls these automatically via the state machine.                │
+│  Do NOT write your own requestAnimationFrame or setInterval.                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ABSOLUTE PROHIBITIONS — any of these guarantees a crash ───────────────────┐
+│                                                                              │
+│  ✗  var canvas = ...       Redeclaring ENGINE globals KILLS context         │
+│  ✗  var ctx    = ...       ctx becomes null → crash on first ctx.save()     │
+│  ✗  var W      = ...       Use W and H directly — they are already set      │
+│  ✗  setInterval()          NEVER. The ENGINE loop already runs.             │
+│  ✗  new Image()            NO external resources. Draw with Canvas API.     │
+│  ✗  fetch() / XHR          NO network calls in game logic.                  │
+│  ✗  Audio() with src       Use sfx.play(freq, dur, type, vol) only.        │
+│  ✗  location.reload()      Reset variables in JS — never force a reload.   │
+│  ✗  Truncating output      Incomplete HTML always crashes. Finish the file. │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ QUALITY CHECKLIST — verify before submitting ──────────────────────────────┐
+│                                                                              │
+│  ✓  Every [FILL: ...] placeholder is replaced with real code                │
+│  ✓  Game works: menu → play → game over / victory → restart                 │
+│  ✓  Score, lives/HP, level visible in HUD at all times                      │
+│  ✓  At least 3 distinct enemy / obstacle / element types with AI            │
+│  ✓  Difficulty scales over time (speed, spawn rate, damage)                 │
+│  ✓  Audio feedback on: shoot, hit, collect, level up, game over             │
+│  ✓  Particle effects on: kills, power-up collect, player death              │
+│  ✓  Your output starts with <!DOCTYPE html> — no markdown fences            │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+-->
+<!DOCTYPE html>
+<html><head><title>[FILL: GAME_TITLE]</title><style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;}
+canvas{display:block;}
+</style></head><body>
+<canvas id="gameCanvas"></canvas>
+<script>
+// ══════════════════════════════════════════════════════════════════
+// ENGINE — DO NOT MODIFY
+// Dev console bridge — AI patches execute in game scope via eval
+window.__devPatch = function(code) { return eval(code); };
+// ══════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const GAME_W = 800, GAME_H = 450;  // 16:9 base resolution
+let W = GAME_W, H = GAME_H;
+function resizeCanvas() {
+  const s = Math.min(window.innerWidth / W, window.innerHeight / H);
+  canvas.style.width = Math.round(W*s)+'px'; canvas.style.height = Math.round(H*s)+'px';
+  canvas.width = Math.round(W*DPR); canvas.height = Math.round(H*DPR);
+  ctx.scale(DPR, DPR);
+}
+resizeCanvas(); window.addEventListener('resize', () => { resizeCanvas(); ctx.scale(DPR, DPR); });
+
+let gameState = 'menu';
+function setState(s) { gameState = s; }
+
+// Input (justPressed / justReleased edge detection)
+const Keys = { down:{}, pressed:{}, released:{} };
+window.addEventListener('keydown', e => {
+  if (!Keys.down[e.code]) Keys.pressed[e.code] = true;
+  Keys.down[e.code] = true;
+  if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { Keys.down[e.code]=false; Keys.released[e.code]=true; });
+const Touch = { justTapped:false, x:0, y:0, swipeDx:0, startX:0 };
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const r = canvas.getBoundingClientRect();
+  Touch.startX = Touch.x = (e.touches[0].clientX-r.left)*(W/r.width);
+  Touch.y = (e.touches[0].clientY-r.top)*(H/r.height);
+  Touch.justTapped = true;
+}, {passive:false});
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const r = canvas.getBoundingClientRect();
+  Touch.swipeDx = (e.touches[0].clientX-r.left)*(W/r.width) - Touch.startX;
+}, {passive:false});
+canvas.addEventListener('touchend', e => { e.preventDefault(); Touch.swipeDx = 0; }, {passive:false});
+const Mouse = { clicked:false };
+canvas.addEventListener('click', () => Mouse.clicked = true);
+
+function keyDown(c){ return !!Keys.down[c]; }
+function keyPressed(c){ return !!Keys.pressed[c]; }
+function anyAction(){ return Mouse.clicked||Touch.justTapped||keyPressed('Space')||keyPressed('Enter'); }
+function flushInput(){ Keys.pressed={}; Keys.released={}; Touch.justTapped=false; Mouse.clicked=false; }
+
+// Object pool
+function createPool(factory, size) {
+  const inactive = Array.from({length:size}, factory), active = [];
+  return {
+    active,
+    get(fn){ const o=inactive.length>0?inactive.pop():factory(); o.alive=true; if(fn)fn(o); active.push(o); return o; },
+    update(fn){ for(let i=active.length-1;i>=0;i--) if(!fn(active[i])){active[i].alive=false;inactive.push(active.splice(i,1)[0]);} },
+    clear(){ while(active.length){active[0].alive=false;inactive.push(active.shift());} }
+  };
+}
+
+// Particles
+const Particles = createPool(() => ({alive:false,x:0,y:0,vx:0,vy:0,life:0,maxLife:0,size:3,color:'#fff',gravity:250}), 200);
+function spawnParticles(x,y,count,opts){
+  opts=opts||{};
+  for(let i=0;i<count;i++){
+    const a=opts.angle!==undefined?opts.angle+(Math.random()-0.5)*(opts.spread||Math.PI*2):Math.random()*Math.PI*2;
+    const sp=opts.speed||(40+Math.random()*80);
+    Particles.get(p=>{p.x=x;p.y=y;p.vx=Math.cos(a)*sp;p.vy=Math.sin(a)*sp;p.life=p.maxLife=opts.life||(0.25+Math.random()*0.4);p.size=opts.size||(2+Math.random()*3);p.color=opts.color||'#fff';p.gravity=opts.gravity!==undefined?opts.gravity:250;});
+  }
+}
+function updateParticles(dt){Particles.update(p=>{p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=p.gravity*dt;return p.life>0;});}
+function drawParticles(){Particles.active.forEach(p=>{ctx.globalAlpha=p.life/p.maxLife;ctx.fillStyle=p.color;ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);});ctx.globalAlpha=1;}
+
+// Score popups
+const Popups=[];
+function spawnPopup(x,y,text,color,size){Popups.push({x,y,text,color:color||'#fff',size:size||13,vy:-50,life:1.0});}
+function updatePopups(dt){for(let i=Popups.length-1;i>=0;i--){Popups[i].y+=Popups[i].vy*dt;Popups[i].life-=dt;if(Popups[i].life<=0)Popups.splice(i,1);}}
+function drawPopups(){Popups.forEach(p=>{ctx.globalAlpha=Math.min(p.life,1);ctx.fillStyle=p.color;ctx.font=`bold ${p.size}px monospace`;ctx.textAlign='center';ctx.fillText(p.text,p.x,p.y);});ctx.globalAlpha=1;ctx.textAlign='left';}
+
+// Screen shake
+const Shake={x:0,y:0,mag:0,dur:0};
+function triggerShake(m,d){Shake.mag=Math.max(Shake.mag,m);Shake.dur=Math.max(Shake.dur,d);}
+function updateShake(dt){if(Shake.dur>0){Shake.dur-=dt;Shake.x=(Math.random()*2-1)*Shake.mag;Shake.y=(Math.random()*2-1)*Shake.mag;if(Shake.dur<=0){Shake.x=0;Shake.y=0;}}}
+
+// Audio
+const sfx={_ctx:null,init(){try{if(!this._ctx)this._ctx=new(window.AudioContext||window.webkitAudioContext)();if(this._ctx.state==='suspended')this._ctx.resume();}catch(e){}},play(f,d,t,v){try{this.init();if(!this._ctx)return;const o=this._ctx.createOscillator(),g=this._ctx.createGain();o.type=t||'square';o.frequency.value=f||440;g.gain.setValueAtTime(v||0.12,this._ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,this._ctx.currentTime+(d||0.1));o.connect(g);g.connect(this._ctx.destination);o.start();o.stop(this._ctx.currentTime+(d||0.1));}catch(e){}}};
+
+function lerp(a,b,t){return a+(b-a)*t;}
+function clamp(v,min,max){return v<min?min:v>max?max:v;}
+function aabb(ax,ay,aw,ah,bx,by,bw,bh){return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by;}
+function randInt(a,b){return a+Math.floor(Math.random()*(b-a+1));}
+let _hiScore=parseInt(localStorage.getItem('hs_platformer')||'0');
+function saveHiScore(s){if(s>_hiScore){_hiScore=s;localStorage.setItem('hs_platformer',s);}}
+function drawText(t,x,y,c,s,a){ctx.fillStyle=c||'#fff';ctx.font=`bold ${s||14}px monospace`;ctx.textAlign=a||'left';ctx.fillText(t,x,y);}
+function drawBar(x,y,w,h,v,m,fg,bg){ctx.fillStyle=bg||'#333';ctx.fillRect(x,y,w,h);ctx.fillStyle=fg||'#0f0';ctx.fillRect(x,y,Math.round(w*clamp(v/m,0,1)),h);}
+
+const FIXED_DT=1/60,MAX_DT=0.1; let lastTime=0,accumulator=0;
+function loop(ts){const rd=Math.min((ts-lastTime)/1000,MAX_DT);lastTime=ts;accumulator+=rd;while(accumulator>=FIXED_DT){update(FIXED_DT);accumulator-=FIXED_DT;}renderFrame();requestAnimationFrame(loop);}
+function update(dt){updateShake(dt);updateParticles(dt);updatePopups(dt);switch(gameState){case'menu':updateMenu(dt);break;case'playing':updatePlaying(dt);break;case'paused':if(keyPressed('Escape')||keyPressed('KeyP'))setState('playing');break;case'gameover':updateGameover(dt);break;case'shop':updateShop(dt);break;}flushInput();}
+function renderFrame(){ctx.save();ctx.translate(Shake.x,Shake.y);switch(gameState){case'menu':renderMenu();break;case'playing':renderPlaying();break;case'paused':renderPlaying();renderPauseOverlay();break;case'gameover':renderPlaying();renderGameoverOverlay();break;case'shop':renderShop();break;}drawParticles();drawPopups();ctx.restore();}
+function updateMenu(dt){if(anyAction()){sfx.play(440,0.08,'square',0.1);startGame();setState('playing');}}
+function renderPauseOverlay(){ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(0,0,W,H);drawText('PAUSED',W/2,H/2,'#fff',28,'center');drawText('ESC to resume',W/2,H/2+36,'#aaa',13,'center');}
+function renderGameoverOverlay(){ctx.fillStyle='rgba(0,0,0,0.72)';ctx.fillRect(0,0,W,H);ctx.textAlign='center';ctx.fillStyle='#f44';ctx.font='bold 34px system-ui,sans-serif';ctx.fillText('GAME OVER',W/2,H*0.38);ctx.fillStyle='#fff';ctx.font='bold 20px system-ui,sans-serif';ctx.fillText(`SCORE: ${GAME_SCORE}`,W/2,H*0.50);ctx.fillStyle='#ff0';ctx.font='bold 16px system-ui,sans-serif';ctx.fillText(`BEST: ${_hiScore}`,W/2,H*0.58);if(_runCoins>0){ctx.fillStyle='#ffdd00';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText(`🪙 ${_runCoins} coins earned`,W/2,H*0.66);}ctx.fillStyle='#aaa';ctx.font='13px system-ui,sans-serif';ctx.fillText('Waiting for shop...',W/2,H*0.74);ctx.textAlign='left';}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME CONSTANTS — [FILL: adjust values to match your design]
+// ══════════════════════════════════════════════════════════════════
+const GAME_TITLE = '[FILL: Game Title]';
+
+// [FILL: color palette]
+const PALETTE = {
+  bg:       '#1a1a2e',
+  sky:      '#16213e',
+  player:   '#00ccff',
+  platform: '#3a5f3a',
+  coin:     '#ffdd00',
+  enemy:    '#ff4444',
+  ui:       '#ffffff',
+  shopBg:   '#0a0a1e',
+  shopCard: '#1a1a3a',
+  shopSel:  '#2a3a5a',
+};
+
+let GAME_SCORE = 0;
+
+// ── Physics constants (RESEARCH-DERIVED — tuned for great game feel) ──
+const GRAVITY         = 1400;   // px/s² — fast, snappy
+const JUMP_FORCE      = -580;   // initial jump velocity
+const JUMP_RELEASE    = 0.42;   // vy multiplier on early release (variable height)
+const MAX_FALL        = 800;    // terminal velocity
+const WALK_SPEED      = 200;
+const RUN_SPEED       = 320;
+const GROUND_ACCEL    = 1400;   // ground acceleration
+const GROUND_DECEL    = 2000;   // ground deceleration (friction)
+const AIR_ACCEL       = 700;    // reduced air control
+const COYOTE_TIME     = 0.10;   // seconds after leaving ground that jump still works
+const JUMP_BUFFER     = 0.12;   // seconds jump is remembered before landing
+const MAX_JUMPS       = 2;      // 1 = single jump, 2 = double jump
+
+// ── Player ──────────────────────────────────────────────────────
+const player = {
+  x: 60, y: 200,
+  vx: 0, vy: 0,
+  w: 28, h: 40,
+  onGround: false, wasOnGround: false,
+  facingRight: true,
+  jumpsLeft: MAX_JUMPS,
+  isJumping: false,  // true while holding jump (variable height tracking)
+  coyoteTimer: 0,
+  jumpBufferTimer: 0,
+  hp: 3, maxHp: 3,
+  iframes: 0, IFRAME_DUR: 1.2,
+  score: 0,
+  checkpoint: { x: 60, y: 200 },
+  // Animation
+  animState: 'idle',   // idle | run | jump | fall | hurt
+  animTimer: 0,
+  squashX: 1.0,        // squash/stretch for game feel
+  squashY: 1.0,
+  prevY: 0,            // for one-way platform check
+};
+
+// ── Enemy pool ───────────────────────────────────────────────────
+const enemyPool = createPool(() => ({
+  alive:false,x:0,y:0,vx:60,vy:0,w:32,h:32,
+  onGround:false,patrolLeft:0,patrolRight:200,
+  facingRight:true,hp:1,maxHp:1,type:'walker',
+  flashTimer:0,points:100
+}), 30);
+
+// ── Collectible pool ─────────────────────────────────────────────
+const coinPool = createPool(() => ({alive:false,x:0,y:0,w:16,h:16,value:10,bobTimer:0}), 60);
+
+// ── Camera ───────────────────────────────────────────────────────
+const cam = {
+  x: 0, y: 0,
+  targetX: 0, targetY: 0,
+  SMOOTH: 7.0,
+  LEAD_X: 120,
+  shakeX: 0, shakeY: 0,
+};
+
+// ── Level data ───────────────────────────────────────────────────
+const TILE_SIZE = 32;
+let tileMap = [];        // 2D array: tileMap[row][col] — 0=empty, 1=solid, 2=one-way
+let mapCols = 0, mapRows = 0;
+const platforms = [];    // [{x,y,w,h,type,vx,vy,...}] for moving/special platforms
+
+// ══════════════════════════════════════════════════════════════════
+// [FILL: LEVEL DATA]
+// ══════════════════════════════════════════════════════════════════
+// Option A: Tile map
+// tileMap = [
+//   [1,1,1,1, ...],  // row 0
+//   [1,0,0,0, ...],  // row 1
+//   ...
+// ];
+// mapCols = tileMap[0].length; mapRows = tileMap.length;
+//
+// Option B: Platform list (simpler, recommended for 3-4 level games)
+// platforms = [
+//   {x:0, y:350, w:200, h:TILE_SIZE, type:'solid'},
+//   {x:250,y:280,w:120, h:TILE_SIZE, type:'solid'},
+//   {x:420,y:220,w:80,  h:TILE_SIZE, type:'oneWay'},  // passable from below
+//   // Moving platform:
+//   {x:600,y:200,w:100,h:TILE_SIZE,type:'moving',startX:600,endX:700,speed:60,t:0,vx:0,vy:0},
+// ];
+
+// [FILL: Also define LEVEL_DATA as an array of level configs for multi-level games]
+
+// ══════════════════════════════════════════════════════════════════
+// COLLISION HELPERS — DO NOT MODIFY
+// These implement the research-proven "X then Y" AABB resolution
+// ══════════════════════════════════════════════════════════════════
+function getPlatformAt(px, py, pw, ph) {
+  return platforms.filter(p => p.type !== 'gone' && aabb(px,py,pw,ph, p.x,p.y,p.w,p.h));
+}
+
+// Resolve entity against solid platforms — returns updated entity
+function resolveEntityPlatforms(ent, dt) {
+  // Save previous Y for one-way check
+  ent.prevY = ent.prevY !== undefined ? ent.prevY : ent.y;
+  ent.wasOnGround = ent.onGround;
+  ent.onGround = false;
+
+  // ── X axis first ──────────────────────────────────────────────
+  ent.x += ent.vx * dt;
+  getPlatformAt(ent.x, ent.y, ent.w, ent.h).forEach(p => {
+    if (p.type === 'oneWay') return;  // ignore one-way for X
+    const overlapX = ent.vx > 0
+      ? (ent.x + ent.w) - p.x
+      : p.x + p.w - ent.x;
+    if (overlapX > 0) {
+      ent.x += ent.vx > 0 ? -overlapX : overlapX;
+      ent.vx = 0;
+    }
+  });
+
+  // ── Y axis second ─────────────────────────────────────────────
+  ent.y += ent.vy * dt;
+  getPlatformAt(ent.x, ent.y, ent.w, ent.h).forEach(p => {
+    if (p.type === 'oneWay') {
+      // One-way: only solid when falling onto the top surface from above
+      const prevBottom = ent.prevY + ent.h;
+      const platTop    = p.y;
+      if (ent.vy >= 0 && prevBottom <= platTop + 2) {
+        ent.y = platTop - ent.h;
+        ent.vy = 0;
+        ent.onGround = true;
+      }
+      return;
+    }
+    // Solid platform
+    if (ent.vy >= 0) {
+      // Landing on top
+      ent.y = p.y - ent.h;
+      ent.vy = 0;
+      ent.onGround = true;
+    } else {
+      // Hitting ceiling
+      ent.y = p.y + p.h;
+      ent.vy = 0;
+    }
+  });
+
+  ent.prevY = ent.y;
+
+  // Screen bounds
+  if (ent.x < 0) { ent.x = 0; ent.vx = 0; }
+  // [FILL: Add map right boundary when map width is known]
+}
+
+// ── Meta-progression runtime ──────────────────────────────────────────────────
+let _runCoins      = 0;
+let _gameoverTimer = 0;
+let _shopIdx       = 0;
+let _magnetRange   = 0;
+let _scoreMultiplier = 1.0;
+
+const UPGRADES = [
+  {id:'jumps',  name:'Extra Jump',   desc:'One more jump per run',        maxLevel:2, costs:[40,100],      icon:'🦘'},
+  {id:'magnet', name:'Coin Magnet',  desc:'Pull coins from farther away', maxLevel:3, costs:[30,60,120],   icon:'🧲'},
+  {id:'speed',  name:'Speed Boost',  desc:'Move faster each run',         maxLevel:2, costs:[35,80],       icon:'⚡'},
+  {id:'score',  name:'Score Boost',  desc:'Score ×1.25 per level',        maxLevel:3, costs:[35,70,140],   icon:'⭐'},
+];
+
+const _META_KEY = 'meta_platformer';
+let _meta = { coins:0, upgrades:{} };
+function loadMeta(){try{_meta=JSON.parse(localStorage.getItem(_META_KEY))||{coins:0,upgrades:{}};}catch(e){_meta={coins:0,upgrades:{}};} if(!_meta.upgrades)_meta.upgrades={};}
+function saveMeta(){try{localStorage.setItem(_META_KEY,JSON.stringify(_meta));}catch(e){}}
+function addRunCoins(n){_meta.coins+=Math.floor(n);saveMeta();}
+function getUpgradeLevel(id){return _meta.upgrades[id]||0;}
+function buyUpgrade(id){const up=UPGRADES.find(u=>u.id===id);if(!up)return false;const lvl=getUpgradeLevel(id);if(lvl>=up.maxLevel)return false;const cost=up.costs[lvl];if(_meta.coins<cost)return false;_meta.coins-=cost;_meta.upgrades[id]=lvl+1;saveMeta();return true;}
+
+function updateGameover(dt){_gameoverTimer-=dt;if(_gameoverTimer<=0||anyAction()){addRunCoins(_runCoins);_shopIdx=0;setState('shop');}}
+function _shopHit(mx,my,x,y,w,h){return mx>=x&&mx<=x+w&&my>=y&&my<=y+h;}
+function updateShop(dt){
+  if(!anyAction())return;
+  const cardW=160,cardH=128,gap=16,cols=Math.min(UPGRADES.length,UPGRADES.length<=4?4:3),totalW=cols*cardW+(cols-1)*gap,sx=(W-totalW)/2,sy=Math.round(H*0.22);
+  for(let i=0;i<UPGRADES.length;i++){
+    if(_shopHit(Mouse.x,Mouse.y,sx+i*(cardW+gap),sy,cardW,cardH)){_shopIdx=i;if(buyUpgrade(UPGRADES[i].id)){sfx.play(660,0.12,'sine',0.1);applyUpgrades();}else sfx.play(110,0.06,'sawtooth',0.08);return;}
+  }
+  const btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+32;
+  if(_shopHit(Mouse.x,Mouse.y,btnX,btnY,btnW,btnH)){sfx.play(440,0.08,'square',0.1);startGame();setState('playing');}
+}
+function renderShop(){
+  ctx.fillStyle=PALETTE.shopBg;ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle=PALETTE.accent||'#ff8800';ctx.font='bold 24px system-ui,sans-serif';ctx.fillText('UPGRADE SHOP',W/2,Math.round(H*0.10));
+  ctx.fillStyle='#ffdd00';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,Math.round(H*0.18));
+  const cardW=160,cardH=128,gap=16,cols=Math.min(UPGRADES.length,UPGRADES.length<=4?4:3),totalW=cols*cardW+(cols-1)*gap,sx=(W-totalW)/2,sy=Math.round(H*0.22);
+  for(let i=0;i<UPGRADES.length;i++){
+    const up=UPGRADES[i],lvl=getUpgradeLevel(up.id),cx=sx+i*(cardW+gap),maxed=lvl>=up.maxLevel,canBuy=!maxed&&_meta.coins>=up.costs[lvl];
+    ctx.fillStyle=i===_shopIdx?PALETTE.shopSel:PALETTE.shopCard;ctx.strokeStyle=maxed?'#4caf50':canBuy?'#ffdd00':'#444';ctx.lineWidth=i===_shopIdx?2:1;
+    ctx.beginPath();ctx.roundRect(cx,sy,cardW,cardH,8);ctx.fill();ctx.stroke();
+    ctx.font='24px system-ui,sans-serif';ctx.fillStyle='#fff';ctx.fillText(up.icon,cx+cardW/2,sy+30);
+    ctx.font='bold 11px system-ui,sans-serif';ctx.fillText(up.name,cx+cardW/2,sy+50);
+    ctx.fillStyle='#aaa';ctx.font='10px system-ui,sans-serif';ctx.fillText(up.desc,cx+cardW/2,sy+64);
+    for(let p=0;p<up.maxLevel;p++){ctx.fillStyle=p<lvl?'#ffdd00':'#333';ctx.beginPath();ctx.arc(cx+cardW/2-(up.maxLevel-1)*7+p*14,sy+84,5,0,Math.PI*2);ctx.fill();}
+    ctx.font='bold 11px system-ui,sans-serif';ctx.fillStyle=maxed?'#4caf50':canBuy?'#ffdd00':'#555';ctx.fillText(maxed?'MAXED':`${up.costs[lvl]} coins`,cx+cardW/2,sy+108);
+  }
+  const btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+30;
+  ctx.fillStyle='#1a4a1a';ctx.strokeStyle='#4caf50';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(btnX,btnY,btnW,btnH,8);ctx.fill();ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='bold 16px system-ui,sans-serif';ctx.fillText('▶  PLAY',W/2,btnY+26);
+  ctx.textAlign='left';
+}
+
+function applyUpgrades(){
+  _magnetRange=[0,80,150,240][getUpgradeLevel('magnet')];
+  _scoreMultiplier=[1.0,1.25,1.5,2.0][getUpgradeLevel('score')];
+  player.jumpsLeft=MAX_JUMPS+getUpgradeLevel('jumps');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME INIT
+// ══════════════════════════════════════════════════════════════════
+function initGame() {
+  loadMeta();
+  // [FILL: Load level 1 — set up tileMap or platforms array]
+  // Example minimal level:
+  platforms.push({x:0,y:380,w:800,h:50,type:'solid'});       // floor
+  platforms.push({x:150,y:300,w:120,h:TILE_SIZE,type:'solid'});
+  platforms.push({x:320,y:240,w:100,h:TILE_SIZE,type:'solid'});
+  platforms.push({x:500,y:200,w:80, h:TILE_SIZE,type:'oneWay'});
+  platforms.push({x:600,y:160,w:100,h:TILE_SIZE,type:'moving',startX:600,endX:680,speed:50,t:0,vx:0,vy:0,frameDelta:{x:0,y:0},prevX:600,prevY:160});
+
+  // Spawn some coins
+  [200,300,400,500,150,650].forEach((x,i) => {
+    coinPool.get(c => { c.x=x; c.y=200+i*10-30; c.bobTimer=Math.random()*Math.PI*2; });
+  });
+  // [FILL: Spawn enemies for level]
+}
+
+function startGame() {
+  loadMeta();
+  GAME_SCORE = 0;
+  _runCoins = 0; _gameoverTimer = 1.5;
+  player.x = player.checkpoint.x; player.y = player.checkpoint.y;
+  player.vx = 0; player.vy = 0;
+  player.hp = player.maxHp; player.iframes = 0;
+  player.jumpsLeft = MAX_JUMPS; player.coyoteTimer = 0; player.jumpBufferTimer = 0;
+  player.onGround = false; player.isJumping = false;
+  enemyPool.clear(); coinPool.clear(); Popups.length = 0;
+  platforms.length = 0;
+  initGame();
+  applyUpgrades();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// JUMPING — research-proven feel mechanics (DO NOT MODIFY LOGIC)
+// ══════════════════════════════════════════════════════════════════
+function executeJump() {
+  const isDoubleJump = !player.onGround && player.coyoteTimer <= 0;
+  player.vy = isDoubleJump ? JUMP_FORCE * 0.88 : JUMP_FORCE;
+  if (isDoubleJump) player.jumpsLeft--;
+  else { player.jumpsLeft = MAX_JUMPS - 1; player.coyoteTimer = 0; }
+  player.isJumping = true;
+  player.jumpBufferTimer = 0;
+  // Squash/stretch on jump
+  player.squashX = 0.7; player.squashY = 1.35;
+  spawnParticles(player.x+player.w/2, player.y+player.h, 4, {color:'#fff', speed:40, angle:Math.PI*0.5, spread:0.6, gravity:50, life:0.25});
+  sfx.play(isDoubleJump?660:440, 0.08, 'square', 0.09);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// UPDATE
+// ══════════════════════════════════════════════════════════════════
+function updatePlaying(dt) {
+  // ── Moving platforms ─────────────────────────────────────────
+  platforms.forEach(p => {
+    if (p.type !== 'moving') return;
+    p.prevX = p.x; p.prevY = p.y;
+    p.t += dt * p.speed;
+    const frac = (Math.sin(p.t * Math.PI / (p.endX - p.startX + 0.001)) + 1) / 2;
+    p.x = p.startX + (p.endX - p.startX) * frac;
+    p.frameDelta = { x: p.x - p.prevX, y: p.y - p.prevY };
+  });
+
+  // ── Player horizontal movement ────────────────────────────────
+  const isRunning = keyDown('ShiftLeft') || keyDown('ShiftRight');
+  const targetSpeed = isRunning ? RUN_SPEED : WALK_SPEED;
+  const movingLeft  = keyDown('ArrowLeft')  || keyDown('KeyA') || (Touch.swipeDx < -15);
+  const movingRight = keyDown('ArrowRight') || keyDown('KeyD') || (Touch.swipeDx > 15);
+
+  if (movingLeft || movingRight) {
+    const dir = movingLeft ? -1 : 1;
+    if (movingRight) player.facingRight = true;
+    if (movingLeft)  player.facingRight = false;
+    const accel = player.onGround ? GROUND_ACCEL : AIR_ACCEL;
+    player.vx = clamp(player.vx + dir * accel * dt, -targetSpeed, targetSpeed);
+  } else {
+    // Decelerate
+    const decel = player.onGround ? GROUND_DECEL : AIR_ACCEL * 0.5;
+    if (Math.abs(player.vx) <= decel * dt) player.vx = 0;
+    else player.vx -= Math.sign(player.vx) * decel * dt;
+  }
+
+  // ── Coyote time ───────────────────────────────────────────────
+  if (player.wasOnGround && !player.onGround) player.coyoteTimer = COYOTE_TIME;
+  player.coyoteTimer = Math.max(0, player.coyoteTimer - dt);
+
+  // ── Jump buffer ───────────────────────────────────────────────
+  if (keyPressed('Space') || keyPressed('ArrowUp') || keyPressed('KeyW') || Touch.justTapped) {
+    player.jumpBufferTimer = JUMP_BUFFER;
+  }
+  player.jumpBufferTimer = Math.max(0, player.jumpBufferTimer - dt);
+
+  // ── Jump execution ────────────────────────────────────────────
+  const canJump = player.onGround || player.coyoteTimer > 0 || player.jumpsLeft > 0;
+  if (player.jumpBufferTimer > 0 && canJump) executeJump();
+
+  // ── Variable jump height ──────────────────────────────────────
+  if (player.isJumping) {
+    const jumpReleased = !keyDown('Space') && !keyDown('ArrowUp') && !keyDown('KeyW');
+    if (jumpReleased && player.vy < 0) {
+      player.vy *= JUMP_RELEASE;
+      player.isJumping = false;
+    }
+    if (player.vy >= 0) player.isJumping = false;  // reached peak
+  }
+
+  // ── Gravity ───────────────────────────────────────────────────
+  const fallMultiplier = player.vy > 0 ? 1.55 : 1.0;  // fall faster = more satisfying
+  player.vy = Math.min(player.vy + GRAVITY * fallMultiplier * dt, MAX_FALL);
+
+  // ── Platform collision ────────────────────────────────────────
+  resolveEntityPlatforms(player, dt);
+
+  // ── Moving platform carry ─────────────────────────────────────
+  platforms.forEach(p => {
+    if (p.type !== 'moving' || !p.frameDelta) return;
+    const standing =
+      player.y + player.h >= p.y - 2 && player.y + player.h <= p.y + 4 &&
+      player.x + player.w > p.x && player.x < p.x + p.w && player.vy >= 0;
+    if (standing) { player.x += p.frameDelta.x; player.y += p.frameDelta.y; }
+  });
+
+  // ── On-ground effects ─────────────────────────────────────────
+  if (player.onGround && !player.wasOnGround) {
+    // Landing
+    const landSpeed = Math.abs(player.vy < -50 ? player.vy : 0);
+    if (landSpeed > 300) { triggerShake(3, 0.12); sfx.play(220, 0.06, 'sine', 0.08); }
+    player.squashX = 1.25; player.squashY = 0.72;
+    spawnParticles(player.x+player.w/2, player.y+player.h, 3, {color:'#ddd',speed:30,angle:Math.PI*0.5,spread:1.0,gravity:150,life:0.2});
+    player.jumpsLeft = MAX_JUMPS;
+    player.isJumping = false;
+  }
+
+  // Lerp squash/stretch back to 1
+  player.squashX = lerp(player.squashX, 1.0, dt * 12);
+  player.squashY = lerp(player.squashY, 1.0, dt * 12);
+
+  // ── Iframes ───────────────────────────────────────────────────
+  player.iframes = Math.max(0, player.iframes - dt);
+
+  // ── Enemy updates ─────────────────────────────────────────────
+  enemyPool.update(en => {
+    en.flashTimer = Math.max(0, en.flashTimer - dt);
+    // [FILL: enemy patrol movement]
+    // RULE: Check for wall and cliff ahead before reversing
+    // Example:
+    // en.x += en.vx * dt;
+    // if (en.x < en.patrolLeft || en.x + en.w > en.patrolRight) { en.vx *= -1; en.facingRight = !en.facingRight; }
+    // Apply gravity
+    en.vy = Math.min(en.vy + GRAVITY * dt, MAX_FALL);
+    resolveEntityPlatforms(en, dt);
+    return en.y < H + 100;  // remove if falls off screen
+  });
+
+  // ── Enemy collision with player ───────────────────────────────
+  if (player.iframes <= 0) {
+    enemyPool.active.forEach(en => {
+      if (!en.alive) return;
+      if (aabb(player.x, player.y, player.w, player.h, en.x, en.y, en.w, en.h)) {
+        // Stomp check: player falling onto top of enemy
+        const playerBottom = player.y + player.h;
+        const enemyTop = en.y;
+        if (player.vy > 0 && playerBottom - en.h * 0.35 <= enemyTop + 6) {
+          // Stomp — kill enemy
+          en.hp--;
+          if (en.hp <= 0) {
+            GAME_SCORE += en.points;
+            spawnParticles(en.x+en.w/2,en.y+en.h/2,8,{color:PALETTE.enemy,speed:60,life:0.35});
+            spawnPopup(en.x+en.w/2,en.y,`+${en.points}`,'#ff0',13);
+            sfx.play(660,0.08,'square',0.1);
+            en.alive = false;
+          }
+          player.vy = JUMP_FORCE * 0.55;  // bounce off
+          player.isJumping = false;
+        } else {
+          // Side hit — take damage
+          player.hp--;
+          player.iframes = player.IFRAME_DUR;
+          player.vx = (player.x < en.x ? -1 : 1) * 200;
+          player.vy = -250;
+          triggerShake(4, 0.20);
+          sfx.play(150, 0.18, 'sawtooth', 0.14);
+          spawnParticles(player.x+player.w/2,player.y+player.h/2,6,{color:'#f44',speed:55});
+          if (player.hp <= 0) { saveHiScore(GAME_SCORE); _runCoins=player.coins||Math.floor(GAME_SCORE/100); _gameoverTimer=1.5; setState('gameover'); }
+        }
+      }
+    });
+  }
+
+  // ── Coin collection ───────────────────────────────────────────
+  coinPool.update(c => {
+    c.bobTimer += dt;
+    if (aabb(player.x,player.y,player.w,player.h, c.x,c.y,c.w,c.h)) {
+      GAME_SCORE += c.value;
+      spawnPopup(c.x,c.y,`+${c.value}`,'#ff0',13);
+      sfx.play(880,0.07,'square',0.09);
+      spawnParticles(c.x+c.w/2,c.y+c.h/2,4,{color:PALETTE.coin,speed:35,life:0.25});
+      return false;
+    }
+    return true;
+  });
+
+  // ── Death by falling ─────────────────────────────────────────
+  if (player.y > H + 100) {
+    player.hp--;
+    if (player.hp <= 0) { saveHiScore(GAME_SCORE); _runCoins=player.coins||Math.floor(GAME_SCORE/100); _gameoverTimer=1.5; setState('gameover'); }
+    else { player.x = player.checkpoint.x; player.y = player.checkpoint.y; player.vx=0; player.vy=0; }
+  }
+
+  // ── Camera smooth follow ─────────────────────────────────────
+  const leadX = player.facingRight ? cam.LEAD_X : -cam.LEAD_X;
+  // [FILL: Set map width to clamp camera]
+  const mapW = mapCols * TILE_SIZE || 2000;
+  const mapH = mapRows * TILE_SIZE || H;
+  cam.targetX = player.x + player.w/2 - W/2 + leadX;
+  cam.targetY = player.y + player.h/2 - H/2 - 30;
+  cam.x = lerp(cam.x, clamp(cam.targetX, 0, Math.max(0, mapW - W)), cam.SMOOTH * dt);
+  cam.y = lerp(cam.y, clamp(cam.targetY, 0, Math.max(0, mapH - H)), cam.SMOOTH * dt);
+
+  // ── Pause ─────────────────────────────────────────────────────
+  if (keyPressed('Escape') || keyPressed('KeyP')) setState('paused');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════════════════
+function renderMenu() {
+  ctx.fillStyle = PALETTE.bg; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle='#ff0'; ctx.font=`bold 30px ${GAME_TITLE.includes('[FILL')?'monospace':'system-ui,sans-serif'}`; ctx.fillText(GAME_TITLE, W/2, H*0.30);
+  ctx.fillStyle='#aaa'; ctx.font='12px system-ui,sans-serif'; ctx.fillText('← → to move  •  SPACE to jump  •  Double jump!', W/2, H*0.46);
+  if(_meta.coins>0){ctx.fillStyle='#ffdd00';ctx.font='bold 13px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,H*0.53);}
+  ctx.fillStyle='#fff'; ctx.font='bold 16px system-ui,sans-serif'; ctx.fillText('SPACE / TAP to play', W/2, H*0.58);
+  ctx.fillStyle='#888'; ctx.font='13px system-ui,sans-serif'; ctx.fillText(`BEST: ${_hiScore}`, W/2, H*0.68);
+  ctx.textAlign='left';
+}
+
+function renderPlaying() {
+  // Background
+  ctx.fillStyle = PALETTE.bg; ctx.fillRect(0, 0, W, H);
+  // [FILL: draw parallax background layers]
+
+  ctx.save();
+  ctx.translate(-Math.round(cam.x), -Math.round(cam.y));
+
+  // ── Platforms ────────────────────────────────────────────────
+  platforms.forEach(p => {
+    // [FILL: draw platform with style matching your palette]
+    ctx.fillStyle = p.type === 'oneWay' ? '#2a4a2a' : PALETTE.platform;
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    // Top edge highlight
+    ctx.fillStyle = p.type === 'oneWay' ? '#4a8a4a' : '#5a8a5a';
+    ctx.fillRect(p.x, p.y, p.w, 3);
+  });
+
+  // ── Coins ────────────────────────────────────────────────────
+  coinPool.active.forEach(c => {
+    const bob = Math.sin(c.bobTimer * 3.5) * 3;
+    ctx.fillStyle = PALETTE.coin;
+    ctx.shadowBlur = 6; ctx.shadowColor = PALETTE.coin;
+    ctx.beginPath(); ctx.arc(c.x+c.w/2, c.y+c.h/2+bob, c.w/2, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+  });
+
+  // ── Enemies ──────────────────────────────────────────────────
+  enemyPool.active.forEach(en => {
+    ctx.globalAlpha = en.flashTimer > 0 ? 0.35 : 1.0;
+    // [FILL: draw enemy with distinct shape per type]
+    ctx.fillStyle = en.flashTimer > 0 ? '#fff' : PALETTE.enemy;
+    ctx.fillRect(en.x, en.y, en.w, en.h);
+    ctx.globalAlpha = 1;
+  });
+
+  // ── Player ───────────────────────────────────────────────────
+  const blink = player.iframes > 0 && Math.floor(player.iframes / 0.07) % 2 === 0;
+  if (!blink) {
+    ctx.globalAlpha = player.iframes > 0 ? 0.55 : 1.0;
+    const px = player.x + player.w / 2;
+    const py = player.y + player.h / 2;
+    const drawW = player.w * player.squashX;
+    const drawH = player.h * player.squashY;
+    ctx.fillStyle = PALETTE.player;
+    ctx.shadowBlur = 8; ctx.shadowColor = PALETTE.player;
+    // [FILL: draw player sprite — use arc/roundRect, NOT plain fillRect]
+    ctx.beginPath();
+    ctx.roundRect(px - drawW/2, py - drawH/2, drawW, drawH, 4);
+    ctx.fill();
+    // Eyes showing facing direction
+    ctx.shadowBlur = 0; ctx.fillStyle = '#001a2e';
+    const eyeX = player.facingRight ? px + 2 : px - 2;
+    ctx.beginPath(); ctx.arc(eyeX, py - drawH*0.15, 4, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+
+  // ── HUD (screen-space, no camera transform) ──────────────────
+  drawText(`SCORE: ${GAME_SCORE}`, 10, 22, '#fff', 14);
+  drawText(`BEST: ${_hiScore}`, W - 10, 22, '#888', 12, 'right');
+  // HP
+  for (let i = 0; i < player.maxHp; i++) {
+    ctx.fillStyle = i < player.hp ? '#f44' : '#333';
+    ctx.beginPath(); ctx.arc(14 + i*22, H - 14, 8, 0, Math.PI*2); ctx.fill();
+  }
+  // Controls hint (first 5 seconds)
+  // [FILL: show control hints on first play]
+}
+
+// ══════════════════════════════════════════════════════════════════
+// START
+// ══════════════════════════════════════════════════════════════════
+initGame();
+requestAnimationFrame(t => { lastTime = t; requestAnimationFrame(loop); });
+</script>
+</body></html>

@@ -461,6 +461,41 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
     # Enrichment — create the GenreProfile
     genre_profile = agent_enrichisseur.run(cleaned_prompt, classification, research)
 
+    # Fix 8 — Validate enrichisseur output (can be empty after Gemini 503)
+    _mec_count = len(genre_profile.mecaniques_obligatoires)
+    _pe_len = len(genre_profile.prompt_enrichi or '')
+    if _mec_count < 3 or _pe_len < 200:
+        coordinateur_log.warning(
+            f"Enrichisseur output insufficient ({_mec_count} mechanics, {_pe_len} chars) — applying fallbacks"
+        )
+        if not genre_profile.genre_principal:
+            genre_profile.genre_principal = classification.genre_principal
+        if not genre_profile.sous_genre:
+            genre_profile.sous_genre = classification.sous_genre
+        if not genre_profile.style_visuel:
+            genre_profile.style_visuel = classification.style_visuel_attendu
+        if not genre_profile.type_gameplay:
+            genre_profile.type_gameplay = classification.type_gameplay
+        if _pe_len < 200:
+            genre_profile.prompt_enrichi = cleaned_prompt
+        if _mec_count < 3:
+            _genre_lc = (genre_profile.genre_principal or classification.genre_principal).lower()
+            _mechanic_defaults = {
+                'shoot': ['shoot_enemies', 'dodge_bullets', 'score_multiplier'],
+                'platform': ['jump', 'run', 'collect_items'],
+                'tower': ['place_towers', 'manage_resources', 'wave_defense'],
+                'rpg': ['dialogue', 'inventory', 'level_up'],
+                'puzzle': ['match_tiles', 'solve_pattern', 'limited_moves'],
+                'racing': ['accelerate', 'steer', 'boost'],
+                'strategy': ['manage_resources', 'build_units', 'attack_base'],
+            }
+            for _key, _mechs in _mechanic_defaults.items():
+                if _key in _genre_lc:
+                    genre_profile.mecaniques_obligatoires = _mechs
+                    break
+            else:
+                genre_profile.mecaniques_obligatoires = ['move', 'score', 'game_over']
+
     # Propagate 3D detection from classifier to GenreProfile
     if est_3d:
         genre_profile.technologie_rendu = "threejs"
@@ -506,6 +541,26 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
     elif not _gdd_mechanics and not _gdd_systems:
         coordinateur_log.warning("G5: GDD without mechanics or systems detected (unexpected key?)")
 
+    # Q4: GDD depth enforcement — retry if game_systems < 3 (shallow GDD → shallow game)
+    _gdd_systems_count = len(_gdd_systems) if isinstance(_gdd_systems, dict) else len(_gdd_systems or [])
+    _gdd_mechanics_count = len(_gdd_mechanics) if isinstance(_gdd_mechanics, list) else 0
+    if _gdd_systems_count < 3 and _gdd_mechanics_count < 3:
+        coordinateur_log.warning(
+            f"Q4: GDD depth too shallow (systems={_gdd_systems_count}, mechanics={_gdd_mechanics_count}) — retry"
+        )
+        _gdd_deep_retry = agent_game_designer.run(genre_profile)
+        if _gdd_deep_retry:
+            _retry_sys = (
+                _gdd_deep_retry.get('systemes_jeu') or _gdd_deep_retry.get('systemes_principaux')
+                or _gdd_deep_retry.get('systems') or {}
+            )
+            _retry_sys_count = len(_retry_sys) if isinstance(_retry_sys, dict) else 0
+            if _retry_sys_count >= 3:
+                gdd = _gdd_deep_retry
+                coordinateur_log.success(f"Q4: GDD depth retry OK — {_retry_sys_count} systems")
+            else:
+                coordinateur_log.warning(f"Q4: retry also shallow ({_retry_sys_count} systems) — continuing")
+
     # I14: the 4 other Phase 2 agents in parallel (max_workers=4)
     p2 = _parallel([
         ("tech",         agent_tech_architect.run, [genre_profile, gdd]),
@@ -539,6 +594,45 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
     coordinateur_log.success("Phase 2 complete — full context assembled")
 
     # ─────────────────────────────────────────────
+    # PHASE 2.5: TEMPLATE SELECTION
+    # ─────────────────────────────────────────────
+    # Select a genre-matched template as the crash-proof foundation.
+    # 2D: LLM fills [FILL] sections of the 2D Canvas template.
+    # 3D: LLM fills [FILL] sections of the Three.js template (preferred over modular).
+    from agents.phase3 import agent_template as _agent_template
+    _template_name = None
+    _template_html = None
+    _3d_template_name = None
+    _3d_template_html = None
+
+    if not est_3d:
+        _template_name, _template_html = _agent_template.run(genre_profile)
+        if _template_name:
+            coordinateur_log.success(
+                f"Template selected: {_template_name} "
+                f"({len(_template_html)} chars, {_template_html.count('[FILL')} [FILL] sections)"
+            )
+            push_event("agent_done", {
+                "agent": "Template Selector", "phase": "PHASE2",
+                "result": f"Template: {_template_name} ({_template_html.count('[FILL')} sections to customize)"
+            })
+        else:
+            coordinateur_log.info("No 2D template match — layered generation will be used")
+    else:
+        _3d_template_name, _3d_template_html = _agent_template.run_3d(genre_profile)
+        if _3d_template_name:
+            coordinateur_log.success(
+                f"3D template selected: {_3d_template_name} "
+                f"({len(_3d_template_html)} chars, {_3d_template_html.count('[FILL')} [FILL] sections)"
+            )
+            push_event("agent_done", {
+                "agent": "Template Selector 3D", "phase": "PHASE2",
+                "result": f"3D Template: {_3d_template_name} ({_3d_template_html.count('[FILL')} sections to customize)"
+            })
+        else:
+            coordinateur_log.info("No 3D template match — modular generation will be used")
+
+    # ─────────────────────────────────────────────
     # PHASE 3: GENERATION (modular)
     # ─────────────────────────────────────────────
     _check_stop()
@@ -549,17 +643,37 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
     est_3d_genre = genre_profile.technologie_rendu == "threejs"
 
     # Generation strategy:
-    # - Monolithic for ALL 2D games (more reliable, fewer failure points)
-    # - Modular ONLY for 3D games (Three.js) where complexity justifies it
-    use_modular = est_3d_genre
+    # - 3D + template match  → template adaptation (LLM fills [FILL] sections) — faster, more reliable
+    # - 3D + no template     → modular Three.js pipeline (agent_architecte → run_modulaire → assembleur)
+    # - 2D + template match  → run_from_template (single LLM call)
+    # - 2D + no template     → run_layered (full 8-layer pipeline)
+    use_modular = est_3d_genre and not _3d_template_html
 
-    CODE_MIN_VIABLE = 15000  # a real playable 2D game is >15K chars minimum
+    CODE_MIN_VIABLE = 15000  # a real playable game is >15K chars minimum
 
     # ─────────────────────────────────────────────
     # CODE GENERATION
     # ─────────────────────────────────────────────
+    if est_3d_genre and _3d_template_html:
+        # 3D template route — preferred: single call, ENGINE pre-wired, LLM fills [FILL] sections
+        coordinateur_log.info(f"3D route: template-based generation ({_3d_template_name})")
+        from agents.phase3._layer_gen import run_from_template_3d
+        code = run_from_template_3d(
+            context,
+            _3d_template_html,
+            patterns_reussis=successful_patterns,
+            erreurs_passees=past_errors,
+            game_logics=game_logics,
+        )
+        if code and len(code) >= CODE_MIN_VIABLE:
+            coordinateur_log.success(f"3D template code: {len(code)} characters")
+        else:
+            # Integrity check failed inside run_from_template_3d → fall back to modular
+            coordinateur_log.warning("3D template adaptation failed — falling back to modular pipeline")
+            use_modular = True
+
     if use_modular:
-        # 3D games — modular Three.js architecture
+        # 3D games — modular Three.js architecture (fallback or no template match)
         coordinateur_log.info("3D route: modular Three.js generation")
         architecture = agent_architecte.run(context)
 
@@ -577,18 +691,31 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
         generated = agent_testeur_modules.run(generated)
         code = agent_assembleur.run(generated, context)
         coordinateur_log.success(f"3D code assembled: {len(code)} characters")
-    else:
-        # 2D games — ALWAYS via the 5-layer system (never monolithic)
-        coordinateur_log.info("2D route: 5-layer generation (layered)")
-        from agents.phase3._layer_gen import run_layered
-        code = run_layered(
-            context,
-            patterns_reussis=successful_patterns,
-            erreurs_passees=past_errors,
-            game_logics=game_logics,        # A — detailed mechanics
-            level_design=level_design,       # 4 — level structure
-        )
-        coordinateur_log.success(f"2D layered code: {len(code)} characters")
+    elif not est_3d_genre:
+        if _template_html:
+            # 2D games with a matched template — single focused LLM call to fill [FILL] sections
+            coordinateur_log.info(f"2D route: template-based generation ({_template_name})")
+            from agents.phase3._layer_gen import run_from_template
+            code = run_from_template(
+                context,
+                _template_html,
+                patterns_reussis=successful_patterns,
+                erreurs_passees=past_errors,
+                game_logics=game_logics,
+            )
+            coordinateur_log.success(f"2D template code: {len(code)} characters")
+        else:
+            # 2D games without a template match — full 8-layer pipeline
+            coordinateur_log.info("2D route: layered generation (no template match)")
+            from agents.phase3._layer_gen import run_layered
+            code = run_layered(
+                context,
+                patterns_reussis=successful_patterns,
+                erreurs_passees=past_errors,
+                game_logics=game_logics,
+                level_design=level_design,
+            )
+            coordinateur_log.success(f"2D layered code: {len(code)} characters")
 
     # Basic sanity check: verify we have viable code
     game_title = context.gdd.get("titre", "Arcade Game")
@@ -608,6 +735,17 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
     def _post_generation_cleanup(html_code: str, ep: list) -> tuple[str, list]:
         """Coherence check + A1 JS linter — applied after any generation (init + E1)."""
         _ep = list(ep or [])
+
+        # B2: fix_all_auto loop x3 post-generation — each pass may unlock new fixes
+        # (runs first for 3D where fix_all_auto is not called inside the generation path)
+        from js_syntax_checker import fix_all_auto as _b2_faa
+        for _b2_i in range(3):
+            _b2_out, _b2_did, _b2_dscs = _b2_faa(html_code)
+            if not _b2_did:
+                break
+            html_code = _b2_out
+            if _b2_dscs:
+                coordinateur_log.info(f"B2 auto-fix pass {_b2_i+1}: {'; '.join(_b2_dscs[:3])}")
         if not use_modular:
             from agents.phase3._layer_gen import coherence_check as _coh_check
             _coh_issues = _coh_check(html_code)
@@ -641,6 +779,15 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
 
     code, past_errors = _post_generation_cleanup(code, past_errors)
 
+    # B4 — Inject dev console AFTER all validation passes (not inside run_from_template)
+    # This keeps the file ~97K during eslint/linter passes, avoiding timeout on 113K files
+    if _template_html and not est_3d_genre:
+        try:
+            from agents.phase3._layer_gen import _inject_dev_console as _inj_console
+            code = _inj_console(code, genre_profile.genre_principal)
+        except Exception as _e:
+            coordinateur_log.warning(f"Dev console injection failed: {_e}")
+
     # E1 — Live preview: store generated code for /api/preview
     try:
         from logger import store_code_preview
@@ -665,6 +812,10 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
     previous_score = 0.0
     bundle = None
     stagnation_count = 0
+    # Fix 3: best-version keeper — track highest-scoring (code, bundle) across all iterations
+    _best_code = code
+    _best_score = 0.0
+    _best_bundle = None
 
     def _safe_result(r, name: str) -> EvaluationResult:
         """Extracts an EvaluationResult from a raw value (dict or object)."""
@@ -713,9 +864,21 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
         score = bundle.score_global()
         exec_score = bundle.execution.score
 
+        # M5 — QC Technique coherence cap: a game that doesn't run can't score high technically
+        # A black screen is not "good code" regardless of static analysis
+        _tech_score = bundle.qc_technique.score
+        if exec_score < 4.0 and _tech_score > 6.0:
+            _capped_tech = min(_tech_score, 6.0)
+            coordinateur_log.warning(
+                f"M5: QC Technique {_tech_score:.1f} capped to {_capped_tech:.1f} "
+                f"(execution={exec_score:.1f} < 4.0 — non-running code cannot score high)"
+            )
+            bundle.qc_technique.score = _capped_tech
+            _tech_score = _capped_tech
+            score = bundle.score_global()
+
         # C1: minimum thresholds per dimension — block if not reached
         # (note: exec < 4.5 is always covered here since 4.5 < SCORE_MIN_EXECUTION=5.0)
-        _tech_score = bundle.qc_technique.score
         if exec_score < SCORE_MIN_EXECUTION or _tech_score < SCORE_MIN_TECHNIQUE:
             _blocking_reasons = []
             if exec_score < SCORE_MIN_EXECUTION:
@@ -733,17 +896,65 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
             past_errors = list(past_errors or []) + _err_from_exec[:3]
             # Limit past_errors (I7)
             past_errors = past_errors[-MAX_ERREURS_PASSEES:]
-            if not use_modular:
-                from agents.phase3._layer_gen import run_layered as _rl_e1
-                _regen_code = _rl_e1(context, patterns_reussis=successful_patterns,
-                                     erreurs_passees=past_errors, game_logics=game_logics,
-                                     level_design=level_design)
+            if _3d_template_html:
+                # E1 for 3D template route — re-adapt template with error feedback
+                coordinateur_log.info("E1 (3D template): re-adapting 3D template with error feedback")
+                from agents.phase3._layer_gen import run_from_template_3d as _rft3d_e1
+                _regen_code = _rft3d_e1(context, _3d_template_html,
+                                        patterns_reussis=successful_patterns,
+                                        erreurs_passees=past_errors, game_logics=game_logics)
+                if not _regen_code:
+                    # Template failed again — escalate to modular
+                    coordinateur_log.warning("E1 3D template failed again — escalating to modular")
+                    _arch_e1 = agent_architecte.run(context)
+                    from agents.phase3.agent_createur import run_modulaire as _rm_e1
+                    _gen_e1 = _rm_e1(context, _arch_e1, patterns_reussis=successful_patterns,
+                                     erreurs_passees=past_errors, game_logics=game_logics)
+                    _gen_e1 = agent_testeur_modules.run(_gen_e1)
+                    _regen_code = agent_assembleur.run(_gen_e1, context)
+                if _regen_code and len(_regen_code) >= CODE_MIN_VIABLE:
+                    code = _regen_code
+                    coordinateur_log.success(f"E1 3D regeneration complete: {len(code)} chars")
+                    code, past_errors = _post_generation_cleanup(code, past_errors)
+                    continue
+            elif not use_modular:
+                if _template_html:
+                    from agents.phase3._layer_gen import run_from_template as _rft_e1
+                    _regen_code = _rft_e1(context, _template_html,
+                                          patterns_reussis=successful_patterns,
+                                          erreurs_passees=past_errors, game_logics=game_logics)
+                else:
+                    from agents.phase3._layer_gen import run_layered as _rl_e1
+                    _regen_code = _rl_e1(context, patterns_reussis=successful_patterns,
+                                         erreurs_passees=past_errors, game_logics=game_logics,
+                                         level_design=level_design)
                 if _regen_code and len(_regen_code) >= CODE_MIN_VIABLE:
                     code = _regen_code
                     coordinateur_log.success(f"E1 regeneration complete: {len(code)} chars")
                     # K4 — apply coherence+linter on E1 code (bypasses main loop)
                     code, past_errors = _post_generation_cleanup(code, past_errors)
                     continue  # restart Phase 4 with the new code
+            else:
+                # Fix 3D-C: E1 regen for modular 3D games — re-run full Three.js generation
+                # with past errors injected so LLM avoids the same architectural mistakes
+                coordinateur_log.info("E1 (3D): re-running modular Three.js generation with error feedback")
+                _arch_e1 = agent_architecte.run(context)
+                from agents.phase3.agent_createur import run_modulaire as _rm_e1
+                _gen_e1 = _rm_e1(context, _arch_e1, patterns_reussis=successful_patterns,
+                                 erreurs_passees=past_errors, game_logics=game_logics)
+                _gen_e1 = agent_testeur_modules.run(_gen_e1)
+                _regen_code = agent_assembleur.run(_gen_e1, context)
+                if _regen_code and len(_regen_code) >= CODE_MIN_VIABLE:
+                    code = _regen_code
+                    coordinateur_log.success(f"E1 3D regeneration complete: {len(code)} chars")
+                    code, past_errors = _post_generation_cleanup(code, past_errors)
+                    continue  # restart Phase 4 with the new 3D code
+
+        # Fix 3: update best-version keeper
+        if score > _best_score:
+            _best_score = score
+            _best_code = code
+            _best_bundle = bundle
 
         # Log scores
         coordinateur_log.score("Score global", score)
@@ -956,27 +1167,65 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
             # I7: limit past_errors to 20 max to avoid prompt pollution
             past_errors = past_errors[-MAX_ERREURS_PASSEES:]
 
-            if not use_modular:
-                from agents.phase3._layer_gen import run_layered as _rl
-                if has_logic_errors and not has_render_errors:
-                    # Logic errors → targeted L2 hint in the errors
-                    coordinateur_log.warning("Patch insufficient — targeted regeneration (L2 logic errors)")
-                    past_errors.append("[L2-TARGET] Regenerate logic with these fixes: " + "; ".join(issue_descs[:3]))
-                    import memory as _mem
-                    _mem.save_layer_errors(game_genre, 2, issue_descs[:3])
-                else:
-                    coordinateur_log.warning("Patch insufficient — full layered regeneration")
-                new_code = _rl(
-                    context,
+            new_code = None
+            if _3d_template_html:
+                coordinateur_log.warning("Patch insufficient — 3D template re-adaptation")
+                from agents.phase3._layer_gen import run_from_template_3d as _rft3d_patch
+                new_code = _rft3d_patch(
+                    context, _3d_template_html,
                     patterns_reussis=successful_patterns,
                     erreurs_passees=past_errors,
                     game_logics=game_logics,
-                    level_design=level_design,
                 )
-                if new_code and len(new_code) >= CODE_MIN_VIABLE:
-                    code = new_code
-                    coordinateur_log.success(f"Layered regeneration: {len(code)} characters")
-                    code, past_errors = _post_generation_cleanup(code, past_errors)
+                if not new_code:
+                    # Escalate to modular
+                    coordinateur_log.warning("3D template re-adaptation failed — escalating to modular regen")
+                    _arch_patch = agent_architecte.run(context)
+                    from agents.phase3.agent_createur import run_modulaire as _rm_patch
+                    _gen_patch = _rm_patch(context, _arch_patch, patterns_reussis=successful_patterns,
+                                           erreurs_passees=past_errors, game_logics=game_logics)
+                    _gen_patch = agent_testeur_modules.run(_gen_patch)
+                    new_code = agent_assembleur.run(_gen_patch, context)
+            elif not use_modular:
+                if _template_html:
+                    coordinateur_log.warning("Patch insufficient — template re-adaptation")
+                    from agents.phase3._layer_gen import run_from_template as _rft_patch
+                    new_code = _rft_patch(
+                        context, _template_html,
+                        patterns_reussis=successful_patterns,
+                        erreurs_passees=past_errors,
+                        game_logics=game_logics,
+                    )
+                else:
+                    from agents.phase3._layer_gen import run_layered as _rl
+                    if has_logic_errors and not has_render_errors:
+                        coordinateur_log.warning("Patch insufficient — targeted regeneration (L2 logic errors)")
+                        past_errors.append("[L2-TARGET] Regenerate logic with these fixes: " + "; ".join(issue_descs[:3]))
+                        import memory as _mem
+                        _mem.save_layer_errors(game_genre, 2, issue_descs[:3])
+                    else:
+                        coordinateur_log.warning("Patch insufficient — full layered regeneration")
+                    new_code = _rl(
+                        context,
+                        patterns_reussis=successful_patterns,
+                        erreurs_passees=past_errors,
+                        game_logics=game_logics,
+                        level_design=level_design,
+                    )
+            if new_code and len(new_code) >= CODE_MIN_VIABLE:
+                code = new_code
+                coordinateur_log.success(f"Regeneration: {len(code)} characters")
+                code, past_errors = _post_generation_cleanup(code, past_errors)
+
+    # Fix 3: restore best-scoring version if later iterations caused a regression
+    if _best_bundle is not None and _best_score > score:
+        coordinateur_log.info(
+            f"Best-version keeper: restoring highest-scoring code "
+            f"(best={_best_score:.2f} > last={score:.2f})"
+        )
+        code = _best_code
+        bundle = _best_bundle
+        score = _best_score
 
     # ─────────────────────────────────────────────
     # PHASE 5 : FINALISATION
@@ -1046,7 +1295,7 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
                                 break
                     snippets.append(js_body[start:end])
                 if snippets:
-                    combined = '\n\n'.join(snippets[:3])[:3000]
+                    combined = '\n\n'.join(snippets[:3])[:100_000]
                     memory.save_pattern(genre_profile, final_score, combined, notes="auto-extrait score>=8")
                     coordinateur_log.success(f"Snippet réussi mémorisé ({len(snippets)} fonctions extraites)")
         except Exception as e:

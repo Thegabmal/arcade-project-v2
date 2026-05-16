@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>APEX CIRCUIT — Racing 3D</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+  #c { display: block; width: 100vw; height: 100vh; }
+
+  #hud {
+    position: fixed; inset: 0; pointer-events: none; font-family: system-ui, sans-serif;
+  }
+  #speed-disp {
+    position: absolute; bottom: 50px; right: 40px;
+    font-size: 52px; font-weight: 900; color: #fff; text-shadow: 0 0 20px #ffffff55;
+    line-height: 1;
+  }
+  #speed-unit { font-size: 14px; color: #aaa; letter-spacing: 3px; }
+  #lap-disp {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    font-size: 22px; font-weight: 700; color: #ffd700; letter-spacing: 2px;
+    text-shadow: 0 0 12px #ffd70055;
+  }
+  #time-disp {
+    position: absolute; top: 52px; left: 50%; transform: translateX(-50%);
+    font-size: 14px; color: #aaa; letter-spacing: 3px;
+  }
+  #best-disp {
+    position: absolute; top: 72px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; color: #666; letter-spacing: 2px;
+  }
+  #pos-disp {
+    position: absolute; top: 20px; right: 40px;
+    font-size: 30px; font-weight: 900; color: #fff;
+  }
+  #coins-disp { position: absolute; top: 20px; left: 30px; font-size: 15px; color: #ffd700; }
+  #gear-disp {
+    position: absolute; bottom: 100px; right: 56px;
+    font-size: 18px; color: #aaa; letter-spacing: 2px;
+  }
+  #mini-bar {
+    position: absolute; bottom: 34px; right: 40px;
+    width: 120px; height: 8px; background: #222; border-radius: 4px; overflow: hidden;
+  }
+  #rpm-fill { height: 100%; background: linear-gradient(90deg,#2ecc71,#ffd700,#e74c3c); border-radius: 4px; width: 0%; transition: width 0.1s; }
+  #checkpoint-banner {
+    position: absolute; top: 35%; left: 50%; transform: translateX(-50%);
+    font-size: 28px; font-weight: 700; color: #ffd700; letter-spacing: 4px;
+    opacity: 0; transition: opacity 0.3s; text-shadow: 0 0 20px #ffd700;
+  }
+  #wrong-way {
+    position: absolute; top: 40%; left: 50%; transform: translateX(-50%);
+    font-size: 32px; font-weight: 900; color: #e74c3c; letter-spacing: 4px;
+    opacity: 0; transition: opacity 0.3s;
+  }
+
+  #overlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.9); color: #fff;
+  }
+  #overlay h1 {
+    font-size: 54px; font-weight: 900; letter-spacing: 8px;
+    color: #ffd700; text-shadow: 0 0 30px #ffd70088;
+    font-family: 'Impact', system-ui; margin-bottom: 6px;
+  }
+  #overlay .sub { font-size: 13px; color: #666; letter-spacing: 4px; margin-bottom: 40px; }
+  .menu-btn {
+    padding: 13px 36px; margin: 5px;
+    font-size: 14px; font-weight: 700; letter-spacing: 2px;
+    border: 2px solid #ffd700; background: transparent; color: #ffd700;
+    cursor: pointer; text-transform: uppercase; transition: all 0.15s; font-family: system-ui;
+  }
+  .menu-btn:hover { background: #ffd700; color: #000; }
+  #result-time { font-size: 28px; color: #ffd700; margin: 16px 0; }
+  #result-sub { font-size: 13px; color: #666; margin-bottom: 24px; }
+
+  #shop-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.93);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; font-family: system-ui;
+  }
+  #shop-overlay h2 { font-size: 30px; color: #ffd700; letter-spacing: 4px; margin-bottom: 6px; }
+  #shop-coins-disp { font-size: 15px; color: #ffd700; margin-bottom: 26px; }
+  #shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 540px; width: 100%; }
+  .shop-card { border: 2px solid #333; padding: 16px; cursor: pointer; transition: all 0.15s; background: #080800; }
+  .shop-card:hover { border-color: #ffd700; background: #141000; }
+  .shop-card h3 { font-size: 13px; color: #ffd700; margin-bottom: 6px; }
+  .shop-card p  { font-size: 11px; color: #666; margin-bottom: 10px; line-height: 1.4; }
+  .shop-card .cost { font-size: 12px; color: #ffd700; font-weight: 700; }
+  .shop-card .lvl  { font-size: 11px; color: #444; float: right; }
+  #shop-skip { margin-top: 18px; font-size: 13px; color: #444; cursor: pointer; letter-spacing: 2px; }
+  #shop-skip:hover { color: #aaa; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" style="display:none;">
+  <div id="lap-disp">LAP 1 / 3</div>
+  <div id="time-disp">0:00.000</div>
+  <div id="best-disp">BEST —</div>
+  <div id="pos-disp">P1</div>
+  <div id="coins-disp">🪙 0</div>
+  <div id="speed-disp">0<br><span id="speed-unit">km/h</span></div>
+  <div id="gear-disp">GEAR 1</div>
+  <div id="mini-bar"><div id="rpm-fill"></div></div>
+  <div id="checkpoint-banner">CHECKPOINT ✓</div>
+  <div id="wrong-way">⚠ WRONG WAY</div>
+</div>
+
+<div id="overlay">
+  <h1>APEX CIRCUIT</h1>
+  <div class="sub">3D RACING</div>
+  <button class="menu-btn" id="btn-play">RACE</button>
+  <div style="font-size:11px;color:#555;margin-top:14px;">W/S or ↑/↓ — GAS / BRAKE &nbsp;|&nbsp; A/D or ←/→ — STEER</div>
+</div>
+
+<div id="shop-overlay">
+  <h2>GARAGE</h2>
+  <div id="shop-coins-disp">🪙 0</div>
+  <div id="shop-grid"></div>
+  <div id="shop-skip">[ SKIP → ]</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js"></script>
+<script>
+// ─── META ─────────────────────────────────────────────────────────────────────
+const META_KEY = 'meta_apex_circuit';
+const UPGRADES = [
+  { id:'engine',      name:'Engine Tune',   desc:'+15% top speed per level',         cost:40, maxLv:3, effect:'speed' },
+  { id:'tires',       name:'Racing Tires',  desc:'Better grip: +20% cornering',      cost:35, maxLv:3, effect:'grip' },
+  { id:'nitro',       name:'Nitro Tank',    desc:'Unlocks nitro burst (N key)',       cost:50, maxLv:1, effect:'nitro' },
+  { id:'aero',        name:'Aero Kit',      desc:'+10% acceleration per level',      cost:30, maxLv:3, effect:'accel' },
+];
+let meta={coins:0,upgrades:{}};
+function loadMeta(){try{const s=localStorage.getItem(META_KEY);if(s)meta=JSON.parse(s);}catch(e){}
+  UPGRADES.forEach(u=>{if(!meta.upgrades[u.id])meta.upgrades[u.id]=0;});}
+function saveMeta(){try{localStorage.setItem(META_KEY,JSON.stringify(meta));}catch(e){}}
+function buyUpgrade(id){
+  const u=UPGRADES.find(u=>u.id===id);if(!u)return;
+  const lv=meta.upgrades[id];if(lv>=u.maxLv)return;
+  const cost=u.cost*(lv+1);if(meta.coins<cost)return;
+  meta.coins-=cost;meta.upgrades[id]++;saveMeta();
+}
+function applyUpgrades(){
+  const lv=id=>meta.upgrades[id]||0;
+  car.maxSpeed=28+lv('engine')*4.2;
+  car.grip=0.88+lv('tires')*0.04;
+  car.hasNitro=lv('nitro')>0;
+  car.acceleration=12+lv('aero')*1.2;
+}
+loadMeta();
+
+// ─── THREE.JS ─────────────────────────────────────────────────────────────────
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+renderer.setSize(window.innerWidth,window.innerHeight);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x0a1020);
+scene.fog=new THREE.Fog(0x0a1020,60,160);
+
+const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,0.1,300);
+const clock=new THREE.Clock();
+
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+// ─── LIGHTING ─────────────────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x334466,0.9));
+const sun=new THREE.DirectionalLight(0xffd700,0.6); sun.position.set(20,30,20); sun.castShadow=true; scene.add(sun);
+// Track lights
+for(let i=0;i<8;i++){
+  const a=i/8*Math.PI*2;
+  const pl=new THREE.PointLight(0x4488ff,1.5,25);
+  pl.position.set(Math.cos(a)*42,6,Math.sin(a)*42); scene.add(pl);
+}
+
+// ─── TRACK (oval circuit) ─────────────────────────────────────────────────────
+const TRACK_R=40, TRACK_W=8;
+const trackPath=new THREE.CatmullRomCurve3([
+  new THREE.Vector3(TRACK_R,0,0),
+  new THREE.Vector3(TRACK_R,0,-20),
+  new THREE.Vector3(TRACK_R*0.5,0,-TRACK_R*0.85),
+  new THREE.Vector3(0,0,-TRACK_R),
+  new THREE.Vector3(-TRACK_R*0.5,0,-TRACK_R*0.85),
+  new THREE.Vector3(-TRACK_R,0,-20),
+  new THREE.Vector3(-TRACK_R,0,0),
+  new THREE.Vector3(-TRACK_R,0,20),
+  new THREE.Vector3(-TRACK_R*0.5,0,TRACK_R*0.85),
+  new THREE.Vector3(0,0,TRACK_R),
+  new THREE.Vector3(TRACK_R*0.5,0,TRACK_R*0.85),
+  new THREE.Vector3(TRACK_R,0,20),
+],true);
+
+const CHECKPOINTS=[];
+const N_CP=12;
+for(let i=0;i<N_CP;i++) {
+  const t=i/N_CP;
+  const p=trackPath.getPoint(t);
+  const tang=trackPath.getTangent(t);
+  CHECKPOINTS.push({t,pos:p,fwd:tang});
+}
+
+function buildTrack(){
+  // Ground
+  const groundGeo=new THREE.PlaneGeometry(300,300);
+  const groundMat=new THREE.MeshLambertMaterial({color:0x1a2a14});
+  const ground=new THREE.Mesh(groundGeo,groundMat); ground.rotation.x=-Math.PI/2;
+  ground.receiveShadow=true; scene.add(ground);
+
+  // Road surface
+  const roadGeo=new THREE.TubeGeometry(trackPath,200,TRACK_W,6,true);
+  const roadMat=new THREE.MeshLambertMaterial({color:0x222233,side:THREE.DoubleSide});
+  scene.add(new THREE.Mesh(roadGeo,roadMat));
+
+  // Center line (white)
+  const lineGeo=new THREE.TubeGeometry(trackPath,200,0.15,4,true);
+  scene.add(new THREE.Mesh(lineGeo,new THREE.MeshBasicMaterial({color:0xffffff})));
+
+  // Barrier (cones on edge)
+  const coneGeo=new THREE.ConeGeometry(0.35,1.2,6);
+  const coneMat=new THREE.MeshLambertMaterial({color:0xff6600});
+  for(let i=0;i<80;i++){
+    const t=i/80;
+    const p=trackPath.getPoint(t); const tang=trackPath.getTangent(t);
+    const perp=new THREE.Vector3(-tang.z,0,tang.x).normalize();
+    [-TRACK_W-0.5, TRACK_W+0.5].forEach(offset=>{
+      const cone=new THREE.Mesh(coneGeo,coneMat);
+      cone.position.set(p.x+perp.x*offset,0.6,p.z+perp.z*offset);
+      scene.add(cone);
+    });
+  }
+
+  // Start/finish line
+  const sfGeo=new THREE.PlaneGeometry(TRACK_W*2,1.5);
+  const sfMat=new THREE.MeshBasicMaterial({color:0xffffff});
+  const sf=new THREE.Mesh(sfGeo,sfMat); sf.rotation.x=-Math.PI/2;
+  const sfPos=trackPath.getPoint(0); sf.position.set(sfPos.x,0.01,sfPos.z); scene.add(sf);
+
+  // Trees / scenery
+  for(let i=0;i<30;i++){
+    const a=Math.random()*Math.PI*2, r=60+Math.random()*30;
+    const trunkH=2+Math.random()*3;
+    const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.3,trunkH,5),
+      new THREE.MeshLambertMaterial({color:0x5a3820}));
+    trunk.position.set(Math.cos(a)*r,trunkH/2,Math.sin(a)*r);
+    const leafR=1.5+Math.random();
+    const leaf=new THREE.Mesh(new THREE.SphereGeometry(leafR,7,7),
+      new THREE.MeshLambertMaterial({color:0x2a6a2a}));
+    leaf.position.copy(trunk.position); leaf.position.y+=trunkH;
+    scene.add(trunk); scene.add(leaf);
+  }
+}
+
+// ─── CAR ─────────────────────────────────────────────────────────────────────
+const car={
+  mesh:null,
+  pos:new THREE.Vector3(TRACK_R,0.5,0),
+  dir:new THREE.Vector3(0,0,-1),
+  speed:0, steer:0,
+  maxSpeed:28, grip:0.88, acceleration:12,
+  hasNitro:false, nitro:100, nitroing:false,
+  lap:1, maxLaps:3,
+  lastCp:-1, cpCount:0,
+  raceTime:0, lapStart:0, bestLap:Infinity,
+  finished:false,
+};
+
+function buildCar(){
+  const grp=new THREE.Group();
+  const mat=new THREE.MeshLambertMaterial({color:0xe74c3c});
+  const matDark=new THREE.MeshLambertMaterial({color:0x222222});
+  // Body
+  const body=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.5,3.2),mat);
+  body.position.y=0.35; grp.add(body);
+  // Cabin
+  const cab=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.5,1.6),mat);
+  cab.position.set(0,0.85,-0.2); grp.add(cab);
+  // Wheels
+  const wheelGeo=new THREE.CylinderGeometry(0.35,0.35,0.25,12);
+  [[-0.95,0.35,1.1],[0.95,0.35,1.1],[-0.95,0.35,-1.1],[0.95,0.35,-1.1]].forEach(([x,y,z])=>{
+    const w=new THREE.Mesh(wheelGeo,matDark); w.rotation.z=Math.PI/2;
+    w.position.set(x,y,z); grp.add(w);
+  });
+  scene.add(grp);
+  car.mesh=grp;
+}
+buildCar();
+
+// ─── AI CARS (simple) ────────────────────────────────────────────────────────
+const aiCars=[];
+function buildAiCar(startT,color){
+  const grp=new THREE.Group();
+  const mat=new THREE.MeshLambertMaterial({color});
+  const body=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.5,3.2),mat);
+  body.position.y=0.35; grp.add(body);
+  const cab=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.5,1.6),mat);
+  cab.position.set(0,0.85,-0.2); grp.add(cab);
+  const start=trackPath.getPoint(startT);
+  grp.position.set(start.x,0.5,start.z);
+  scene.add(grp);
+  aiCars.push({grp,t:startT,speed:18+Math.random()*4});
+}
+buildAiCar(0.08,0x3399ff);
+buildAiCar(0.16,0x33cc44);
+buildAiCar(0.24,0xffaa00);
+
+// ─── INPUT ────────────────────────────────────────────────────────────────────
+const keys={};
+window.addEventListener('keydown',e=>keys[e.code]=true);
+window.addEventListener('keyup',  e=>keys[e.code]=false);
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let gameState='menu';
+
+function startGame(){
+  applyUpgrades();
+  car.pos.set(TRACK_R,0.5,0);
+  car.dir.set(0,0,-1); car.speed=0; car.steer=0;
+  car.lap=1; car.lastCp=-1; car.cpCount=0;
+  car.raceTime=0; car.lapStart=0; car.bestLap=Infinity; car.finished=false;
+  car.nitro=100;
+  aiCars.forEach((a,i)=>{ a.t=(i+1)*0.08; });
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('hud').style.display='block';
+  gameState='playing'; updateHUD();
+}
+
+function finishRace(){
+  car.finished=true; gameState='finished';
+  const finalTime=car.raceTime;
+  const tStr=formatTime(finalTime);
+  const coins=Math.max(5,Math.floor(60-finalTime)*2);
+  meta.coins+=coins; saveMeta();
+  document.getElementById('hud').style.display='none';
+  const ov=document.getElementById('overlay');
+  ov.innerHTML=`
+    <h1>APEX CIRCUIT</h1><div class="sub">RACE COMPLETE</div>
+    <div id="result-time">${tStr}</div>
+    <div id="result-sub">BEST LAP: ${car.bestLap<Infinity?formatTime(car.bestLap):'—'} — +${coins} 🪙</div>
+    <button class="menu-btn" id="btn-shop">GARAGE</button>
+    <button class="menu-btn" id="btn-retry">RACE AGAIN</button>
+  `;
+  ov.style.display='flex';
+  document.getElementById('btn-shop').onclick=()=>{ov.style.display='none';openShop();};
+  document.getElementById('btn-retry').onclick=startGame;
+}
+
+function openShop(){ gameState='shop'; renderShop(); document.getElementById('shop-overlay').style.display='flex'; }
+function closeShop(){ document.getElementById('shop-overlay').style.display='none'; startGame(); }
+function renderShop(){
+  document.getElementById('shop-coins-disp').textContent=`🪙 ${meta.coins}`;
+  const grid=document.getElementById('shop-grid'); grid.innerHTML='';
+  UPGRADES.forEach(u=>{
+    const lv=meta.upgrades[u.id]||0, cost=u.cost*(lv+1), maxed=lv>=u.maxLv;
+    const card=document.createElement('div'); card.className='shop-card';
+    card.innerHTML=`<h3>${u.name}<span class="lvl">LV${lv}/${u.maxLv}</span></h3><p>${u.desc}</p><span class="cost">${maxed?'MAXED':'🪙 '+cost}</span>`;
+    if(!maxed&&meta.coins>=cost) card.onclick=()=>{buyUpgrade(u.id);renderShop();};
+    else card.style.opacity=maxed?'0.4':'0.6';
+    grid.appendChild(card);
+  });
+  document.getElementById('shop-skip').onclick=closeShop;
+}
+
+function formatTime(s){
+  const m=Math.floor(s/60); const sec=(s%60).toFixed(3).padStart(6,'0');
+  return `${m}:${sec}`;
+}
+
+let cpBannerTimer=0, wrongWayTimer=0;
+function updateHUD(){
+  document.getElementById('lap-disp').textContent=`LAP ${car.lap} / ${car.maxLaps}`;
+  document.getElementById('time-disp').textContent=formatTime(car.raceTime);
+  document.getElementById('best-disp').textContent='BEST '+(car.bestLap<Infinity?formatTime(car.bestLap):'—');
+  const kmh=Math.round(car.speed*3.6);
+  document.getElementById('speed-disp').innerHTML=`${kmh}<br><span id="speed-unit">km/h</span>`;
+  const gear=Math.min(6,1+Math.floor(car.speed/car.maxSpeed*6));
+  document.getElementById('gear-disp').textContent=`GEAR ${gear}`;
+  document.getElementById('rpm-fill').style.width=(car.speed/car.maxSpeed*100)+'%';
+  document.getElementById('coins-disp').textContent=`🪙 ${meta.coins}`;
+}
+
+// ─── TRACK PROJECTION ────────────────────────────────────────────────────────
+function getTrackT(pos){
+  // Approximate t by nearest checkpoint
+  let bestT=0, bestD=Infinity;
+  for(let i=0;i<100;i++){
+    const t=i/100; const p=trackPath.getPoint(t);
+    const d=pos.distanceTo(p);
+    if(d<bestD){ bestD=d; bestT=t; }
+  }
+  return bestT;
+}
+
+// ─── UPDATE ───────────────────────────────────────────────────────────────────
+function update(dt){
+  if(gameState!=='playing') return;
+
+  car.raceTime+=dt;
+
+  // Input
+  const gas = (keys['KeyW']||keys['ArrowUp']);
+  const brake = (keys['KeyS']||keys['ArrowDown']);
+  const left = (keys['KeyA']||keys['ArrowLeft']);
+  const right = (keys['KeyD']||keys['ArrowRight']);
+  const nitroKey = (keys['KeyN'] && car.hasNitro && car.nitro>0);
+
+  let targetSpeed=0;
+  if(gas) targetSpeed=car.maxSpeed*(nitroKey?1.4:1);
+  if(brake) targetSpeed=-car.maxSpeed*0.3;
+
+  const accel=gas?car.acceleration:(brake?car.acceleration*1.5:car.acceleration*0.5);
+  if(car.speed<targetSpeed) car.speed=Math.min(targetSpeed,car.speed+accel*dt);
+  else if(car.speed>targetSpeed) car.speed=Math.max(targetSpeed,car.speed-accel*1.2*dt);
+
+  if(nitroKey){ car.nitro=Math.max(0,car.nitro-30*dt); }
+  else { car.nitro=Math.min(100,car.nitro+8*dt); }
+
+  // Steering
+  const steerRate=2.2;
+  if(left) car.steer=Math.min(car.steer+steerRate*dt, 0.8);
+  else if(right) car.steer=Math.max(car.steer-steerRate*dt,-0.8);
+  else car.steer*=(1-5*dt);
+
+  const turnAmount=car.steer*car.speed*0.04*car.grip;
+  car.dir.applyAxisAngle(new THREE.Vector3(0,1,0),turnAmount);
+  car.dir.normalize();
+
+  car.pos.addScaledVector(car.dir,car.speed*dt);
+  car.pos.y=0.5;
+
+  // Track bounds — clamp to arena (soft)
+  if(car.pos.length()>TRACK_R+TRACK_W+2) { car.speed*=0.7; car.pos.multiplyScalar(0.99); }
+
+  car.mesh.position.copy(car.pos);
+  const lookTarget=car.pos.clone().add(car.dir);
+  car.mesh.lookAt(lookTarget.x,car.pos.y,lookTarget.z);
+
+  // Checkpoint detection
+  CHECKPOINTS.forEach((cp,i)=>{
+    if(car.pos.distanceTo(cp.pos)<TRACK_W+1){
+      const expected=(car.lastCp+1)%N_CP;
+      if(i===expected){
+        car.lastCp=i; car.cpCount++;
+        // Show banner
+        document.getElementById('checkpoint-banner').style.opacity='1';
+        cpBannerTimer=1.5;
+        // Lap complete
+        if(i===0 && car.cpCount>=N_CP){
+          const lapTime=car.raceTime-car.lapStart;
+          if(lapTime<car.bestLap) car.bestLap=lapTime;
+          car.lapStart=car.raceTime; car.cpCount=0;
+          car.lap++;
+          if(car.lap>car.maxLaps){ finishRace(); return; }
+        }
+      }
+    }
+  });
+
+  if(cpBannerTimer>0){ cpBannerTimer-=dt; if(cpBannerTimer<=0) document.getElementById('checkpoint-banner').style.opacity='0'; }
+
+  // AI movement
+  aiCars.forEach(a=>{
+    a.t=(a.t+a.speed*dt/1000)%1;
+    const p=trackPath.getPoint(a.t);
+    const p2=trackPath.getPoint((a.t+0.002)%1);
+    a.grp.position.set(p.x,0.5,p.z);
+    a.grp.lookAt(p2.x,0.5,p2.z);
+  });
+
+  // TPS camera
+  const camOffset=new THREE.Vector3(-car.dir.x*10, 4, -car.dir.z*10);
+  const idealPos=car.pos.clone().add(camOffset);
+  camera.position.lerp(idealPos,0.1);
+  camera.lookAt(car.pos.x,car.pos.y+0.5,car.pos.z);
+
+  updateHUD();
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
+buildTrack();
+camera.position.set(TRACK_R+5,5,5);
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  update(dt);
+  renderer.render(scene,camera);
+}
+animate();
+document.getElementById('btn-play').onclick=startGame;
+</script>
+</body>
+</html>

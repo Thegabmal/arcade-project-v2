@@ -4,11 +4,14 @@ Combines classification and research to produce:
 - A complete GenreProfile with adaptive evaluation criteria
 - An ultra-detailed prompt for the Game Designer
 - A technical prompt for the Creator
-This is the most important agent in Phase 1.
+
+Two-pass design to avoid JSON truncation:
+  Pass 1 (JSON)  — compact structured data (mechanics, QC criteria, style)
+  Pass 2 (text)  — large text blobs (prompt_enrichi + prompt_technique) as plain text
 """
 
 import json
-from config import call_gemini_json, with_fallback
+from config import call_gemini_json, call_gemini, with_fallback
 from genre_profile import Classification, Research, GenreProfile
 from logger import phase1_log
 
@@ -17,95 +20,41 @@ into a complete creative and technical vision. You produce ultra-detailed prompt
 that provide all the material needed to create an excellent game.
 You respond ONLY in valid JSON."""
 
+SYSTEM_TEXT = """You are a game design expert. Write detailed, structured design
+specifications in plain text. Be specific, use numbers and formulas where relevant."""
+
 
 def run(prompt_original: str, classification: Classification, research: Research) -> GenreProfile:
     phase1_log.agent_start("Enrichisseur", "Génération du GenreProfile complet")
 
-    # Construire le contexte
     refs_str = "\n".join([
         f"  - {r['nom']}: {r.get('points_forts', '')}"
         for r in research.jeux_reference
     ])
 
-    prompt = f"""Tu dois créer un GenreProfile complet pour guider la génération d'un jeu HTML5 de qualité professionnelle.
+    context = f"""ORIGINAL REQUEST: "{prompt_original}"
 
-DEMANDE ORIGINALE : "{prompt_original}"
+CLASSIFICATION:
+- Genre: {classification.genre_principal}
+- Sub-genre: {classification.sous_genre}
+- Tone: {classification.ton}
+- Audience: {classification.public_cible}
+- Visual style: {classification.style_visuel_attendu}
+- Gameplay type: {classification.type_gameplay}
 
-CLASSIFICATION :
-- Genre : {classification.genre_principal}
-- Sous-genre : {classification.sous_genre}
-- Ton : {classification.ton}
-- Public : {classification.public_cible}
-- Style visuel : {classification.style_visuel_attendu}
-- Type gameplay : {classification.type_gameplay}
+RESEARCH:
+- Popular mechanics: {json.dumps(research.mecaniques_populaires, ensure_ascii=False)}
+- Trending mechanics: {json.dumps(research.mecaniques_tendance, ensure_ascii=False)}
+- Typical core loop: {research.core_loop_typique}
+- Typical progression: {research.progression_typique}
+- Pitfalls to avoid: {json.dumps(research.pieges_courants, ensure_ascii=False)}
+- Visual standards: {json.dumps(research.standards_visuels, ensure_ascii=False)}
+- Technical notes: {research.notes_techniques}
 
-RECHERCHE :
-- Mécaniques populaires : {json.dumps(research.mecaniques_populaires, ensure_ascii=False)}
-- Mécaniques tendance : {json.dumps(research.mecaniques_tendance, ensure_ascii=False)}
-- Core loop typique : {research.core_loop_typique}
-- Progression typique : {research.progression_typique}
-- Pièges à éviter : {json.dumps(research.pieges_courants, ensure_ascii=False)}
-- Standards visuels : {json.dumps(research.standards_visuels, ensure_ascii=False)}
-- Notes techniques : {research.notes_techniques}
+REFERENCE GAMES:
+{refs_str}"""
 
-JEUX RÉFÉRENCE :
-{refs_str}
-
-Génère un GenreProfile COMPLET et PROFOND :
-
-1. MÉCANIQUES : liste précise des mécaniques obligatoires, bonus et à éviter
-2. STYLE VISUEL : style, palette, animations clés, effets importants
-3. DESIGN : boucle core avec formule, structure progression, courbe difficulté NUMÉRIQUE
-4. CRITÈRES QC TECHNIQUE : 6-8 critères avec poids (SOMME EXACTE = 10.0) spécifiques à ce genre
-5. CRITÈRES QC GAMEPLAY : 6-8 critères avec poids (SOMME EXACTE = 10.0) — incluant profondeur et variété
-6. CRITÈRES QC VISUEL : 4-6 critères avec poids (SOMME EXACTE = 10.0) spécifiques à ce genre
-7. PROMPT ENRICHI : 30-40 lignes pour le Game Designer incluant :
-   - Les systèmes interconnectés et leurs interactions clés
-   - Les formules numériques (dégâts, économie, spawn, progression)
-   - Le contenu précis (nb types ennemis, upgrades, boss phases)
-   - La meta-loop et l'arc émotionnel d'une session
-8. PROMPT TECHNIQUE : 15-20 lignes pour le Créateur avec :
-   - Architecture (objets, arrays, fonctions clés)
-   - Noms de variables pour la dev console
-   - Patterns de code spécifiques au genre
-   - Points critiques d'implémentation
-
-RÈGLES CRITÈRES QC :
-- Les poids doivent sommer EXACTEMENT à 10.0
-- Chaque critère doit être vérifiable dans le code source
-- Les critères GAMEPLAY doivent inclure : variété ennemis, profondeur systèmes, meta-loop
-- Les critères sont SPÉCIFIQUES au genre
-
-Pour les critères QC, utilise ce format :
-{{"nom": "...", "description": "...", "poids": 1.5, "comment_verifier": "présence dans le code de..."}}
-
-Réponds en JSON :
-{{
-  "mecaniques_obligatoires": ["...", "..."],
-  "mecaniques_bonus": ["...", "..."],
-  "mecaniques_a_eviter": ["...", "..."],
-  "style_visuel": "...",
-  "palette_recommandee": "...",
-  "animations_cles": ["...", "..."],
-  "effets_importants": ["...", "..."],
-  "boucle_core": "description complète incluant les interactions entre systèmes",
-  "structure_progression": "description numérique : paliers, timings, déblocages",
-  "courbe_difficulte": "description avec valeurs : '×1.0 à t=0, ×1.5 à t=60s, ×2.5 à t=120s'",
-  "criteres_qc_technique": [
-    {{"nom": "...", "description": "...", "poids": 1.5, "comment_verifier": "..."}}
-  ],
-  "criteres_qc_gameplay": [
-    {{"nom": "Variété ennemis", "description": "Au moins 3 types d'ennemis distincts implémentés", "poids": 2.0, "comment_verifier": "présence de 3+ types dans ENEMY_DEFS ou équivalent"}},
-    {{"nom": "...", "description": "...", "poids": 1.5, "comment_verifier": "..."}}
-  ],
-  "criteres_qc_visuel": [
-    {{"nom": "...", "description": "...", "poids": 2.0, "comment_verifier": "..."}}
-  ],
-  "prompt_enrichi": "Prompt détaillé (40-60 lignes) pour le Game Designer incluant systèmes, formules, contenu précis, meta-loop, arc de session",
-  "prompt_technique": "Prompt technique (20-25 lignes) pour le Créateur avec architecture, noms de variables, patterns spécifiques"
-}}"""
-
-    result = _call(prompt)
+    result = _call_two_pass(context, classification, prompt_original)
 
     genre_profile = GenreProfile(
         genre_principal=classification.genre_principal,
@@ -134,14 +83,6 @@ Réponds en JSON :
         prompt_technique=result.get("prompt_technique", ""),
     )
 
-    # G1 : Validation GenreProfile post-génération
-    _poids_total = sum(
-        c.get("poids", 0) for c in (
-            genre_profile.criteres_qc_technique +
-            genre_profile.criteres_qc_gameplay +
-            genre_profile.criteres_qc_visuel
-        )
-    )
     _nb_mecaniques = len(genre_profile.mecaniques_obligatoires)
     _prompt_len = len(genre_profile.prompt_enrichi)
     if _nb_mecaniques < 3:
@@ -175,6 +116,87 @@ Réponds en JSON :
     "prompt_enrichi": "",
     "prompt_technique": "",
 })
-def _call(prompt: str) -> dict:
-    # D4 : thinking activé pour l'enrichisseur (clé payante) — raisonnement profond pour le GenreProfile
-    return call_gemini_json(prompt, temperature=0.5, system_instruction=SYSTEM, max_tokens=32000, disable_thinking=False)
+def _call_two_pass(context: str, classification: Classification, prompt_original: str) -> dict:
+    # ── Pass 1: Compact JSON — structured data only, no large text blobs ──
+    # Keeping this small (~4-6K chars output) prevents JSON decoder truncation.
+    structural_prompt = f"""{context}
+
+Generate a GenreProfile in JSON. Structured data only — no long text descriptions.
+
+Rules for QC criteria:
+- Weights must sum to EXACTLY 10.0 per category
+- Each criterion must be verifiable in source code
+- GAMEPLAY criteria must include: enemy variety, system depth, meta-loop
+
+{{
+  "mecaniques_obligatoires": ["...", "..."],
+  "mecaniques_bonus": ["...", "..."],
+  "mecaniques_a_eviter": ["...", "..."],
+  "style_visuel": "one sentence",
+  "palette_recommandee": "one sentence",
+  "animations_cles": ["...", "..."],
+  "effets_importants": ["...", "..."],
+  "boucle_core": "2-3 sentences max",
+  "structure_progression": "2-3 sentences with numeric values",
+  "courbe_difficulte": "values only: x1.0 t=0, x1.5 t=60s, x2.5 t=120s",
+  "criteres_qc_technique": [
+    {{"nom": "...", "description": "...", "poids": 1.5, "comment_verifier": "..."}}
+  ],
+  "criteres_qc_gameplay": [
+    {{"nom": "Enemy variety", "description": "At least 3 distinct enemy types", "poids": 2.0, "comment_verifier": "3+ types in ENEMY_DEFS"}},
+    {{"nom": "...", "description": "...", "poids": 1.5, "comment_verifier": "..."}}
+  ],
+  "criteres_qc_visuel": [
+    {{"nom": "...", "description": "...", "poids": 2.0, "comment_verifier": "..."}}
+  ]
+}}"""
+
+    result = call_gemini_json(
+        structural_prompt,
+        temperature=0.4,
+        system_instruction=SYSTEM,
+        max_tokens=12000,
+        disable_thinking=True,
+    )
+
+    # ── Pass 2: Plain text — large prompts without JSON overhead ──
+    text_prompt = f"""{context}
+
+Write two design prompts for this {classification.genre_principal} game.
+
+=== GAME DESIGNER PROMPT ===
+25-35 lines covering:
+- Interconnected systems and their key interactions
+- Numeric formulas (damage, economy, spawn rate, progression)
+- Precise content (exact number of enemy types, upgrades, boss phases, power-ups)
+- Meta-loop and emotional arc of a session
+- Specific mechanics requested: {prompt_original}
+
+=== TECHNICAL PROMPT ===
+10-12 lines covering:
+- Key objects/arrays and their structure
+- Variable names for the dev console (player, enemies, bullets, score, wave)
+- Genre-specific code patterns and critical implementation points
+
+End your response after the technical prompt. Use === TECHNICAL PROMPT === as the only separator."""
+
+    text_response = call_gemini(
+        text_prompt,
+        temperature=0.5,
+        system_instruction=SYSTEM_TEXT,
+        max_tokens=6000,
+        disable_thinking=True,
+    )
+
+    separator = "=== TECHNICAL PROMPT ==="
+    if separator in text_response:
+        parts = text_response.split(separator, 1)
+        prompt_enrichi = parts[0].replace("=== GAME DESIGNER PROMPT ===", "").strip()
+        prompt_technique = parts[1].strip()
+    else:
+        prompt_enrichi = text_response.strip()
+        prompt_technique = ""
+
+    result["prompt_enrichi"] = prompt_enrichi
+    result["prompt_technique"] = prompt_technique
+    return result

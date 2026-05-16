@@ -1,0 +1,606 @@
+<!--
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ARCADE PROJECT — TPS PLATFORMER 3D TEMPLATE (Three.js r160)                ║
+║  Read this entirely before writing a single line of code.                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ ROLE ──────────────────────────────────────────────────────────────────────┐
+│ You are a senior Three.js game developer.                                    │
+│ Fill EVERY [FILL: ...] section to create a complete, playable 3D platformer.│
+│ DO NOT touch the ENGINE block — it is already wired and tested.              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ THE TWO ZONES ─────────────────────────────────────────────────────────────┐
+│  1. ENGINE — DO NOT MODIFY  (Three.js setup, TPS camera, gravity, meta)     │
+│  2. [FILL: ...] sections — YOUR creative work                                │
+│     Replace EVERY placeholder. Any [FILL] left = broken game.               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SACRED CONTRACT — ENGINE GLOBALS (NEVER redeclare) ───────────────────────┐
+│  scene, camera, renderer, clock  → Three.js core (already initialised)      │
+│  keys{}     → { 'KeyW':bool, 'KeyA':bool, 'KeyD':bool, 'Space':bool, … }   │
+│  camYaw     → horizontal camera orbit angle (radians, mouse-drag)           │
+│  camPhi     → vertical camera orbit angle (clamped 0.2–1.4 rad)            │
+│  gameState  → 'menu' | 'playing' | 'gameover' | 'shop'                     │
+│  meta       → { coins:0, upgrades:{} }                                      │
+│  player     → { pos:Vector3, vel:Vector3, onGround:bool, hp:int, … }       │
+│  platforms[]→ [{mesh, min:V3, max:V3, moveAmt?:num, axis?:'x'|'z', phase?}]│
+│  collectibles[] → [{mesh, pos:V3, collected:bool}]  gems / items to pick up │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ENGINE HELPERS — USE, DON'T REWRITE ───────────────────────────────────────┐
+│  resolveGround()        → AABB platform landing, sets onGround + vel.y=0   │
+│  resolveWalls()         → AABB lateral wall collision with platforms        │
+│  updateCamera()         → smooth TPS follow-cam lerp toward player          │
+│  updateHUD()            → syncs score, coins, hp, level display             │
+│  spawnParticle(pos,col) → burst particle effect at world position           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ YOUR CONTRACT — FILL THESE ─────────────────────────────────────────────────┐
+│  META_KEY          → unique localStorage key, e.g. 'meta_my_platformer'     │
+│  UPGRADE_DEFS[]    → 4 upgrades with id, name, desc, cost, maxLv            │
+│  applyUpgrades()   → reads meta.upgrades, sets player.* vars                │
+│  buildLevel(lv)    → clears scene, builds platforms[], collectibles[], goal │
+│  onCollectItem(c)  → called when player collects an item (gem, coin, etc.)  │
+│  onGoalReached()   → called when all collectibles gathered or goal touched  │
+│  updatePlaying(dt) → full game loop: move, jump, collect, enemies, win cond │
+└─────────────────────────────────────────────────────────────────────────────┘
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>[FILL: GAME_TITLE]</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#000; overflow:hidden; font-family:system-ui,sans-serif; }
+  #c { display:block; width:100vw; height:100vh; }
+  #hud { position:fixed; inset:0; pointer-events:none; font-family:system-ui,sans-serif; }
+  #score-disp { position:absolute; top:18px; left:50%; transform:translateX(-50%); font-size:22px; font-weight:700; color:#ffd700; letter-spacing:2px; }
+  #level-disp { position:absolute; top:48px; left:50%; transform:translateX(-50%); font-size:13px; color:#aaa; letter-spacing:3px; }
+  #coins-disp { position:absolute; top:18px; right:24px; font-size:15px; color:#ffd700; }
+  #gems-disp  { position:absolute; top:46px; right:24px; font-size:13px; color:#7ecfff; }
+  #hp-wrap { position:absolute; bottom:56px; left:24px; }
+  #hp-label { font-size:11px; color:#888; letter-spacing:2px; margin-bottom:4px; }
+  #hp-bg { width:180px; height:13px; background:#333; border-radius:6px; overflow:hidden; }
+  #hp-fill { height:100%; background:linear-gradient(90deg,#1a7a3a,#2ecc71); border-radius:6px; transition:width .2s; }
+  #status-msg { position:absolute; bottom:104px; left:50%; transform:translateX(-50%); font-size:13px; color:#7ecfff; letter-spacing:2px; display:none; }
+  #hit-flash  { position:absolute; inset:0; background:rgba(231,76,60,0); pointer-events:none; transition:background .07s; }
+  /* [FILL: CSS_ACCENT] — replace #00d4ff with your game's accent color in overlay/btn styles */
+  #overlay {
+    position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.88); color:#fff;
+  }
+  #overlay h1 { font-size:52px; font-weight:900; letter-spacing:6px; font-family:'Impact',system-ui; margin-bottom:8px; color:#00d4ff; }
+  #overlay .sub { font-size:13px; color:#666; letter-spacing:4px; margin-bottom:36px; }
+  .menu-btn { padding:13px 38px; margin:5px; font-size:14px; font-weight:700; letter-spacing:2px; border:2px solid #00d4ff; background:transparent; cursor:pointer; text-transform:uppercase; transition:all .15s; font-family:system-ui; color:#00d4ff; }
+  .menu-btn:hover { background:#00d4ff; color:#000; }
+  #shop-overlay {
+    position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.92); color:#fff;
+  }
+  #shop-overlay h2 { font-size:28px; font-weight:700; margin-bottom:6px; letter-spacing:3px; font-family:system-ui; }
+  #shop-overlay .coins-info { font-size:14px; color:#ffd700; margin-bottom:24px; }
+  #shop-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; max-width:520px; width:90%; margin-bottom:24px; }
+  .shop-card { border:1px solid #333; padding:16px; text-align:center; background:#111; border-radius:8px; }
+  .shop-card h3 { font-size:13px; font-weight:700; letter-spacing:1px; margin-bottom:6px; font-family:system-ui; }
+  .shop-card p { font-size:11px; color:#777; margin-bottom:10px; font-family:system-ui; }
+  .shop-card .lv { font-size:11px; color:#00d4ff; margin-bottom:8px; }
+  .buy-btn { padding:7px 18px; font-size:11px; font-weight:700; border:1px solid #00d4ff; background:transparent; color:#00d4ff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; font-family:system-ui; }
+  .buy-btn:hover { background:#00d4ff; color:#000; }
+  .buy-btn:disabled { border-color:#333; color:#333; cursor:default; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div id="score-disp">SCORE: 0</div>
+  <div id="level-disp">LEVEL 1</div>
+  <div id="coins-disp">🪙 0</div>
+  <div id="gems-disp">💎 0 / 0</div>
+  <div id="hp-wrap">
+    <div id="hp-label">HP</div>
+    <div id="hp-bg"><div id="hp-fill" style="width:100%"></div></div>
+  </div>
+  <div id="status-msg"></div>
+  <div id="hit-flash"></div>
+</div>
+
+<!-- MAIN OVERLAY -->
+<div id="overlay">
+  <h1>[FILL: GAME_TITLE]</h1>
+  <div class="sub">[FILL: GAME_SUBTITLE]</div>
+  <button class="menu-btn" id="btn-play">[FILL: START_LABEL]</button>
+</div>
+
+<!-- SHOP OVERLAY -->
+<div id="shop-overlay">
+  <h2>[FILL: SHOP_TITLE]</h2>
+  <div class="coins-info" id="shop-coins">🪙 0 coins</div>
+  <div id="shop-grid"></div>
+  <button class="menu-btn" id="btn-close-shop">[FILL: SHOP_LABEL]</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js"></script>
+<script>
+'use strict';
+// ═══ ENGINE — DO NOT MODIFY ═══
+
+// ── Meta-progression ──────────────────────────────────────────────────────────
+const META_KEY = '[FILL: META_KEY]'; // e.g. 'meta_skyrift_clone'
+let meta = { coins:0, upgrades:{} };
+function loadMeta() {
+  try { const s=localStorage.getItem(META_KEY); if(s) meta=JSON.parse(s); } catch(e){}
+  // ensure all upgrade levels exist
+  UPGRADE_DEFS.forEach(u => { if(meta.upgrades[u.id]==null) meta.upgrades[u.id]=0; });
+}
+function saveMeta() { try { localStorage.setItem(META_KEY,JSON.stringify(meta)); } catch(e){} }
+function buyUpgrade(id) {
+  const u=UPGRADE_DEFS.find(x=>x.id===id); if(!u) return;
+  const lv=meta.upgrades[id]||0;
+  if(lv>=u.maxLv || meta.coins<u.cost) return;
+  meta.coins-=u.cost; meta.upgrades[id]=lv+1;
+  saveMeta(); applyUpgrades(); renderShop();
+}
+function renderShop() {
+  document.getElementById('shop-coins').textContent='🪙 '+meta.coins+' coins';
+  const g=document.getElementById('shop-grid'); g.innerHTML='';
+  UPGRADE_DEFS.forEach(u=>{
+    const lv=meta.upgrades[u.id]||0;
+    const maxed=lv>=u.maxLv;
+    const canBuy=!maxed&&meta.coins>=u.cost;
+    g.innerHTML+=`<div class="shop-card">
+      <h3>${u.name}</h3><p>${u.desc}</p>
+      <div class="lv">Lv ${lv} / ${u.maxLv}</div>
+      <button class="buy-btn" onclick="buyUpgrade('${u.id}')" ${!canBuy?'disabled':''}>
+        ${maxed?'MAX':'Buy — 🪙'+u.cost}
+      </button></div>`;
+  });
+}
+
+// ── Three.js core ──────────────────────────────────────────────────────────────
+const scene    = new THREE.Scene();
+const camera   = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 500);
+const renderer = new THREE.WebGLRenderer({ canvas:document.getElementById('c'), antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+const clock = new THREE.Clock();
+
+window.addEventListener('resize', ()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+// ── Keyboard input ────────────────────────────────────────────────────────────
+const keys = {};
+window.addEventListener('keydown', e=>{ keys[e.code]=true;  e.code==='Space' && e.preventDefault(); });
+window.addEventListener('keyup',   e=>{ keys[e.code]=false; });
+
+// ── TPS orbit camera via mouse drag ───────────────────────────────────────────
+let camYaw = 0, camPhi = 0.8;
+let _dragging = false, _lastX = 0, _lastY = 0;
+const _camDist = 9, _camHeight = 3;
+
+document.getElementById('c').addEventListener('mousedown', e=>{
+  if(gameState!=='playing') return;
+  _dragging=true; _lastX=e.clientX; _lastY=e.clientY;
+});
+window.addEventListener('mouseup',   ()=>{ _dragging=false; });
+window.addEventListener('mousemove', e=>{
+  if(!_dragging || gameState!=='playing') return;
+  camYaw   -= (e.clientX-_lastX) * 0.005;
+  camPhi    = Math.max(0.2, Math.min(1.4, camPhi-(e.clientY-_lastY)*0.004));
+  _lastX=e.clientX; _lastY=e.clientY;
+});
+
+function updateCamera() {
+  const ox = Math.sin(camYaw)*Math.cos(camPhi)*_camDist;
+  const oy = Math.sin(camPhi)*_camDist + _camHeight;
+  const oz = Math.cos(camYaw)*Math.cos(camPhi)*_camDist;
+  const ideal = player.pos.clone().add(new THREE.Vector3(ox, oy, oz));
+  camera.position.lerp(ideal, 0.12);
+  camera.lookAt(player.pos.clone().add(new THREE.Vector3(0, 1.2, 0)));
+}
+
+// ── Game state ────────────────────────────────────────────────────────────────
+let gameState = 'menu'; // 'menu' | 'playing' | 'gameover' | 'shop'
+let score = 0;
+
+// ── Player state ──────────────────────────────────────────────────────────────
+const GRAVITY = -22;
+let playerMesh;
+const player = {
+  pos: new THREE.Vector3(0, 2, 0),
+  vel: new THREE.Vector3(0, 0, 0),
+  onGround: false,
+  hp: 3, maxHp: 3,
+  speed: 7,
+  jumpPower: 10,
+  jumpsLeft: 1,      // modified by double_jump upgrade
+  magnetRange: 0,    // gem magnet radius (0 = off)
+  level: 1,
+  gemsCollected: 0,
+  gemsTotal: 0
+};
+
+// ── Platform + collectible arrays ─────────────────────────────────────────────
+let platforms    = [];  // { mesh, minX,maxX,minY,maxY,minZ,maxZ, moveAmt?,axis?,phase? }
+let collectibles = [];  // { mesh, pos:Vector3, collected:bool, value:int }
+let particles    = [];  // { mesh, vel, life, maxLife }
+
+// ── AABB platform physics ──────────────────────────────────────────────────────
+function resolveGround() {
+  player.onGround = false;
+  const pw = 0.4, ph = 1.0; // player half-extents
+  for(const p of platforms) {
+    // moving platform position
+    if(p.moveAmt && p.axis) {
+      const off = Math.sin(p.phase||0) * p.moveAmt;
+      p.mesh.position[p.axis] = p.origin[p.axis] + off;
+      p.minX = p.mesh.position.x - p.hw; p.maxX = p.mesh.position.x + p.hw;
+      p.minY = p.mesh.position.y - p.hh; p.maxY = p.mesh.position.y + p.hh;
+      p.minZ = p.mesh.position.z - p.hd; p.maxZ = p.mesh.position.z + p.hd;
+    }
+    // top-surface landing
+    if(player.pos.x+pw > p.minX && player.pos.x-pw < p.maxX &&
+       player.pos.z+pw > p.minZ && player.pos.z-pw < p.maxZ) {
+      const feetY = player.pos.y - ph;
+      const prevFeetY = feetY - player.vel.y * (1/60);
+      if(prevFeetY >= p.maxY - 0.1 && feetY <= p.maxY + 0.3 && player.vel.y <= 0) {
+        player.pos.y = p.maxY + ph;
+        player.vel.y = 0;
+        player.onGround = true;
+        player.jumpsLeft = player.jumpsLeft < meta.upgrades['double_jump']?2:1;
+        // ride moving platform
+        if(p.moveAmt && p.axis) {
+          const prevOff = Math.sin((p.phase||0) - 0.016*0.8) * p.moveAmt;
+          player.pos[p.axis] += (p.mesh.position[p.axis] - (p.origin[p.axis]+prevOff)) * 0.9;
+        }
+      }
+    }
+  }
+}
+
+function resolveWalls() {
+  const pw=0.4, ph=1.0;
+  for(const p of platforms) {
+    if(player.pos.x+pw > p.minX && player.pos.x-pw < p.maxX &&
+       player.pos.z+pw > p.minZ && player.pos.z-pw < p.maxZ &&
+       player.pos.y-ph < p.maxY && player.pos.y+ph > p.minY) {
+      // push out on smallest axis
+      const ox = Math.min(player.pos.x+pw-p.minX, p.maxX-(player.pos.x-pw));
+      const oz = Math.min(player.pos.z+pw-p.minZ, p.maxZ-(player.pos.z-pw));
+      if(ox < oz) { player.pos.x += (player.pos.x < (p.minX+p.maxX)/2) ? -ox : ox; player.vel.x=0; }
+      else         { player.pos.z += (player.pos.z < (p.minZ+p.maxZ)/2) ? -oz : oz; player.vel.z=0; }
+    }
+  }
+}
+
+// ── Particle burst ────────────────────────────────────────────────────────────
+function spawnParticle(pos, col) {
+  for(let i=0;i<8;i++){
+    const g=new THREE.SphereGeometry(0.12,4,4);
+    const m=new THREE.MeshBasicMaterial({color:col});
+    const mesh=new THREE.Mesh(g,m); mesh.position.copy(pos); scene.add(mesh);
+    particles.push({
+      mesh, life:0.5, maxLife:0.5,
+      vel:new THREE.Vector3((Math.random()-.5)*6,(Math.random()+0.5)*5,(Math.random()-.5)*6)
+    });
+  }
+}
+
+function updateParticles(dt) {
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.life-=dt; p.vel.y-=15*dt;
+    p.mesh.position.addScaledVector(p.vel,dt);
+    p.mesh.material.opacity=p.life/p.maxLife;
+    if(p.life<=0){ scene.remove(p.mesh); particles.splice(i,1); }
+  }
+}
+
+// ── HUD ───────────────────────────────────────────────────────────────────────
+function updateHUD() {
+  document.getElementById('score-disp').textContent = 'SCORE: '+score;
+  document.getElementById('level-disp').textContent = 'LEVEL '+player.level;
+  document.getElementById('coins-disp').textContent = '🪙 '+meta.coins;
+  document.getElementById('gems-disp').textContent  = '💎 '+player.gemsCollected+' / '+player.gemsTotal;
+  const pct = Math.max(0, player.hp/player.maxHp*100);
+  document.getElementById('hp-fill').style.width = pct+'%';
+}
+
+function flashHit() {
+  const f=document.getElementById('hit-flash');
+  f.style.background='rgba(231,76,60,0.45)';
+  setTimeout(()=>f.style.background='rgba(231,76,60,0)',120);
+}
+
+function showStatus(msg, dur=1500) {
+  const el=document.getElementById('status-msg');
+  el.textContent=msg; el.style.display='block';
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>el.style.display='none', dur);
+}
+
+// ── Game state machine ────────────────────────────────────────────────────────
+function startGame() {
+  document.getElementById('overlay').style.display='none';
+  score=0; player.level=1; player.hp=player.maxHp; player.gemsCollected=0;
+  player.pos.set(0,2,0); player.vel.set(0,0,0);
+  applyUpgrades();
+  buildLevel(1);
+  gameState='playing';
+  updateHUD();
+}
+
+function triggerGameOver() {
+  gameState='gameover';
+  const ov=document.getElementById('overlay');
+  ov.innerHTML=`
+    <h1 style="color:#e74c3c">[FILL: GAMEOVER_SUBTITLE]</h1>
+    <div class="sub">SCORE: ${score}</div>
+    <button class="menu-btn" id="btn-shop">[FILL: SHOP_LABEL]</button>
+    <button class="menu-btn" id="btn-retry">[FILL: RETRY_LABEL]</button>`;
+  ov.style.display='flex';
+  document.getElementById('btn-shop').onclick = openShop;
+  document.getElementById('btn-retry').onclick = startGame;
+}
+
+function openShop() {
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('shop-overlay').style.display='flex';
+  gameState='shop'; renderShop();
+}
+function closeShop() {
+  document.getElementById('shop-overlay').style.display='none';
+  triggerGameOver(); // return to gameover screen (first open from menu goes to game)
+}
+document.getElementById('btn-close-shop').onclick = closeShop;
+
+// ── Player physics update ──────────────────────────────────────────────────────
+function updatePlayerPhysics(dt) {
+  // movement direction relative to camera yaw
+  const fw = new THREE.Vector3(-Math.sin(camYaw),0,-Math.cos(camYaw));
+  const rt = new THREE.Vector3( Math.cos(camYaw),0,-Math.sin(camYaw));
+  let move = new THREE.Vector3();
+  if(keys['KeyW'] || keys['ArrowUp'])    move.addScaledVector(fw,  1);
+  if(keys['KeyS'] || keys['ArrowDown'])  move.addScaledVector(fw, -1);
+  if(keys['KeyA'] || keys['ArrowLeft'])  move.addScaledVector(rt, -1);
+  if(keys['KeyD'] || keys['ArrowRight']) move.addScaledVector(rt,  1);
+  if(move.lengthSq()>0) move.normalize();
+
+  player.vel.x = move.x * player.speed;
+  player.vel.z = move.z * player.speed;
+
+  // jump
+  if((keys['Space']||keys['KeyZ']) && !keys._jumpHeld && player.jumpsLeft>0) {
+    player.vel.y = player.jumpPower;
+    player.jumpsLeft--;
+    keys._jumpHeld=true;
+  }
+  if(!keys['Space']&&!keys['KeyZ']) keys._jumpHeld=false;
+
+  // gravity
+  player.vel.y += GRAVITY * dt;
+
+  // integrate
+  player.pos.addScaledVector(player.vel, dt);
+
+  // platform collisions
+  resolveWalls();
+  resolveGround();
+
+  // face movement direction
+  if(move.lengthSq()>0.01 && playerMesh) {
+    const angle = Math.atan2(move.x, move.z);
+    playerMesh.rotation.y = angle;
+  }
+  if(playerMesh) playerMesh.position.copy(player.pos);
+
+  // gem magnet
+  if(player.magnetRange>0) {
+    for(const c of collectibles) {
+      if(c.collected) continue;
+      if(c.mesh.position.distanceTo(player.pos) < player.magnetRange) {
+        c.mesh.position.lerp(player.pos, 0.12);
+      }
+    }
+  }
+
+  // collectible pickup
+  for(const c of collectibles) {
+    if(c.collected) continue;
+    if(c.mesh.position.distanceTo(player.pos) < 1.2) {
+      c.collected=true; scene.remove(c.mesh);
+      spawnParticle(c.mesh.position.clone(), 0xffd700);
+      onCollectItem(c);
+      player.gemsCollected++;
+      updateHUD();
+    }
+  }
+
+  // fall death
+  if(player.pos.y < -30) {
+    player.hp--;
+    if(player.hp<=0) { triggerGameOver(); return; }
+    flashHit(); showStatus('- LIFE', 1200);
+    player.pos.copy(player._spawnPos||new THREE.Vector3(0,2,0));
+    player.vel.set(0,0,0);
+    updateHUD();
+  }
+}
+
+// ── Main loop ──────────────────────────────────────────────────────────────────
+function update(dt) {
+  if(gameState!=='playing') return;
+  // update moving platform phases
+  for(const p of platforms) { if(p.moveAmt) p.phase=(p.phase||0)+dt*0.8; }
+  updatePlayerPhysics(dt);
+  updateParticles(dt);
+  updateCamera();
+  updatePlaying(dt);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  update(dt);
+  renderer.render(scene, camera);
+}
+
+// ═══ END ENGINE ═══
+
+
+// ── [FILL: UPGRADE_DEFS] ──────────────────────────────────────────────────────
+// Define exactly 4 upgrades for the shop.
+// id must be a valid JS identifier. maxLv: recommended 3-5.
+const UPGRADE_DEFS = [
+  { id:'double_jump', name:'Double Jump',   desc:'Gain an extra mid-air jump',           cost:30, maxLv:1 },
+  { id:'boost_speed', name:'Speed Boost',   desc:'+1.5 run speed per level',             cost:25, maxLv:3 },
+  { id:'gem_magnet',  name:'Gem Magnet',    desc:'Attract nearby collectibles',          cost:35, maxLv:2 },
+  { id:'extra_life',  name:'Extra Life',    desc:'+1 max HP',                            cost:40, maxLv:3 }
+];
+
+// ── [FILL: APPLY_UPGRADES] ────────────────────────────────────────────────────
+// Read meta.upgrades and apply them to player.* variables.
+// Called on game start and after every shop purchase.
+function applyUpgrades() {
+  // example — replace with your values:
+  player.speed    = 7 + (meta.upgrades['boost_speed']||0) * 1.5;
+  player.maxHp    = 3 + (meta.upgrades['extra_life']||0);
+  player.hp       = Math.min(player.hp, player.maxHp);
+  player.magnetRange = (meta.upgrades['gem_magnet']||0) * 2.5;
+  // double_jump is checked live in updatePlayerPhysics via meta.upgrades['double_jump']
+}
+
+// ── [FILL: BUILD_LEVEL] ───────────────────────────────────────────────────────
+// Clear scene and reconstruct all platforms, collectibles, lights, and geometry.
+// Called once per level (and on retry). Must populate:
+//   platforms[]     — objects with min/max AABB fields (use makePlatform helper below)
+//   collectibles[]  — gems/items to collect
+//   player._spawnPos — Vector3 respawn position for this level
+//
+// Helper: makePlatform(scene, x,y,z, w,h,d, color, moveAmt?, axis?)
+//   Returns a platform descriptor pushed into platforms[].
+//
+function makePlatform(x,y,z, w,h,d, color, moveAmt, axis) {
+  const geo = new THREE.BoxGeometry(w,h,d);
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const mesh = new THREE.Mesh(geo,mat);
+  mesh.position.set(x,y,z); mesh.castShadow=true; mesh.receiveShadow=true;
+  scene.add(mesh);
+  const plat = {
+    mesh, origin:mesh.position.clone(),
+    hw:w/2, hh:h/2, hd:d/2,
+    minX:x-w/2, maxX:x+w/2, minY:y-h/2, maxY:y+h/2, minZ:z-d/2, maxZ:z+d/2,
+    moveAmt:moveAmt||0, axis:axis||null, phase:Math.random()*Math.PI*2
+  };
+  platforms.push(plat); return plat;
+}
+
+function makeGem(x,y,z, color, value) {
+  const geo = new THREE.DodecahedronGeometry(0.35);
+  const mat = new THREE.MeshLambertMaterial({ color, emissive:color, emissiveIntensity:0.3 });
+  const mesh = new THREE.Mesh(geo,mat); mesh.position.set(x,y,z); scene.add(mesh);
+  collectibles.push({ mesh, pos:mesh.position, collected:false, value });
+}
+
+function buildLevel(lv) {
+  // clear previous level
+  platforms.forEach(p=>scene.remove(p.mesh));
+  collectibles.forEach(c=>scene.remove(c.mesh));
+  platforms=[]; collectibles=[]; particles=[];
+  // remove dynamic scene objects except renderer-added lights
+  while(scene.children.length) scene.remove(scene.children[0]);
+
+  // ── [FILL: LEVEL_GEOMETRY] ─────────────────────────────────────────────────
+  // Re-add lights each time (they were cleared above)
+  scene.background = new THREE.Color(0x1a1a2e);
+  scene.fog = new THREE.Fog(0x1a1a2e, 30, 80);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+  const sun = new THREE.DirectionalLight(0xffeedd, 1.0);
+  sun.position.set(10,20,10); sun.castShadow=true; scene.add(sun);
+
+  // player mesh (re-create after scene clear)
+  const pmg=new THREE.CapsuleGeometry(0.4,1.2,4,8);
+  const pmm=new THREE.MeshLambertMaterial({color:0x00d4ff});
+  playerMesh=new THREE.Mesh(pmg,pmm); playerMesh.castShadow=true; scene.add(playerMesh);
+
+  // example level layout — replace entirely with your own:
+  player._spawnPos = new THREE.Vector3(0, 2, 0);
+  player.pos.copy(player._spawnPos); player.vel.set(0,0,0);
+
+  // ground platform
+  makePlatform(0,-0.5,0, 12,1,12, 0x2e4a3e);
+  // floating islands
+  makePlatform(6, 2, 0,   4,0.6,4, 0x3a5a4a);
+  makePlatform(10,4, 4,   3,0.6,3, 0x3a5a4a);
+  makePlatform(6, 6,-5,   4,0.6,4, 0x4a6a5a, 2, 'x'); // moving
+  makePlatform(0, 8,-8,   4,0.6,4, 0x3a5a4a);
+  makePlatform(-5,10,-5,  3,0.6,3, 0x5a7a6a);
+
+  // gems on each platform
+  makeGem(6,  3.7, 0,  0xffd700, 10);
+  makeGem(10, 5.7, 4,  0x7ecfff, 10);
+  makeGem(6,  7.7,-5,  0xff88aa, 10);
+  makeGem(0,  9.7,-8,  0xffd700, 15);
+  makeGem(-5,11.7,-5,  0xffaa00, 20);
+
+  player.gemsTotal     = collectibles.length;
+  player.gemsCollected = 0;
+  updateHUD();
+}
+
+// ── [FILL: ON_COLLECT_ITEM] ───────────────────────────────────────────────────
+// Called when the player collects a collectible.
+// c = { mesh, value, collected }
+function onCollectItem(c) {
+  score += c.value * (1 + (meta.upgrades['score_bonus']||0)*0.25);
+  meta.coins += 1;
+  saveMeta();
+  updateHUD();
+}
+
+// ── [FILL: ON_GOAL_REACHED] ───────────────────────────────────────────────────
+// Called when the level win condition is met (all gems collected or goal touched).
+// Typically: increment player.level, rebuild level, show status.
+function onGoalReached() {
+  score += 50 * player.level;
+  meta.coins += 5 * player.level;
+  saveMeta();
+  showStatus('LEVEL CLEAR! +' + (5*player.level) + ' COINS', 2000);
+  player.level++;
+  setTimeout(()=>buildLevel(player.level), 2200);
+}
+
+// ── [FILL: UPDATE_PLAYING] ────────────────────────────────────────────────────
+// Called every frame while gameState==='playing'.
+// Handle: enemy AI, hazards, win condition, time limits, etc.
+// Physics (move, jump, collect, fall) are already handled by the ENGINE above.
+function updatePlaying(dt) {
+  // rotate gems for visual effect
+  for(const c of collectibles) {
+    if(!c.collected) c.mesh.rotation.y += dt*2;
+  }
+
+  // win condition: all gems collected
+  if(player.gemsTotal>0 && player.gemsCollected>=player.gemsTotal) {
+    player.gemsTotal=-1; // prevent re-trigger
+    onGoalReached();
+  }
+
+  // [FILL: ENEMY_LOGIC] — add enemies array and AI here if desired
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+loadMeta();
+applyUpgrades();
+// Build a preview scene for the menu
+buildLevel(1);
+gameState='menu';
+animate();
+document.getElementById('btn-play').onclick = startGame;
+</script>
+</body>
+</html>

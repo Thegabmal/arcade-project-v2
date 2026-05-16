@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SKYRIFT — 3D Platformer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+  #c { display: block; width: 100vw; height: 100vh; }
+
+  #hud {
+    position: fixed; inset: 0; pointer-events: none;
+    color: #fff; font-family: system-ui, sans-serif;
+  }
+  #score-disp {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    font-size: 24px; font-weight: 700; color: #00ffcc; text-shadow: 0 0 12px #00ffcc88;
+    letter-spacing: 2px;
+  }
+  #gems-disp {
+    position: absolute; top: 54px; left: 50%; transform: translateX(-50%);
+    font-size: 14px; color: #aaa; letter-spacing: 3px;
+  }
+  #coins-disp { position: absolute; top: 20px; right: 24px; font-size: 16px; color: #ffd700; }
+  #lives-disp {
+    position: absolute; top: 20px; left: 24px;
+    font-size: 18px; color: #ff6b6b; letter-spacing: 4px;
+  }
+  #level-disp {
+    position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; color: #666; letter-spacing: 3px; text-transform: uppercase;
+  }
+  #power-disp {
+    position: absolute; bottom: 54px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; color: #00ffcc; letter-spacing: 2px;
+  }
+
+  #overlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.88); color: #fff;
+  }
+  #overlay h1 {
+    font-size: 56px; font-weight: 900; letter-spacing: 8px;
+    color: #00ffcc; text-shadow: 0 0 30px #00ffcc88;
+    font-family: 'Impact', system-ui; margin-bottom: 6px;
+  }
+  #overlay .sub { font-size: 13px; color: #666; letter-spacing: 4px; margin-bottom: 40px; }
+  .menu-btn {
+    padding: 14px 40px; margin: 6px;
+    font-size: 15px; font-weight: 700; letter-spacing: 2px;
+    border: 2px solid #00ffcc; background: transparent; color: #00ffcc;
+    cursor: pointer; text-transform: uppercase; transition: all 0.15s;
+    font-family: system-ui;
+  }
+  .menu-btn:hover { background: #00ffcc; color: #000; }
+  #gameover-score { font-size: 32px; color: #00ffcc; margin: 20px 0; }
+
+  #shop-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; font-family: system-ui;
+  }
+  #shop-overlay h2 { font-size: 32px; color: #00ffcc; letter-spacing: 4px; margin-bottom: 6px; }
+  #shop-coins-disp { font-size: 16px; color: #ffd700; margin-bottom: 28px; }
+  #shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 560px; width: 100%; }
+  .shop-card { border: 2px solid #333; padding: 16px; cursor: pointer; transition: all 0.15s; background: #0a0a0a; }
+  .shop-card:hover { border-color: #00ffcc; background: #001a14; }
+  .shop-card h3 { font-size: 14px; color: #00ffcc; margin-bottom: 6px; }
+  .shop-card p  { font-size: 12px; color: #777; margin-bottom: 10px; line-height: 1.4; }
+  .shop-card .cost { font-size: 13px; color: #ffd700; font-weight: 700; }
+  .shop-card .lvl  { font-size: 11px; color: #444; float: right; }
+  #shop-skip { margin-top: 18px; font-size: 13px; color: #555; cursor: pointer; letter-spacing: 2px; }
+  #shop-skip:hover { color: #aaa; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" style="display:none;">
+  <div id="score-disp">0</div>
+  <div id="gems-disp">◆ 0 / 0</div>
+  <div id="lives-disp">♥ ♥ ♥</div>
+  <div id="coins-disp">🪙 0</div>
+  <div id="power-disp"></div>
+  <div id="level-disp">LEVEL 1</div>
+</div>
+
+<div id="overlay">
+  <h1>SKYRIFT</h1>
+  <div class="sub">3D PLATFORMER</div>
+  <button class="menu-btn" id="btn-play">START</button>
+  <div style="font-size:12px;color:#555;margin-top:16px;">WASD — MOVE &nbsp;|&nbsp; SPACE — JUMP &nbsp;|&nbsp; MOUSE — CAMERA</div>
+</div>
+
+<div id="shop-overlay">
+  <h2>UPGRADE HUB</h2>
+  <div id="shop-coins-disp">🪙 0</div>
+  <div id="shop-grid"></div>
+  <div id="shop-skip">[ SKIP → ]</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js"></script>
+<script>
+// ─── META-PROGRESSION ────────────────────────────────────────────────────────
+const META_KEY = 'meta_skyrift';
+const UPGRADES = [
+  { id:'double_jump',  name:'Double Jump',   desc:'Unlocks a second mid-air jump',    cost:30, maxLv:1, effect:'djump' },
+  { id:'boost_speed',  name:'Speed Boost',   desc:'+20% move speed per level',        cost:25, maxLv:3, effect:'speed' },
+  { id:'gem_magnet',   name:'Gem Magnet',    desc:'Collect gems from 50% farther',    cost:35, maxLv:2, effect:'magnet' },
+  { id:'extra_life',   name:'Extra Life',    desc:'Start with +1 life per level',     cost:50, maxLv:2, effect:'lives' },
+];
+let meta = { coins:0, upgrades:{} };
+function loadMeta() {
+  try { const s=localStorage.getItem(META_KEY); if(s) meta=JSON.parse(s); } catch(e){}
+  UPGRADES.forEach(u=>{ if(!meta.upgrades[u.id]) meta.upgrades[u.id]=0; });
+}
+function saveMeta() { try { localStorage.setItem(META_KEY,JSON.stringify(meta)); } catch(e){} }
+function buyUpgrade(id) {
+  const u=UPGRADES.find(u=>u.id===id); if(!u) return;
+  const lv=meta.upgrades[id]; if(lv>=u.maxLv) return;
+  const cost=u.cost*(lv+1); if(meta.coins<cost) return;
+  meta.coins-=cost; meta.upgrades[id]++; saveMeta();
+}
+function applyUpgrades() {
+  const lv=id=>meta.upgrades[id]||0;
+  pState.hasDoubleJump = lv('double_jump')>0;
+  pState.moveSpeed = 6 + lv('boost_speed')*1.2;
+  pState.gemRadius = 1.2 + lv('gem_magnet')*0.6;
+  pState.maxLives = 3 + lv('extra_life');
+}
+loadMeta();
+
+// ─── THREE.JS SETUP ───────────────────────────────────────────────────────────
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+renderer.setSize(window.innerWidth,window.innerHeight);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x0a1628);
+scene.fog=new THREE.FogExp2(0x0a1628,0.025);
+
+const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,0.1,200);
+const clock=new THREE.Clock();
+
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+// ─── LIGHTING ─────────────────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x223366,0.9));
+const sun=new THREE.DirectionalLight(0xaaddff,0.8);
+sun.position.set(20,40,20); sun.castShadow=true; scene.add(sun);
+// colored point lights scattered
+[[0,0xffd700],[30,0x00ffcc],[-30,0xff44aa]].forEach(([x,col])=>{
+  const pl=new THREE.PointLight(col,1.5,30);
+  pl.position.set(x,8,0); scene.add(pl);
+});
+
+// ─── GAME DATA ────────────────────────────────────────────────────────────────
+const pState = {
+  pos: new THREE.Vector3(0,2,0),
+  vel: new THREE.Vector3(),
+  onGround: false,
+  jumpsLeft: 1,
+  hasDoubleJump: false,
+  moveSpeed: 6,
+  gemRadius: 1.2,
+  maxLives: 3,
+  lives: 3,
+  score: 0,
+  level: 1,
+  gems: [],
+  gemCount: 0,
+  gemTotal: 0,
+  dead: false,
+};
+
+let gameState = 'menu';
+const platforms = [];
+const gems = [];
+const enemies3d = [];
+const particles3d = [];
+
+// ─── PLAYER MESH ─────────────────────────────────────────────────────────────
+const pMat = new THREE.MeshLambertMaterial({color:0x00ffcc});
+const pMesh = new THREE.Mesh(new THREE.BoxGeometry(0.7,1.1,0.7), pMat);
+pMesh.castShadow=true;
+scene.add(pMesh);
+
+// ─── CAMERA CONTROL (TPS follow) ─────────────────────────────────────────────
+let camYaw=0, camPitch=0.4;
+let mouseDown=false;
+canvas.addEventListener('mousedown',()=>mouseDown=true);
+canvas.addEventListener('mouseup',  ()=>mouseDown=false);
+window.addEventListener('mousemove',e=>{
+  if(!mouseDown && gameState==='playing') return;
+  if(gameState!=='playing') return;
+  camYaw -= e.movementX*0.003;
+  camPitch = Math.max(0.1,Math.min(1.2, camPitch - e.movementY*0.003));
+});
+canvas.addEventListener('click',()=>{ if(gameState==='playing') canvas.requestPointerLock(); });
+document.addEventListener('pointerlockchange',()=>{});
+
+const keys={};
+window.addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(e.code==='Space' && gameState==='playing') tryJump();
+});
+window.addEventListener('keyup',e=>keys[e.code]=false);
+
+function tryJump() {
+  if(pState.onGround) {
+    pState.vel.y=8; pState.onGround=false;
+    pState.jumpsLeft = pState.hasDoubleJump ? 1 : 0;
+  } else if(pState.jumpsLeft>0 && pState.hasDoubleJump) {
+    pState.vel.y=7; pState.jumpsLeft--;
+  }
+}
+
+// ─── LEVEL BUILDER ────────────────────────────────────────────────────────────
+const platMats = [
+  new THREE.MeshLambertMaterial({color:0x1a3a5c}),
+  new THREE.MeshLambertMaterial({color:0x2a1a5c}),
+  new THREE.MeshLambertMaterial({color:0x1a4a2c}),
+];
+const gemMat  = new THREE.MeshLambertMaterial({color:0xffd700, emissive:0x885500});
+const enemMat = new THREE.MeshLambertMaterial({color:0xff4466});
+
+function clearLevel() {
+  platforms.forEach(p=>scene.remove(p.mesh));
+  platforms.length=0;
+  gems.forEach(g=>scene.remove(g.mesh));
+  gems.length=0;
+  enemies3d.forEach(e=>scene.remove(e.mesh));
+  enemies3d.length=0;
+}
+
+function addPlatform(x,y,z,w,h,d,moving=false,moveAmt=0,moveAxis='x') {
+  const mat=platMats[Math.floor(Math.random()*platMats.length)];
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+  mesh.position.set(x,y,z); mesh.receiveShadow=true; mesh.castShadow=true;
+  scene.add(mesh);
+  platforms.push({mesh,ox:x,oy:y,oz:z,moving,moveAmt,moveAxis,phase:Math.random()*Math.PI*2,w,h,d});
+}
+
+function addGem(x,y,z) {
+  const mesh=new THREE.Mesh(new THREE.OctahedronGeometry(0.25),gemMat);
+  mesh.position.set(x,y,z); scene.add(mesh);
+  gems.push({mesh,collected:false});
+  pState.gemTotal++;
+}
+
+function addEnemy(x,y,z,range=3) {
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.8,0.8),enemMat);
+  mesh.position.set(x,y,z); mesh.castShadow=true; scene.add(mesh);
+  enemies3d.push({mesh,ox:x,oy:y,oz:z,range,phase:Math.random()*Math.PI*2,speed:1.5});
+}
+
+function buildLevel(lv) {
+  clearLevel(); gems.length=0; pState.gemTotal=0; pState.gemCount=0;
+
+  // Ground island
+  addPlatform(0,0,0,12,1,12);
+  addGem(2,1.4,0); addGem(-2,1.4,0); addGem(0,1.4,2);
+
+  const steps=6+lv*2;
+  let x=0,y=1,z=0;
+  for(let i=0;i<steps;i++){
+    const dx=(Math.random()-0.5)*8; const dz=(Math.random()-0.5)*8;
+    x+=dx+(dx<0?-3:3); z+=dz+(dz<0?-3:3); y+=1.5+Math.random()*2;
+    const w=2+Math.random()*3, d=2+Math.random()*3;
+    const moving=(i>3 && Math.random()<0.4);
+    addPlatform(x,y,z,w,0.5,d,moving,1.5+Math.random()*1.5, Math.random()<0.5?'x':'z');
+    // gems on platform
+    const gc=1+Math.floor(Math.random()*2);
+    for(let g=0;g<gc;g++) addGem(x+(Math.random()-0.5)*w*0.6, y+0.7, z+(Math.random()-0.5)*d*0.6);
+    // enemies
+    if(i>1 && Math.random()<0.35) addEnemy(x,y+0.8,z,w*0.4);
+  }
+  // Goal platform
+  const gx=x, gy=y+2, gz=z;
+  addPlatform(gx,gy,gz,4,0.5,4);
+  // special goal gem (larger)
+  const goalGem=new THREE.Mesh(new THREE.OctahedronGeometry(0.5), new THREE.MeshLambertMaterial({color:0x00ffcc,emissive:0x007766}));
+  goalGem.position.set(gx,gy+1,gz); scene.add(goalGem);
+  gems.push({mesh:goalGem,collected:false,isGoal:true});
+  pState.gemTotal++;
+
+  pState.pos.set(0,2,0);
+  pState.vel.set(0,0,0);
+  pState.onGround=false;
+}
+
+// ─── COLLISION ────────────────────────────────────────────────────────────────
+function resolveGround() {
+  pState.onGround=false;
+  const px=pState.pos.x, py=pState.pos.y, pz=pState.pos.z;
+  const ph=0.55; // half-height of player
+  for(const p of platforms) {
+    const pm=p.mesh.position;
+    const hw=p.w/2, hd=p.d/2, hh=p.h/2;
+    if(Math.abs(px-pm.x)<hw+0.35 && Math.abs(pz-pm.z)<hd+0.35) {
+      const topY=pm.y+hh;
+      if(py-ph < topY && py-ph > topY-1.2 && pState.vel.y<=0) {
+        pState.pos.y=topY+ph;
+        pState.vel.y=0;
+        pState.onGround=true;
+        pState.jumpsLeft=pState.hasDoubleJump?1:0;
+      }
+    }
+  }
+}
+
+// ─── HUD ──────────────────────────────────────────────────────────────────────
+function updateHUD() {
+  document.getElementById('score-disp').textContent=pState.score.toLocaleString();
+  document.getElementById('gems-disp').textContent=`◆ ${pState.gemCount} / ${pState.gemTotal}`;
+  document.getElementById('coins-disp').textContent=`🪙 ${meta.coins}`;
+  const h='♥ '.repeat(pState.lives).trim()+' ♡ '.repeat(Math.max(0,pState.maxLives-pState.lives)).trim();
+  document.getElementById('lives-disp').textContent=h;
+  document.getElementById('level-disp').textContent=`LEVEL ${pState.level}`;
+  document.getElementById('power-disp').textContent=pState.hasDoubleJump?'⬆ DOUBLE JUMP':'';
+}
+
+// ─── GAME STATE ──────────────────────────────────────────────────────────────
+function startGame() {
+  applyUpgrades();
+  pState.lives=pState.maxLives;
+  pState.score=0; pState.level=1; pState.dead=false;
+  buildLevel(1);
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('hud').style.display='block';
+  gameState='playing';
+  updateHUD();
+}
+
+function loseLife() {
+  pState.lives--;
+  if(pState.lives<=0) { triggerGameOver(); return; }
+  pState.pos.set(0,2,0); pState.vel.set(0,0,0);
+  updateHUD();
+}
+
+function nextLevel() {
+  pState.level++;
+  pState.score+=500*pState.level;
+  buildLevel(pState.level);
+  updateHUD();
+}
+
+function triggerGameOver() {
+  pState.dead=true; gameState='gameover';
+  const coins=Math.floor(pState.score/20);
+  meta.coins+=coins; saveMeta();
+  document.getElementById('hud').style.display='none';
+  const ov=document.getElementById('overlay');
+  ov.innerHTML=`
+    <h1>SKYRIFT</h1><div class="sub">GAME OVER</div>
+    <div id="gameover-score">${pState.score.toLocaleString()}</div>
+    <div style="font-size:13px;color:#666;margin-bottom:24px;">LEVEL ${pState.level} — +${coins} 🪙</div>
+    <button class="menu-btn" id="btn-shop">UPGRADE</button>
+    <button class="menu-btn" id="btn-retry">RETRY</button>
+  `;
+  ov.style.display='flex';
+  document.getElementById('btn-shop').onclick=()=>{ov.style.display='none';openShop();};
+  document.getElementById('btn-retry').onclick=startGame;
+}
+
+function openShop() {
+  gameState='shop'; renderShop();
+  document.getElementById('shop-overlay').style.display='flex';
+}
+function closeShop() {
+  document.getElementById('shop-overlay').style.display='none';
+  startGame();
+}
+function renderShop() {
+  document.getElementById('shop-coins-disp').textContent=`🪙 ${meta.coins}`;
+  const grid=document.getElementById('shop-grid');
+  grid.innerHTML='';
+  UPGRADES.forEach(u=>{
+    const lv=meta.upgrades[u.id]||0;
+    const cost=u.cost*(lv+1); const maxed=lv>=u.maxLv;
+    const card=document.createElement('div');
+    card.className='shop-card';
+    card.innerHTML=`<h3>${u.name}<span class="lvl">LV ${lv}/${u.maxLv}</span></h3><p>${u.desc}</p><span class="cost">${maxed?'— MAXED —':'🪙 '+cost}</span>`;
+    if(!maxed&&meta.coins>=cost) card.onclick=()=>{buyUpgrade(u.id);renderShop();};
+    else card.style.opacity=maxed?'0.4':'0.6';
+    grid.appendChild(card);
+  });
+  document.getElementById('shop-skip').onclick=closeShop;
+}
+
+// ─── MAIN UPDATE ──────────────────────────────────────────────────────────────
+function update(dt) {
+  if(gameState!=='playing') return;
+
+  // Platform movement
+  platforms.forEach(p=>{
+    if(!p.moving) return;
+    p.phase+=dt*0.8;
+    const offset=Math.sin(p.phase)*p.moveAmt;
+    if(p.moveAxis==='x') p.mesh.position.x=p.ox+offset;
+    else p.mesh.position.z=p.oz+offset;
+  });
+
+  // Enemy patrol
+  enemies3d.forEach(e=>{
+    e.phase+=dt*e.speed;
+    e.mesh.position.x=e.ox+Math.sin(e.phase)*e.range;
+    e.mesh.rotation.y=e.phase;
+    // kill player on touch
+    if(pState.pos.distanceTo(e.mesh.position)<1.0 && gameState==='playing') loseLife();
+  });
+
+  // Gem rotation
+  gems.forEach(g=>{
+    if(!g.collected) g.mesh.rotation.y+=dt*2;
+  });
+
+  // Player movement
+  const fwd=new THREE.Vector3(-Math.sin(camYaw),0,-Math.cos(camYaw));
+  const rgt=new THREE.Vector3(-Math.sin(camYaw-Math.PI/2),0,-Math.cos(camYaw-Math.PI/2));
+  const move=new THREE.Vector3();
+  if(keys['KeyW']||keys['ArrowUp'])   move.add(fwd);
+  if(keys['KeyS']||keys['ArrowDown']) move.sub(fwd);
+  if(keys['KeyA']||keys['ArrowLeft']) move.sub(rgt);
+  if(keys['KeyD']||keys['ArrowRight'])move.add(rgt);
+  if(move.lengthSq()>0){move.normalize(); move.multiplyScalar(pState.moveSpeed);}
+  pState.vel.x=move.x; pState.vel.z=move.z;
+
+  // Gravity
+  pState.vel.y-=20*dt;
+  pState.pos.addScaledVector(pState.vel,dt);
+
+  // Ground resolve
+  resolveGround();
+
+  // Fall death
+  if(pState.pos.y < -15) loseLife();
+
+  // Gem collection
+  gems.forEach(g=>{
+    if(g.collected) return;
+    if(pState.pos.distanceTo(g.mesh.position)<pState.gemRadius) {
+      g.collected=true; scene.remove(g.mesh);
+      pState.gemCount++; pState.score+=g.isGoal?200:50;
+      if(g.isGoal) nextLevel();
+    }
+  });
+
+  // Mesh sync
+  pMesh.position.copy(pState.pos);
+  pMesh.rotation.y=camYaw;
+
+  // TPS camera
+  const camDist=8, camH=3;
+  const ideal=new THREE.Vector3(
+    pState.pos.x + Math.sin(camYaw)*camDist,
+    pState.pos.y + camH + camDist*Math.sin(camPitch),
+    pState.pos.z + Math.cos(camYaw)*camDist
+  );
+  camera.position.lerp(ideal,0.12);
+  camera.lookAt(pState.pos.x, pState.pos.y+0.5, pState.pos.z);
+
+  updateHUD();
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
+buildLevel(1); // initial build for background
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  update(dt);
+  renderer.render(scene,camera);
+}
+animate();
+
+document.getElementById('btn-play').onclick=startGame;
+</script>
+</body>
+</html>

@@ -292,30 +292,36 @@ def _apply_visual_code_checks(code: str, ev: EvaluationResult, est_3d: bool = Fa
 
     # ── BONUS (effets de juice — valident que le LLM n'a pas surestimé) ────────
 
-    # Screen shake
-    has_shake = bool(re.search(r'shakeX|shakeY|shakeMag|shakeTimer|triggerShake', code))
+    # Screen shake — must be actively called, not just declared
+    has_shake = bool(re.search(r'triggerShake\s*\(', code)) or (
+        bool(re.search(r'shakeX|shakeY|shakeMag', code))
+        and bool(re.search(r'shakeX\s*[+\-*/]=|shakeY\s*[+\-*/]=|shakeTimer\s*=\s*[^=]', code))
+    )
     if has_shake:
         bonuses.append(("screen shake implémenté", 0.5))
 
-    # Particules
-    has_particles = bool(re.search(r'particles\s*=\s*\[\]|spawnExplosion|spawnParticle|drawParticles', code))
+    # Particules — must spawn AND draw (not just declare the array)
+    has_particles = bool(re.search(r'(?:spawnExplosion|spawnParticle|Particles\.spawn)\s*\(', code)) or (
+        bool(re.search(r'particles\.push\s*\(', code))
+        and bool(re.search(r'drawParticles|particles\.forEach|for.*particles', code))
+    )
     if has_particles:
-        bonuses.append(("système de particules présent", 0.5))
+        bonuses.append(("système de particules actif", 0.5))
 
-    # Floating texts
-    has_float = bool(re.search(r'floatTexts|spawnFloatText|floatingText', code))
+    # Floating texts — must spawn (not just define)
+    has_float = bool(re.search(r'(?:spawnFloatText|Popups\.add|floatTexts\.push)\s*\(', code))
     if has_float:
-        bonuses.append(("floating score texts présents", 0.3))
+        bonuses.append(("floating score texts actifs", 0.3))
 
-    # Glow / shadowBlur
-    has_glow = 'shadowBlur' in code and 'shadowColor' in code
+    # Glow / shadowBlur — must assign a non-zero value (ctx.shadowBlur = 0 is not a glow effect)
+    has_glow = bool(re.search(r'shadowBlur\s*=\s*(?!0\b)\d', code)) and 'shadowColor' in code
     if has_glow:
-        bonuses.append(("effets glow (shadowBlur/shadowColor) présents", 0.3))
+        bonuses.append(("effets glow (shadowBlur/shadowColor) actifs", 0.3))
 
-    # globalAlpha (transparence / fade)
-    has_alpha = 'globalAlpha' in code
+    # globalAlpha — must be set to a fractional value (not 1.0)
+    has_alpha = bool(re.search(r'globalAlpha\s*=\s*0\.\d', code))
     if has_alpha:
-        bonuses.append(("effets de transparence (globalAlpha) présents", 0.2))
+        bonuses.append(("effets de transparence (globalAlpha) actifs", 0.2))
 
     # Appliquer pénalités
     total_penalty = sum(p for _, p in penalties)

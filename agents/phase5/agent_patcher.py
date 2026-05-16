@@ -541,9 +541,18 @@ def _find_keyword(correction: dict | str, probleme: str, script: str) -> str | N
 
 def _extract_snippet(script: str, keyword: str) -> tuple[str, int, int]:
     """Extrait ~200 lignes autour du keyword, en respectant les template literals."""
+    import re as _re_snip
     lines = script.split("\n")
     half = 125 if len(lines) > 400 else 100
-    target_line = next((i for i, ln in enumerate(lines) if keyword in ln), 0)
+    # Prefer function definition line over first occurrence (avoids anchoring on comments)
+    fn_def_line = next(
+        (i for i, ln in enumerate(lines)
+         if _re_snip.search(r'\bfunction\s+' + _re_snip.escape(keyword) + r'\s*\(', ln)),
+        None
+    )
+    target_line = fn_def_line if fn_def_line is not None else next(
+        (i for i, ln in enumerate(lines) if keyword in ln), 0
+    )
     start_line = max(0, target_line - half)
     end_line = min(len(lines), target_line + half)
 
@@ -749,9 +758,9 @@ def _run_multi_snippet_patch(code: str, script: str, diagnostic: dict,
                     f"({consecutive_syntax_failures} échec(s) consécutif(s))"
                 )
                 patches_skipped += 1
-                if consecutive_syntax_failures >= 2:
+                if consecutive_syntax_failures >= 3:
                     phase5_log.warning(
-                        "  [circuit breaker] 2 patches syntaxiquement invalides consécutifs "
+                        "  [circuit breaker] 3 patches syntaxiquement invalides consécutifs "
                         "— arrêt anticipé du patcher (code inchangé vaut mieux que code dégradé)"
                     )
                     break

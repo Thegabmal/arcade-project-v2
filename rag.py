@@ -217,6 +217,9 @@ def search_patterns(query: str, genre: str = "", n_results: int = 5) -> list:
         patterns = []
         if results and results.get("metadatas"):
             for meta in results["metadatas"][0]:
+                # Filter out low-quality patterns at retrieval time
+                if float(meta.get("score", 0)) < 7.5:
+                    continue
                 p = dict(meta)
                 if "mecaniques" in p:
                     try:

@@ -1138,6 +1138,19 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
                 # introduced by the LLM Patcher, before Phase 4 sees them
                 from js_syntax_checker import fix_all_auto as _fix_all_post_patch
                 code, _p4b_fixed, _p4b_descs = _fix_all_post_patch(code)
+                # P4c — ENGINE integrity check: patcher can accidentally destroy ENGINE vars
+                # (canvas/ctx/W/H/Keys) by inserting code before them or replacing too much
+                _active_template = _3d_template_html if est_3d_genre else _template_html
+                if _active_template:
+                    from agents.phase3._layer_gen import _ensure_engine_intact as _eei
+                    code, _engine_restored = _eei(code, _active_template)
+                    if _engine_restored:
+                        coordinateur_log.warning("P4c: ENGINE section restored after patcher damage")
+                        # P4c-B2: re-run fix_all_auto after ENGINE restore — patcher may have
+                        # introduced template global redeclarations (lastTime, canvas, etc.)
+                        code, _p4c_b2_fixed, _p4c_b2_descs = _fix_all_post_patch(code)
+                        if _p4c_b2_fixed:
+                            coordinateur_log.info(f"P4c-B2: {len(_p4c_b2_descs)} template-global redeclaration(s) cleaned after ENGINE restore")
                 if _p4b_fixed:
                     coordinateur_log.success(f"P4b post-patch auto-fix: {len(_p4b_descs)} correction(s)")
         else:

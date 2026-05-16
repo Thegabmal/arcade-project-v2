@@ -370,25 +370,45 @@ def fix_identifier_already_declared(html: str) -> tuple[str, bool, list[str]]:
                 'TILE', 'TILE_SIZE', 'GAME_TITLE',
             })
             if ident in _TEMPLATE_GLOBALS:
-                # Node.js reports the SECOND (ENGINE) occurrence at line_num.
-                # Find and remove the LLM's FIRST duplicate declaration instead,
-                # leaving the ENGINE line intact (avoids _ensure_engine_intact cycle).
+                # Strategy: use ENGINE section boundaries to avoid removing ENGINE declarations.
+                # The ENGINE section starts at '// ENGINE' and ends at the second '// ══' separator.
+                # If line_num is OUTSIDE ENGINE → the reported line IS the LLM/patcher's duplicate → remove directly.
+                # If line_num is INSIDE ENGINE → the reported line is ENGINE's own declaration → find duplicate after ENGINE.
+                _eng_start = next((j for j, l in enumerate(lines) if '// ENGINE' in l), -1)
+                _eng_end = next(
+                    (j for j, l in enumerate(lines) if '// ══' in l and j > _eng_start + 2),
+                    len(lines)
+                )
                 _decl_pat = re.compile(r'\b(?:const|let|var)\s+' + re.escape(ident) + r'\b')
                 _removed = False
-                for _j in range(0, line_num):
-                    if _decl_pat.search(lines[_j]):
-                        _new = _remove_single_var_from_line(lines[_j], ident)
-                        if not _new.strip():
-                            lines.pop(_j)
-                        else:
-                            lines[_j] = _new
-                        js = '\n'.join(lines)
-                        fixes.append(f'[AUTO-FIX] Suppression redéclaration variable template : {ident} ligne {_j + 1}')
-                        _removed = True
-                        break
+                if _eng_start >= 0 and _eng_start <= line_num <= _eng_end:
+                    # Reported line is the ENGINE's own declaration → find LLM/patcher duplicate after ENGINE
+                    for _j in range(_eng_end + 1, len(lines)):
+                        if _decl_pat.search(lines[_j]):
+                            _new = _remove_single_var_from_line(lines[_j], ident)
+                            if not _new.strip():
+                                lines.pop(_j)
+                            else:
+                                lines[_j] = _new
+                            js = '\n'.join(lines)
+                            fixes.append(f'[AUTO-FIX] Suppression redéclaration variable template : {ident} ligne {_j + 1}')
+                            _removed = True
+                            break
+                else:
+                    # Reported line is outside ENGINE → remove ident from reported line directly
+                    _new = _remove_single_var_from_line(lines[line_num], ident)
+                    if not _new.strip():
+                        lines.pop(line_num)
+                    else:
+                        lines[line_num] = _new
+                    js = '\n'.join(lines)
+                    fixes.append(f'[AUTO-FIX] Suppression redéclaration variable template : {ident} ligne {line_num + 1}')
+                    _removed = True
                 if not _removed:
-                    # ENGINE line is first; remove duplicate from lines AFTER it
-                    for _j in range(line_num + 1, len(lines)):
+                    # Fallback: search everywhere except ENGINE section
+                    for _j in range(len(lines)):
+                        if _eng_start <= _j <= _eng_end:
+                            continue
                         if _decl_pat.search(lines[_j]):
                             _new = _remove_single_var_from_line(lines[_j], ident)
                             if not _new.strip():

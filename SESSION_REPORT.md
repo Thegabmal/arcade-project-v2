@@ -5,6 +5,45 @@
 
 ---
 
+## Last session: 2026-05-17 (session 3) — Full pipeline audit + 12 critical/high fixes
+
+### What to do FIRST next session
+1. Start Flask: `python app.py`
+2. Run 8 autonomous games covering all genre types (platformer, puzzle, runner, dungeon 3D, RPG, roguelite, shoot-em-up, breakout)
+3. Monitor for regressions — all fixes below should prevent the most common failures
+
+### All fixes applied this session (commit 455b0f0)
+
+| Bug | File | Fix |
+|-----|------|-----|
+| `THREE` not in browser globals → ESLint injects `var THREE=0` → all 3D games crash | `js_syntax_checker.py` | Added THREE to `_BROWSER_AND_TEMPLATE_GLOBALS` |
+| ctx alias TDZ crash: `var cx=ctx` injected before `const ctx` → ReferenceError | `js_syntax_checker.py` | Guard: `(typeof ctx!=="undefined"?ctx:null)` |
+| `_CTX_METHODS` too broad: `scale/rotate/translate` matched physics/3D code → false positives | `js_syntax_checker.py` | Removed non-canvas-exclusive methods from detection |
+| Brace-balance check killed Cas 2 (surgical) patch path | `agent_patcher.py` | Moved check inside Cas 1 block only |
+| Declarations context only shown for script-only patches (not full HTML) | `agent_patcher.py` | Always compute and include `decls_context` |
+| `_HTML_TEMPLATE_GLOBALS` included 28 names not in `_HTML_TEMPLATE` wrapper | `_layer_gen.py` | Split into `_LAYER_GEN_GLOBALS` (8 names) + full list |
+| `[FILL]` validation missed malformed tokens like `[FILL]` or `[FILL ...]` | `_layer_gen.py` | Changed to `re.findall(r'\[FILL[:\]]?', html)` |
+| 3D CDN validation checked `'three.min.js'` — accepted wrong cdnjs URL | `_layer_gen.py` | Now checks full jsdelivr URL |
+| 3D Playwright init 5s → black screen on WebGL + shader compile | `agent_executeur.py` | 3D init delay: 5s → 7s |
+| Three.js CDN inconsistent: 5 files still using cdnjs URL | all 3D agents | All → `cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js` |
+| RAG stored broken games (no score threshold) → pollutes future retrieval | `rag.py` | Reject patterns with score < 7.5 |
+| Chest in dungeon_rpg_3d spawns at (0,0,0) → instant auto-loot on hero spawn | `dungeon_rpg_3d.html` | Random position 3–6 units from origin |
+
+### Audit source
+5 parallel audit agents covered the full pipeline (90+ bugs found total).
+Ultrareview (master~5) confirmed 3 bugs with detailed proof.
+Fixes prioritized by: severity × frequency × ease of fix.
+
+### Remaining audit items (not yet fixed — lower priority)
+- agent_patcher: _find_keyword() may extract wrong function (anchors on first occurrence)
+- agent_patcher: circuit breaker threshold 2 → should be 3
+- agent_patcher: executeur called after each patch (5× overhead per iteration)
+- agent_qc_visuel: visual bonus regex checks presence not actual function calls
+- agent_diagnosticien: runtime error detection heuristics too weak
+- code_validator: Three.js detection missing in _fix_missing_canvas_setup
+
+---
+
 ## Last session: 2026-05-16 (session 2) — Model game bugfixes + B2 dedup fix
 
 ### What to do FIRST next session

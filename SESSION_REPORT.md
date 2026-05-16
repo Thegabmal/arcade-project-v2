@@ -5,20 +5,22 @@
 
 ---
 
-## Last session: 2026-05-17 (session 3) — Full pipeline audit + 12 critical/high fixes
+## Last session: 2026-05-17 (session 3) — Full pipeline audit + 14 critical/high fixes
 
 ### What to do FIRST next session
 1. Start Flask: `python app.py`
 2. Run 8 autonomous games covering all genre types (platformer, puzzle, runner, dungeon 3D, RPG, roguelite, shoot-em-up, breakout)
 3. Monitor for regressions — all fixes below should prevent the most common failures
 
-### All fixes applied this session (commit 455b0f0)
+### All fixes applied this session (commits 455b0f0 + ae59fa6)
 
 | Bug | File | Fix |
 |-----|------|-----|
 | `THREE` not in browser globals → ESLint injects `var THREE=0` → all 3D games crash | `js_syntax_checker.py` | Added THREE to `_BROWSER_AND_TEMPLATE_GLOBALS` |
 | ctx alias TDZ crash: `var cx=ctx` injected before `const ctx` → ReferenceError | `js_syntax_checker.py` | Guard: `(typeof ctx!=="undefined"?ctx:null)` |
 | `_CTX_METHODS` too broad: `scale/rotate/translate` matched physics/3D code → false positives | `js_syntax_checker.py` | Removed non-canvas-exclusive methods from detection |
+| Simple syntax errors (missing `}`, `;`) cause patcher to rewrite 200 lines → new bugs | `js_syntax_checker.py` | Added `fix_exact_syntax_error`: reads exact `node --check` output, applies minimal targeted fix (brace count / line removal / semicolon insert), verifies with another `node --check` before accepting; loops 5× in `fix_all_auto` |
+| ENGINE utility functions (lerp, createPool, triggerShake…) flagged as orphans by qc_technique | `agent_qc_technique.py` | Added all ENGINE helpers + state-machine callbacks to orphan-function ignore list |
 | Brace-balance check killed Cas 2 (surgical) patch path | `agent_patcher.py` | Moved check inside Cas 1 block only |
 | Declarations context only shown for script-only patches (not full HTML) | `agent_patcher.py` | Always compute and include `decls_context` |
 | `_HTML_TEMPLATE_GLOBALS` included 28 names not in `_HTML_TEMPLATE` wrapper | `_layer_gen.py` | Split into `_LAYER_GEN_GLOBALS` (8 names) + full list |
@@ -36,9 +38,7 @@ Fixes prioritized by: severity × frequency × ease of fix.
 
 ### Remaining audit items (not yet fixed — lower priority)
 - agent_patcher: _find_keyword() may extract wrong function (anchors on first occurrence)
-- agent_patcher: circuit breaker threshold 2 → should be 3
 - agent_patcher: executeur called after each patch (5× overhead per iteration)
-- agent_qc_visuel: visual bonus regex checks presence not actual function calls
 - agent_diagnosticien: runtime error detection heuristics too weak
 - code_validator: Three.js detection missing in _fix_missing_canvas_setup
 

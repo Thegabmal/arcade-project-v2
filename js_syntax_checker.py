@@ -960,7 +960,7 @@ def check_undefined_vars_eslint(html: str) -> list[str]:
         result = subprocess.run(
             _eslint_cmd,
             shell=True,
-            capture_output=True, text=True, timeout=30
+            capture_output=True, text=True, timeout=15
         )
 
         if result.returncode == 0:
@@ -996,7 +996,7 @@ def check_undefined_vars_eslint(html: str) -> list[str]:
                 f2.write(truncated)
                 tmp2 = f2.name
             _cmd2 = f'npx --yes eslint --no-eslintrc --rule \'{{"no-undef":["error"]}}\' --env browser --format json "{tmp2}"'
-            result2 = subprocess.run(_cmd2, shell=True, capture_output=True, text=True, timeout=15)
+            result2 = subprocess.run(_cmd2, shell=True, capture_output=True, text=True, timeout=10)
             if result2.returncode == 0:
                 return []
             try:
@@ -1043,11 +1043,20 @@ def fix_undefined_runtime_vars(html: str, var_names: set) -> tuple[str, bool, li
     if not to_declare:
         return html, False, []
 
+    # Canvas context method patterns — if a var is called with these it's a ctx alias
+    _CTX_METHODS = r'\.(beginPath|fillRect|strokeRect|clearRect|fill|stroke|save|restore|clip|arc|moveTo|lineTo|bezierCurveTo|fillText|strokeText|drawImage|createLinearGradient|createRadialGradient|setTransform|transform|scale|rotate|translate)\s*\('
+
     inject_lines = []
     descs = []
     for v in to_declare:
         is_fn_call = bool(js and re.search(r'\b' + re.escape(v) + r'\s*\(', js))
-        if is_fn_call:
+        is_ctx_alias = bool(js and re.search(r'\b' + re.escape(v) + _CTX_METHODS, js))
+        if is_ctx_alias:
+            inject_lines.append(
+                f'var {v}=(typeof {v}!=="undefined")?{v}:ctx;'
+            )
+            descs.append(f'[AUTO-FIX] var {v} = ctx (canvas context alias détecté)')
+        elif is_fn_call:
             inject_lines.append(
                 f'if(typeof {v}==="undefined")var {v}=function(){{}};'
             )

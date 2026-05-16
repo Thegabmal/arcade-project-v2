@@ -183,6 +183,9 @@ function renderGameoverOverlay(){
   ctx.textAlign='left';
 }
 
+// Player X position — defined before FILL sections so LLM code can reference it safely
+const PLAYER_X = 130;
+
 // ══════════════════════════════════════════════════════════════════
 // GAME CONSTANTS — [FILL: Adjust to match your design]
 // ══════════════════════════════════════════════════════════════════
@@ -226,7 +229,6 @@ const JUMP_BUFFER = 0.10;
 const MAX_JUMPS   = 2;
 
 // ── Player ────────────────────────────────────────────────────────
-const PLAYER_X    = 130;
 const player = {
   x: PLAYER_X, y: GROUND_Y - 52,
   vx: 0, vy: 0,

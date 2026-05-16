@@ -254,7 +254,8 @@ def run(code: str, diagnostic: dict, genre_profile: GenreProfile, iteration: int
     # Multi-snippet dès 50k chars sur un genre complexe (RPG/FPS/etc.).
     script_trop_grand = script_content and (
         len(script_content) > MAX_PATCH_CHARS
-        or (is_complexe and len(script_content) > 50000)
+        or (is_complexe and len(script_content) > 30000)
+        or len(script_content) > 40000  # always multi-snippet for large scripts
     )
 
     if script_trop_grand:
@@ -596,6 +597,13 @@ Retourne uniquement le JavaScript corrigé (les {snippet_lines} lignes complète
 
     fixed_snippet = _clean_html(fixed_snippet)
     fixed_lines = fixed_snippet.count('\n') + 1
+
+    # Brace-balance delta check: the fixed snippet must not shift global {} balance
+    orig_balance = snippet.count('{') - snippet.count('}')
+    new_balance = fixed_snippet.count('{') - fixed_snippet.count('}')
+    if orig_balance != new_balance:
+        phase5_log.info(f"    → snippet brace delta {orig_balance}→{new_balance} ({new_balance - orig_balance:+d}) — ignoré")
+        return code
 
     # Cas 1 : snippet complet retourné (≥ 50% des lignes originales) → injection directe
     # Cas 2 : correction chirurgicale (LLM n'a retourné que les lignes changées) →

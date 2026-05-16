@@ -46,6 +46,28 @@
     opacity: 0; transition: opacity 0.3s; letter-spacing: 4px;
     text-shadow: 0 0 20px #ffd700; pointer-events: none;
   }
+  #chest-msg {
+    position: absolute; top: 28%; left: 50%; transform: translateX(-50%);
+    font-size: 17px; color: #ffd700; font-weight: 700; letter-spacing: 2px;
+    opacity: 0; transition: opacity 0.5s; pointer-events: none;
+    text-shadow: 0 0 12px #ffd700; background: rgba(0,0,0,0.6);
+    padding: 8px 18px; border-radius: 6px;
+  }
+  #levelup-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 300; font-family: system-ui, sans-serif;
+  }
+  #levelup-overlay h2 { color: #ffd700; font-size: 30px; letter-spacing: 4px; margin-bottom: 6px; }
+  #levelup-overlay .sub2 { color: #888; font-size: 12px; margin-bottom: 32px; letter-spacing: 3px; text-transform: uppercase; }
+  .skill-choice {
+    background: #12101a; border: 2px solid #3a2a55; border-radius: 10px;
+    padding: 16px 32px; margin: 8px; cursor: pointer; color: #ccc;
+    min-width: 240px; text-align: center; transition: border-color 0.15s, background 0.15s;
+  }
+  .skill-choice:hover { border-color: #ffd700; background: #1e1830; color: #ffd700; }
+  .skill-choice strong { display: block; font-size: 17px; margin-bottom: 4px; color: #ffd700; }
+  .skill-choice span { font-size: 12px; color: #888; }
 
   #overlay {
     position: fixed; inset: 0;
@@ -109,6 +131,13 @@
   </div>
   <div id="dmg-popup"></div>
   <div id="levelup-banner">LEVEL UP!</div>
+  <div id="chest-msg"></div>
+</div>
+
+<div id="levelup-overlay">
+  <h2>LEVEL UP!</h2>
+  <div class="sub2">CHOOSE A BONUS</div>
+  <div id="skill-choices"></div>
 </div>
 
 <div id="overlay">
@@ -174,7 +203,7 @@ window.addEventListener('resize',()=>{
 });
 
 // ─── LIGHTING ─────────────────────────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0x9988cc,0.9));
+scene.add(new THREE.AmbientLight(0xbbaadd,1.5));
 const heroLight=new THREE.PointLight(0xff8833,2,12);
 scene.add(heroLight);
 
@@ -210,9 +239,38 @@ window.addEventListener('keyup',    e=>{if(e.code==='KeyF') casting=false;});
 // ─── DUNGEON GRID ─────────────────────────────────────────────────────────────
 const ROOM_W=10, ROOM_D=12, CELL=2;
 const dungeonMeshes=[], enemies=[], items=[], magicOrbs=[];
+let chestMesh=null, chestSpawned=false, chestLooted=false;
 
-const matFloor=new THREE.MeshLambertMaterial({color:0x1a1018});
-const matWall =new THREE.MeshLambertMaterial({color:0x2a2030});
+function spawnChest(){
+  if(chestSpawned) return; chestSpawned=true;
+  const cMat=new THREE.MeshLambertMaterial({color:0xcc8800,emissive:0x553300});
+  chestMesh=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.6,0.6),cMat);
+  chestMesh.position.set(0,0.3,0); scene.add(chestMesh);
+  const glow=new THREE.PointLight(0xffcc44,2.5,4);
+  glow.position.set(0,1,0); chestMesh.add(glow);
+}
+
+function lootChest(){
+  if(chestLooted) return; chestLooted=true;
+  scene.remove(chestMesh); chestMesh=null;
+  const pool=[
+    {desc:'Found a Health Potion! +40 HP', fn:()=>{hero.hp=Math.min(hero.maxHp,hero.hp+40);}},
+    {desc:'Found a Mana Crystal! +30 MP',  fn:()=>{hero.mp=Math.min(hero.maxMp,hero.mp+30);}},
+    {desc:'Found Keen Edge! +6 ATK',       fn:()=>{hero.atk+=6;}},
+    {desc:'Found Iron Plate! +4 DEF',      fn:()=>{hero.def+=4;}},
+    {desc:'Found Arcane Dust! +15 Max MP', fn:()=>{hero.maxMp+=15;}},
+    {desc:'Found Vitality Gem! +25 Max HP',fn:()=>{hero.maxHp+=25; hero.hp=Math.min(hero.maxHp,hero.hp+25);}},
+    {desc:'Found 20 Gold!',                fn:()=>{meta.coins+=20; saveMeta();}},
+  ];
+  const loot=pool[Math.floor(Math.random()*pool.length)];
+  loot.fn();
+  const el=document.getElementById('chest-msg');
+  el.textContent=loot.desc; el.style.opacity='1';
+  setTimeout(()=>el.style.opacity='0',2800);
+}
+
+const matFloor=new THREE.MeshLambertMaterial({color:0x201520});
+const matWall =new THREE.MeshLambertMaterial({color:0x3d2a4a});
 const matBoss =new THREE.MeshLambertMaterial({color:0x6600cc});
 
 function buildDungeon(floorNum){
@@ -277,11 +335,25 @@ function buildDungeon(floorNum){
   stairMesh.position.set((W/2-1)*CELL,0.1,(D/2-1)*CELL); scene.add(stairMesh); dungeonMeshes.push(stairMesh);
   scene.userData.stairs=stairMesh;
 
-  // Lights
-  [0,Math.PI/2,Math.PI,Math.PI*3/2].forEach(a=>{
-    const pl=new THREE.PointLight(0xaa3300,1,10);
-    pl.position.set(Math.cos(a)*3,CELL*1.8,Math.sin(a)*3); scene.add(pl); dungeonMeshes.push(pl);
+  // Wall torches — 2 per wall, visible mesh + warm point light
+  const torchMat=new THREE.MeshBasicMaterial({color:0xffbb44});
+  const torchGeo=new THREE.BoxGeometry(0.18,0.28,0.18);
+  const tw=W*CELL/2-0.25, td=D*CELL/2-0.25;
+  [
+    [-tw, CELL*1.3, -D*CELL/4], [-tw, CELL*1.3,  D*CELL/4], // west wall
+    [ tw, CELL*1.3, -D*CELL/4], [ tw, CELL*1.3,  D*CELL/4], // east wall
+    [-W*CELL/4, CELL*1.3, -td], [ W*CELL/4, CELL*1.3, -td], // north wall
+    [-W*CELL/4, CELL*1.3,  td], [ W*CELL/4, CELL*1.3,  td], // south wall
+  ].forEach(([x,y,z])=>{
+    const tm=new THREE.Mesh(torchGeo,torchMat);
+    tm.position.set(x,y,z); scene.add(tm); dungeonMeshes.push(tm);
+    const pl=new THREE.PointLight(0xff8820,3.5,9);
+    pl.position.set(x,y+0.4,z); scene.add(pl); dungeonMeshes.push(pl);
   });
+
+  // Chest reset for new floor
+  if(chestMesh){ scene.remove(chestMesh); chestMesh=null; }
+  chestSpawned=false; chestLooted=false;
 }
 
 const ENEMY_DEFS={
@@ -354,11 +426,40 @@ function gainXP(amount){
   if(hero.xp>=hero.xpNext){
     hero.xp-=hero.xpNext; hero.level++;
     hero.xpNext=Math.floor(hero.xpNext*1.4);
-    hero.atk+=3; hero.def+=1; hero.maxHp+=10;
-    hero.hp=Math.min(hero.maxHp,hero.hp+20);
-    const el=document.getElementById('levelup-banner');
-    el.style.opacity='1'; levelupTimer=2;
+    hero.hp=Math.min(hero.maxHp,hero.hp+10);
+    showSkillChoices();
   }
+}
+
+function showSkillChoices(){
+  gameState='levelup';
+  const all=[
+    {label:'+8 ATK',         detail:'Sharpen your blade',     fn:()=>{hero.atk+=8;}},
+    {label:'+5 DEF',         detail:'Harden your armor',      fn:()=>{hero.def+=5;}},
+    {label:'+35 Max HP',     detail:'Fortify your body',      fn:()=>{hero.maxHp+=35; hero.hp=Math.min(hero.maxHp,hero.hp+35);}},
+    {label:'+25 Max MP',     detail:'Expand your mana pool',  fn:()=>{hero.maxMp+=25;}},
+    {label:'Heal 50% HP',    detail:'Restore your wounds',    fn:()=>{hero.hp=Math.min(hero.maxHp,hero.hp+Math.floor(hero.maxHp*0.5));}},
+    {label:'+5 ATK +3 DEF', detail:'Balanced growth',         fn:()=>{hero.atk+=5; hero.def+=3;}},
+    {label:'+4 ATK +15 HP', detail:'Warrior\'s path',         fn:()=>{hero.atk+=4; hero.maxHp+=15; hero.hp=Math.min(hero.maxHp,hero.hp+15);}},
+    {label:'+20 HP +20 MP',  detail:'Dual restoration',       fn:()=>{hero.maxHp+=20; hero.maxMp+=20;}},
+  ];
+  const pool=[...all];
+  const choices=[];
+  for(let i=0;i<3&&pool.length>0;i++){
+    const idx=Math.floor(Math.random()*pool.length);
+    choices.push(pool.splice(idx,1)[0]);
+  }
+  const ov=document.getElementById('levelup-overlay');
+  ov.querySelector('h2').textContent=`LEVEL ${hero.level}`;
+  const container=document.getElementById('skill-choices'); container.innerHTML='';
+  choices.forEach(ch=>{
+    const btn=document.createElement('div'); btn.className='skill-choice';
+    btn.innerHTML=`<strong>${ch.label}</strong><span>${ch.detail}</span>`;
+    btn.onclick=()=>{ ch.fn(); ov.style.display='none'; gameState='playing'; updateHUD(); canvas.requestPointerLock(); };
+    container.appendChild(btn);
+  });
+  ov.style.display='flex';
+  document.exitPointerLock();
 }
 
 // ─── GAME STATE ───────────────────────────────────────────────────────────────
@@ -489,7 +590,7 @@ function update(dt){
     if(e.dead) return;
     const toHero=new THREE.Vector3().subVectors(hero.pos,e.grp.position);
     const dist=toHero.length();
-    if(dist<12){
+    if(dist<20){
       toHero.normalize();
       e.grp.position.addScaledVector(toHero,e.speed*dt);
       e.grp.lookAt(hero.pos.x,e.grp.position.y,hero.pos.z);
@@ -515,11 +616,19 @@ function update(dt){
     it.mesh.rotation.y+=dt;
   });
 
-  // Stairs
+  // Chest spawn when all enemies cleared
+  if(!chestSpawned && enemies.length>0 && enemies.every(e=>e.dead)) spawnChest();
+  // Chest interaction
+  if(chestMesh && !chestLooted){
+    chestMesh.rotation.y+=dt*2;
+    if(hero.pos.distanceTo(chestMesh.position)<1.3) lootChest();
+  }
+
+  // Stairs (only accessible after chest looted)
   if(scene.userData.stairs){
     const s=scene.userData.stairs;
     s.rotation.y+=dt;
-    if(hero.pos.distanceTo(s.position)<1.2 && enemies.every(e=>e.dead)){
+    if(hero.pos.distanceTo(s.position)<1.2 && enemies.every(e=>e.dead) && (chestLooted||!chestSpawned)){
       hero.floor++; hero.score+=200; meta.coins+=5; saveMeta();
       buildDungeon(hero.floor);
       hero.pos.set(0,0,0);

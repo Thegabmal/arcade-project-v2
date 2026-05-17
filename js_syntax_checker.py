@@ -1210,7 +1210,10 @@ def fix_undefined_runtime_vars(html: str, var_names: set) -> tuple[str, bool, li
     """
     js = extract_js_from_html(html)
     # Skip variables that are computed distances/angles — stubbing them to 0 creates gameplay bugs
-    _SKIP_STUB_PREFIXES = ('dist', 'Dist', 'angle', 'Angle', 'dx', 'dy', 'dz')
+    # Skip computed vars where stub=0 causes worse bugs than the original undefined
+    # (distances render at 0 size, scales render nothing, deltas corrupt physics)
+    _SKIP_STUB_PREFIXES = ('dist', 'Dist', 'angle', 'Angle', 'dx', 'dy', 'dz',
+                           'scale', 'Scale', 'scaleX', 'scaleY', 'zoom', 'factor')
     to_declare = sorted(
         v for v in var_names
         if v and v.isidentifier()

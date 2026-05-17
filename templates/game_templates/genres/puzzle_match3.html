@@ -221,6 +221,7 @@ const GEM_TYPES = GEM_COLORS.length;  // 6
 
 // Grid geometry (centered in canvas)
 const CELL = Math.floor((W - 20) / COLS);
+let scale = 1; // [FILL: override for responsive board scaling if needed]
 const GRID_X = Math.floor((W - COLS * CELL) / 2);
 const GRID_Y = 120;
 const GRID_W = COLS * CELL;

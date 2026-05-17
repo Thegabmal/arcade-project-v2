@@ -64,25 +64,22 @@ def run(html: str) -> list[str]:
     if not html or len(html) < 500:
         return []
 
-    # Extraire le JS — deux échantillons :
-    # - grand (28k) pour les checks programmatiques (regex, pas de LLM)
-    # - petit (14k) pour l'analyse LLM (éviter les dépassements de tokens)
-    # - déclarations collectées depuis le script COMPLET (pas d'échantillon)
-    js_full = extract_js_sample(html, 28000)   # Zone 1 = ~9800 chars → couvre les déclarations globales
-    js_sample = extract_js_sample(html, 14000)  # Pour LLM seulement
-    if not js_full or len(js_full) < 200:
+    # Item 2.2: run all checks on the COMPLETE script (no sampling).
+    # _quick_checks is pure Python regex — fast even at 60K+ chars.
+    # LLM analysis is still limited to 28K to stay within token budget.
+    js_complete = extract_js_sample(html, 10_000_000)  # full script, no truncation
+    if not js_complete or len(js_complete) < 200:
         return []
 
-    # Construire all_declared depuis le script entier (évite les faux positifs pour vars hors Zone 1)
-    js_complete = extract_js_sample(html, 10_000_000)  # Pas de troncature → script entier
     declared_from_full = _collect_all_declared(js_complete)
 
-    # Checks programmatiques rapides d'abord (sans LLM) — utilise le grand échantillon
-    quick_issues = _quick_checks(js_full, declared_from_full)
+    # Programmatic checks on the full script — catches bugs in the second half
+    quick_issues = _quick_checks(js_complete, declared_from_full)
 
-    # Analyse LLM uniquement si le code est de taille raisonnable
+    # LLM analysis on a 28K sample (API token limit)
+    js_sample = extract_js_sample(html, 28000)
     llm_issues = []
-    if len(js_sample) <= 20000:
+    if js_sample and len(js_sample) <= 32000:
         llm_issues = _llm_analysis(js_sample) or []
 
     all_issues = quick_issues + [i for i in llm_issues if i not in quick_issues]

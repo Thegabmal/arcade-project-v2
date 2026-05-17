@@ -1946,6 +1946,124 @@ Règle : ctx.arc() pour les ennemis ronds, ctx.lineTo() pour les polygones, ctx.
 Un jeu avec UNIQUEMENT des fillRect() sera pénalisé -2.0 pts en évaluation visuelle.
 Ajouter ctx.shadowBlur = 10; ctx.shadowColor = color; avant les arc() pour l'effet glow.
 
+FEW-SHOT — EXEMPLE DE JEU CORRECT (shooter minimaliste fonctionnel) :
+Ce code illustre tous les patterns obligatoires correctement intégrés.
+Utilise-le comme référence de structure — adapte le contenu, pas les patterns.
+
+```html
+<!DOCTYPE html><html><head><title>Star Blaster</title><style>
+*{margin:0;padding:0;box-sizing:border-box;}body{background:#000;overflow:hidden;}canvas{display:block;}
+</style></head><body><canvas id="gameCanvas"></canvas><script>
+// ── GLOBALES (avant DOMContentLoaded) ── PATTERN CORRECT
+const PALETTE = { bg:'#0a0a1e', player:'#00CCFF', enemy:'#FF4422', bullet:'#FFFF44', ui:'#FFFFFF' };
+const PLAYER_SPEED = 280, BULLET_SPEED = 500, ENEMY_SPEED = 60;
+const FIRE_RATE = 0.18;
+let score = 0, lives = 3, gameState = 'menu';  // gameState global
+const keys = { left: false, right: false, up: false, down: false, space: false };
+const sfx = { _ctx: null, init(){ try{ if(!this._ctx) this._ctx = new(window.AudioContext||window.webkitAudioContext)(); }catch(e){} },
+  play(f=440,d=0.1,t='square',v=0.12){ try{ this.init(); if(!this._ctx)return; const o=this._ctx.createOscillator(),g=this._ctx.createGain(); o.type=t;o.frequency.value=f;g.gain.setValueAtTime(v,this._ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,this._ctx.currentTime+d);o.connect(g);g.connect(this._ctx.destination);o.start();o.stop(this._ctx.currentTime+d); }catch(e){} } };
+let player = null;       // initialisé dans startGame()
+let fireTimer = 0;       // timer global — déclaré ici, reset dans startGame()
+let spawnTimer = 0;      // idem
+const enemies = [], bullets = [], particles = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+  const canvas = document.getElementById('gameCanvas');
+  canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  document.addEventListener('keydown', e => { const k = e.key.toLowerCase(); if (k in keys) keys[k] = true; if (e.code==='Space') keys.space = true; });
+  document.addEventListener('keyup',   e => { const k = e.key.toLowerCase(); if (k in keys) keys[k] = false; if (e.code==='Space') keys.space = false; });
+
+  function startGame() {
+    score = 0; lives = 3; fireTimer = 0; spawnTimer = 0;  // reset des globales
+    enemies.length = 0; bullets.length = 0; particles.length = 0;
+    player = { x: W/2, y: H*0.8, w: 28, h: 28 };  // initialisé ici
+    gameState = 'playing';
+  }
+
+  function update(dt) {  // dt reçu en paramètre — JAMAIS global implicite
+    if (gameState === 'menu') { if (keys.space) startGame(); return; }
+    if (gameState === 'gameover') { if (keys.space) gameState = 'menu'; return; }
+    // ── déplacement joueur ──
+    if (keys.left  && player.x > 20)      player.x -= PLAYER_SPEED * dt;
+    if (keys.right && player.x < W - 20)  player.x += PLAYER_SPEED * dt;
+    // ── tir ──
+    fireTimer -= dt;
+    if (keys.space && fireTimer <= 0) {
+      bullets.push({ x: player.x, y: player.y - 16, vy: -BULLET_SPEED });
+      fireTimer = FIRE_RATE; sfx.play(880, 0.05, 'square');
+    }
+    // ── mise à jour bullets ──  PATTERN CORRECT : index décroissant + init variable
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      const b = bullets[i];  // ← init obligatoire première ligne
+      b.y += b.vy * dt;
+      if (b.y < -10) { bullets.splice(i, 1); continue; }
+    }
+    // ── spawn ennemis ──
+    spawnTimer -= dt;
+    if (spawnTimer <= 0) { enemies.push({ x: 40+Math.random()*(W-80), y:-30, vy: ENEMY_SPEED }); spawnTimer = 1.2; }
+    // ── mise à jour ennemis ──
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const en = enemies[i];
+      en.y += en.vy * dt;
+      if (en.y > H + 40) { enemies.splice(i, 1); continue; }
+    }
+  }
+
+  function draw() {
+    // ── ÉTAPE 1 : fond EN PREMIER (obligatoire) ──
+    const grad = ctx.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0, '#0a0a1e'); grad.addColorStop(1, '#1a0a2e');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+    if (gameState === 'menu') {
+      ctx.fillStyle = PALETTE.ui; ctx.font = 'bold 36px Arial'; ctx.textAlign = 'center';
+      ctx.fillText('STAR BLASTER', W/2, H/2 - 40);
+      ctx.font = '18px Arial'; ctx.fillText('ESPACE pour jouer', W/2, H/2 + 20);
+      ctx.textAlign = 'left'; return;
+    }
+    if (gameState === 'gameover') {
+      ctx.fillStyle = PALETTE.ui; ctx.font = 'bold 40px Arial'; ctx.textAlign = 'center';
+      ctx.fillText('GAME OVER', W/2, H/2 - 20);
+      ctx.font = '18px Arial'; ctx.fillText('Score: ' + score, W/2, H/2 + 30);
+      ctx.fillText('ESPACE pour rejouer', W/2, H/2 + 60);
+      ctx.textAlign = 'left'; return;
+    }
+    // ── entités ──
+    if (!player) return;  // null guard obligatoire
+    ctx.fillStyle = PALETTE.player; ctx.fillRect(player.x - 14, player.y - 14, 28, 28);
+    bullets.forEach(b => { ctx.fillStyle = PALETTE.bullet; ctx.fillRect(b.x-3, b.y-8, 6, 16); });
+    enemies.forEach(en => { ctx.fillStyle = PALETTE.enemy; ctx.fillRect(en.x-16, en.y-16, 32, 32); });
+    // ── HUD EN DERNIER ──
+    ctx.fillStyle = PALETTE.ui; ctx.font = '18px Arial';
+    ctx.fillText('Score: ' + score, 15, 30);
+    ctx.fillText('Vies: ' + lives, W - 100, 30);
+  }
+
+  let lastTime = 0;
+  function gameLoop(ts) {  // requestAnimationFrame — UNE SEULE fois dans le fichier
+    const dt = Math.min((ts - lastTime) / 1000, 0.05);
+    lastTime = ts;
+    update(dt); draw();
+    requestAnimationFrame(gameLoop);
+  }
+  requestAnimationFrame(gameLoop);
+});
+</script></body></html>
+```
+
+CE QUE CET EXEMPLE DÉMONTRE (à reproduire dans TOUS tes jeux) :
+✓ Toutes les constantes et variables partagées (PALETTE, SPEEDS, score, gameState, tableaux) déclarées AVANT DOMContentLoaded
+✓ player = null déclaré globalement, initialisé seulement dans startGame(), null guard dans draw()
+✓ fireTimer et spawnTimer déclarés globalement, reset dans startGame() — jamais oublier ces reset
+✓ dt passé en paramètre à update(dt) — jamais utilisé comme variable globale implicite
+✓ Boucle for décroissante avec `const b = bullets[i]` en première ligne obligatoire
+✓ gameState géré dans BOTH update() ET draw() — jamais oublier un des deux
+✓ requestAnimationFrame appelé UNE SEULE fois (dans l'initialisation finale)
+✓ Fond dessiné EN PREMIER dans draw() avec dégradé (jamais noir pur #000)
+✓ HUD dessiné EN DERNIER dans draw()
+
 Tu produis UNIQUEMENT le code HTML complet. Commence par <!DOCTYPE html>. Aucun texte avant ou après."""
 
 SYSTEM_3D = """Tu es un développeur senior spécialisé en jeux 3D web avec Three.js r160. Tu produis du code Three.js qui FONCTIONNE SANS ERREUR dès le premier chargement.

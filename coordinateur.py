@@ -892,6 +892,7 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
     _best_code = code
     _best_score = 0.0
     _best_bundle = None
+    _e1_tardif_done = False  # Item 4.2: late full-regen — only one chance per run
 
     def _safe_result(r, name: str) -> EvaluationResult:
         """Extracts an EvaluationResult from a raw value (dict or object)."""
@@ -1090,6 +1091,53 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
                 stagnation_count += 1
                 coordinateur_log.warning(f"Stagnation ({delta:+.2f}) [{stagnation_count}]")
                 if stagnation_count >= MAX_ITERATIONS_SANS_PROGRES:
+                    # Item 4.2: E1 tardif — full regen if patcher stagnated and execution is still broken
+                    if exec_score < 6.0 and not _e1_tardif_done and iteration < _iters:
+                        coordinateur_log.warning(
+                            f"E1-tardif: stagnation + execution={exec_score:.1f} < 6.0 — full regeneration"
+                        )
+                        _e1_tardif_done = True
+                        _err_from_exec = [c.get("commentaire", "") for c in bundle.execution.criteres if c.get("score", 1) == 0]
+                        past_errors = list(past_errors or []) + _err_from_exec[:3]
+                        past_errors = past_errors[-MAX_ERREURS_PASSEES:]
+                        _e1t_regen_code = None
+                        if _3d_template_html:
+                            from agents.phase3._layer_gen import run_from_template_3d as _rft3d_e1t
+                            _e1t_regen_code = _rft3d_e1t(context, _3d_template_html,
+                                                          patterns_reussis=successful_patterns,
+                                                          erreurs_passees=past_errors, game_logics=game_logics)
+                            if not _e1t_regen_code:
+                                _arch_e1t = agent_architecte.run(context)
+                                from agents.phase3.agent_createur import run_modulaire as _rm_e1t
+                                _gen_e1t = _rm_e1t(context, _arch_e1t, patterns_reussis=successful_patterns,
+                                                   erreurs_passees=past_errors, game_logics=game_logics)
+                                _gen_e1t = agent_testeur_modules.run(_gen_e1t)
+                                _e1t_regen_code = agent_assembleur.run(_gen_e1t, context)
+                        elif not use_modular:
+                            if _template_html:
+                                from agents.phase3._layer_gen import run_from_template as _rft_e1t
+                                _e1t_regen_code = _rft_e1t(context, _template_html,
+                                                            patterns_reussis=successful_patterns,
+                                                            erreurs_passees=past_errors, game_logics=game_logics)
+                            else:
+                                from agents.phase3._layer_gen import run_layered as _rl_e1t
+                                _e1t_regen_code = _rl_e1t(context, patterns_reussis=successful_patterns,
+                                                           erreurs_passees=past_errors, game_logics=game_logics,
+                                                           level_design=level_design)
+                        else:
+                            _arch_e1t = agent_architecte.run(context)
+                            from agents.phase3.agent_createur import run_modulaire as _rm_e1t
+                            _gen_e1t = _rm_e1t(context, _arch_e1t, patterns_reussis=successful_patterns,
+                                               erreurs_passees=past_errors, game_logics=game_logics)
+                            _gen_e1t = agent_testeur_modules.run(_gen_e1t)
+                            _e1t_regen_code = agent_assembleur.run(_gen_e1t, context)
+                        if _e1t_regen_code and len(_e1t_regen_code) >= CODE_MIN_VIABLE:
+                            code = _e1t_regen_code
+                            coordinateur_log.success(f"E1-tardif regeneration complete: {len(code)} chars")
+                            code, past_errors = _post_generation_cleanup(code, past_errors)
+                            stagnation_count = 0
+                            previous_score = 0.0
+                            continue
                     coordinateur_log.warning("Persistent stagnation -> stopping iterations")
                     break
             else:

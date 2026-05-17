@@ -568,6 +568,87 @@ def _extract_snippet(script: str, keyword: str) -> tuple[str, int, int]:
     return "\n".join(lines[start_line:end_line]), start_line, end_line
 
 
+def _extract_function_window(script: str, keyword: str) -> tuple[str, int, int]:
+    """
+    Item 3.2 — Full function extraction (replaces fixed ±125-line window).
+
+    Extracts the COMPLETE JavaScript function enclosing the keyword so the patcher
+    always sees full scope context and brace-balance validation is meaningful.
+
+    Algorithm:
+    1. Locate target line (prefer function-definition line over first usage)
+    2. Scan backward ≤200 lines for the nearest named function definition
+    3. Count braces from that definition to find the matching closing brace
+    4. If the function is >500 lines, fall back to a windowed slice within bounds
+    5. Fall back to _extract_snippet if no enclosing function is found
+
+    Returns (snippet, start_line, end_line) — same contract as _extract_snippet.
+    """
+    import re as _re
+    lines = script.split("\n")
+
+    # Find target line — prefer function definition, then first usage
+    fn_def_line = next(
+        (i for i, ln in enumerate(lines)
+         if _re.search(r'\bfunction\s+' + _re.escape(keyword) + r'\s*\(', ln)),
+        None
+    )
+    target_line = fn_def_line if fn_def_line is not None else next(
+        (i for i, ln in enumerate(lines) if keyword in ln), 0
+    )
+
+    # Scan backward to find the nearest enclosing named function definition
+    fn_start = None
+    for i in range(target_line, max(-1, target_line - 200), -1):
+        ln = lines[i]
+        if _re.search(r'^\s*(?:async\s+)?function\s+\w+\s*\(', ln):
+            fn_start = i
+            break
+
+    if fn_start is None:
+        return _extract_snippet(script, keyword)
+
+    # Count braces from fn_start to find the matching close — cap at 600 lines
+    region_lines = lines[fn_start: fn_start + 600]
+    region = "\n".join(region_lines)
+
+    depth = 0
+    in_str = False
+    str_ch = None
+    fn_end_line = None
+
+    for pos, ch in enumerate(region):
+        if in_str:
+            if ch == str_ch:
+                in_str = False
+            continue
+        if ch in ('"', "'", '`'):
+            in_str = True
+            str_ch = ch
+            continue
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                fn_end_line = fn_start + region[: pos + 1].count('\n') + 1
+                break
+
+    if fn_end_line is None or target_line < fn_start or target_line >= fn_end_line:
+        # Brace scan failed or target is outside — fall back to window
+        return _extract_snippet(script, keyword)
+
+    fn_lines = fn_end_line - fn_start
+    if fn_lines > 500:
+        # Function too large — window within the function bounds
+        half = 125
+        start = max(fn_start, target_line - half)
+        end = min(fn_end_line, target_line + half)
+        return "\n".join(lines[start:end]), start, end
+
+    return "\n".join(lines[fn_start:fn_end_line]), fn_start, fn_end_line
+
+
 def _patch_single_issue(code: str, script: str, correction: dict | str,
                         probleme: str, genre_profile: GenreProfile) -> str:
     """
@@ -578,7 +659,8 @@ def _patch_single_issue(code: str, script: str, correction: dict | str,
     if not keyword:
         return code
 
-    snippet, start_line, end_line = _extract_snippet(script, keyword)
+    # Item 3.2: full function extraction — falls back to _extract_snippet automatically
+    snippet, start_line, end_line = _extract_function_window(script, keyword)
     issue_desc = correction.get("description", "") if isinstance(correction, dict) else str(correction)
     correction_str = json.dumps(correction, ensure_ascii=False)
 

@@ -192,6 +192,11 @@ function renderFrame(){ctx.save();ctx.translate(Shake.x,Shake.y);switch(gameStat
 
 // ══════════════════════════════════════════════════════════════════
 // GAME CONSTANTS — [FILL: Adjust to match your design]
+// SCOPE CONTRACT: Everything here is MODULE-LEVEL (global).
+//   • const  → immutable config     (ENEMY_SPEED, ROOM_W, PALETTE, ...)
+//   • let    → mutable runtime state (score, level, currentRoomIdx, ...)
+//   • NEVER  → redeclare canvas/ctx/W/H/gameState/Keys/Mouse (ENGINE owns these)
+//   • Mutable state goes HERE with let, then gets reset inside startGame().
 // ══════════════════════════════════════════════════════════════════
 const GAME_TITLE = '[FILL: Game Title]';
 

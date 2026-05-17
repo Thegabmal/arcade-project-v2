@@ -240,6 +240,11 @@ function renderGameoverOverlay(){ctx.fillStyle='rgba(0,0,0,0.72)';ctx.fillRect(0
 
 // ══════════════════════════════════════════════════════════════════
 // GAME CONSTANTS — [FILL: adjust values to match your design]
+// SCOPE CONTRACT: Everything in this section is MODULE-LEVEL (global).
+//   • const  → values that never change     (ENEMY_SPEED, TILE_SIZE, PALETTE, ...)
+//   • let    → state that changes at runtime (score, level, currentLevel, ...)
+//   • NEVER  → var/let/const canvas/ctx/W/H/gameState/Keys/Mouse (ENGINE owns these)
+//   • Where to put mutable game state: declare with `let` HERE, reset in startGame().
 // ══════════════════════════════════════════════════════════════════
 const GAME_TITLE = '[FILL: Game Title]';
 
@@ -324,6 +329,8 @@ const platforms = [];    // [{x,y,w,h,type,vx,vy,...}] for moving/special platfo
 
 // ══════════════════════════════════════════════════════════════════
 // [FILL: LEVEL DATA]
+// SCOPE: module-level. tileMap, platforms, mapCols, mapRows are ALREADY declared (let)
+// above — ASSIGN to them (push / reassign), do NOT redeclare with var/let/const.
 // ══════════════════════════════════════════════════════════════════
 // Option A: Tile map
 // tileMap = [
@@ -614,6 +621,9 @@ function updatePlaying(dt) {
   enemyPool.update(en => {
     en.flashTimer = Math.max(0, en.flashTimer - dt);
     // [FILL: enemy patrol movement]
+    // SCOPE: callback closure — en is the enemy, dt comes from the outer updatePlaying(dt).
+    // Access globals directly: player, GRAVITY, platforms, score — they are module-level.
+    // DO NOT redeclare dt (already in scope via closure).
     // RULE: Check for wall and cliff ahead before reversing
     // Example:
     // en.x += en.vx * dt;

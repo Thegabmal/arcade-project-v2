@@ -58,6 +58,63 @@ def _export_failure_log(
         json.dump(failures, f, ensure_ascii=False, indent=2)
 
 
+def _save_to_needs_review(
+    html_code: str,
+    titre: str,
+    genre: str,
+    score: float,
+    exec_score: float,
+    issues: list,
+) -> str:
+    """
+    Item 4.1 — Save a 'promising but incomplete' game to needs_review/.
+
+    Called when SCORE_NEEDS_REVIEW ≤ score < SCORE_SEUIL_SAUVEGARDE AND exec ≥ 5.0.
+    These games have correct execution (player responds) but incomplete features.
+    They can be manually patched or used as debugging references.
+
+    Returns the path to the saved HTML, or "" on failure.
+    """
+    import json as _json
+    import re as _re
+
+    folder = os.path.join(os.path.dirname(__file__), "needs_review")
+    os.makedirs(folder, exist_ok=True)
+
+    slug = _re.sub(r'[^a-z0-9_]', '_', titre.lower())[:30].strip('_') or "game"
+    ts   = time.strftime("%Y%m%d_%H%M%S")
+    html_path = os.path.join(folder, f"{ts}_{slug}.html")
+    meta_path = os.path.join(folder, f"{ts}_{slug}_report.json")
+
+    try:
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(html_code)
+
+        top_issues = [
+            (i.get("description", str(i)) if isinstance(i, dict) else str(i))
+            for i in issues[:10]
+        ]
+        meta = {
+            "titre": titre,
+            "genre": genre,
+            "score": round(score, 2),
+            "exec_score": round(exec_score, 2),
+            "date": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "top_issues": top_issues,
+            "note": (
+                "This game runs (exec≥5.0) but needs manual fixes to reach save threshold (7.5). "
+                "Top issues listed above. Edit the HTML directly or re-run with these as past_errors."
+            ),
+        }
+        with open(meta_path, "w", encoding="utf-8") as f:
+            _json.dump(meta, f, ensure_ascii=False, indent=2)
+
+        return html_path
+    except Exception as e:
+        print(f"  [needs_review] Save failed: {e}", flush=True)
+        return ""
+
+
 def _make_minimal_fallback_game(titre: str, genre: str) -> str:
     """
     Session 14 — Generates a minimal guaranteed-functional game in pure Python.
@@ -282,6 +339,7 @@ SCORE_SEUIL_SAUVEGARDE = 7.5   # Minimum score to mark as "approved"
 SCORE_SORTIE_ANTICIPEE = 8.5   # Score to exit early without iterating
 SCORE_STAGNATION_DELTA = 0.2   # If score improves by less than this → stagnation
 SCORE_MIN_VIABLE_SAVE  = 2.0   # Below this, no point saving (empty code)
+SCORE_NEEDS_REVIEW     = 5.0   # 4.1: games ≥ this but < SEUIL_SAUVEGARDE → needs_review/
 # Number of consecutive iterations without progress before stagnation is declared
 MAX_ITERATIONS_SANS_PROGRES = 2  # tolerate 1 "stuck" iteration — A2 fix can unblock
 # E4: threshold to allow passes 3 and 4 (quota savings)
@@ -1398,6 +1456,27 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
     else:
         coordinateur_log.warning(f"Score {final_score:.2f} < {SCORE_MIN_VIABLE_SAVE} — game not saved")
         html_basename = ""
+
+    # 4.1 — needs_review path: save promising-but-incomplete games for manual review
+    # Condition: runs AND nearly passes (exec≥5.0) but below save threshold
+    if (
+        not approved
+        and final_score >= SCORE_NEEDS_REVIEW
+        and final_exec_score >= 5.0
+    ):
+        _nr_path = _save_to_needs_review(
+            html_code=code,
+            titre=game_title,
+            genre=game_genre,
+            score=final_score,
+            exec_score=final_exec_score,
+            issues=final_issues,
+        )
+        if _nr_path:
+            coordinateur_log.info(
+                f"4.1 needs_review: {os.path.basename(_nr_path)} "
+                f"(score={final_score:.2f}, exec={final_exec_score:.1f}) — manual fix candidate"
+            )
 
     # Auto-learner — fire-and-forget in a daemon thread (non-blocking)
     import threading as _threading

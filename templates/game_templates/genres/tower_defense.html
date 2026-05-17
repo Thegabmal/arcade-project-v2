@@ -186,6 +186,11 @@ function renderFrame(){switch(gameState){case'menu':renderMenu();break;case'play
 
 // ══════════════════════════════════════════════════════════════════
 // GAME CONSTANTS — [FILL: Adjust to match your design]
+// SCOPE CONTRACT: Everything here is MODULE-LEVEL (global).
+//   • const  → immutable config     (TOWER_TYPES, ENEMY_DEFS, PATH_WAYPOINTS, ...)
+//   • let    → mutable runtime state (gold, lives, wave, towers, enemies, ...)
+//   • NEVER  → redeclare canvas/ctx/W/H/gameState/Keys/Mouse (ENGINE owns these)
+//   • Mutable state goes HERE with let, then gets reset inside startGame().
 // ══════════════════════════════════════════════════════════════════
 const GAME_TITLE = '[FILL: Game Title]';
 

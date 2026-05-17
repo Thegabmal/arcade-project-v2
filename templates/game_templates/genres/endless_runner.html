@@ -188,6 +188,11 @@ const PLAYER_X = 130;
 
 // ══════════════════════════════════════════════════════════════════
 // GAME CONSTANTS — [FILL: Adjust to match your design]
+// SCOPE CONTRACT: Everything here is MODULE-LEVEL (global).
+//   • const  → immutable config     (OBSTACLE_TYPES, SPEEDS, PALETTE, ...)
+//   • let    → mutable runtime state (score, gameSpeed, distance, ...)
+//   • NEVER  → redeclare canvas/ctx/W/H/gameState/Keys/Mouse (ENGINE owns these)
+//   • Mutable state goes HERE with let, then gets reset inside startGame().
 // ══════════════════════════════════════════════════════════════════
 const GAME_TITLE = '[FILL: Game Title]';
 

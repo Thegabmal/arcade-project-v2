@@ -191,6 +191,11 @@ function renderFrame(){
 
 // ══════════════════════════════════════════════════════════════════
 // GAME CONSTANTS — [FILL: Adjust to match your design]
+// SCOPE CONTRACT: Everything here is MODULE-LEVEL (global).
+//   • const  → immutable config     (ENEMY_STATS, SKILL_DEFS, PALETTE, ...)
+//   • let    → mutable runtime state (hp, mp, gold, questFlags, ...)
+//   • NEVER  → redeclare canvas/ctx/W/H/gameState/Keys/Mouse (ENGINE owns these)
+//   • Mutable state goes HERE with let, then gets reset inside startGame().
 // ══════════════════════════════════════════════════════════════════
 const GAME_TITLE = '[FILL: Game Title]';
 const GAME_SUBTITLE = '[FILL: Subtitle / tagline]';

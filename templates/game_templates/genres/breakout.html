@@ -252,6 +252,11 @@ function renderLevelClearOverlay() { ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillR
 
 // ══════════════════════════════════════════════════════════════════
 // GAME CONSTANTS — [FILL: Adjust to match your design]
+// SCOPE CONTRACT: Everything in this section is MODULE-LEVEL (global).
+//   • const  → values that never change     (PALETTE, BALL_SPEED, BRICK_W, ...)
+//   • let    → state that changes at runtime (score, lives, level, ...)
+//   • NEVER  → redeclare canvas/ctx/W/H/DPR/gameState/setState/Keys/Touch/Mouse (ENGINE owns these)
+//   • Where to put mutable game state: declare with `let` HERE, reset in startGame().
 // ══════════════════════════════════════════════════════════════════
 const GAME_TITLE = '[FILL: Game Title]';
 

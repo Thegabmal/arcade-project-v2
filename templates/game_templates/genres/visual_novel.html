@@ -191,6 +191,11 @@ function renderFrame(){
 
 // ══════════════════════════════════════════════════════════════════
 // GAME CONSTANTS — [FILL: Adjust to match your design]
+// SCOPE CONTRACT: Everything in this section is MODULE-LEVEL (global).
+//   • const  → values that never change     (PALETTE, CHARACTERS, CHAPTERS, ...)
+//   • let    → state that changes at runtime (currentChapter, dialogIndex, ...)
+//   • NEVER  → redeclare canvas/ctx/W/H/DPR/gameState/setState/Keys/Touch/Mouse (ENGINE owns these)
+//   • Where to put mutable game state: declare with `let` HERE, reset in startGame().
 // ══════════════════════════════════════════════════════════════════
 const GAME_TITLE    = '[FILL: Game Title]';
 const GAME_SUBTITLE = '[FILL: Your story subtitle]';

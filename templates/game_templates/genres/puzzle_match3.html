@@ -196,6 +196,11 @@ function renderFrame(){switch(gameState){case'menu':renderMenu();break;case'play
 
 // ══════════════════════════════════════════════════════════════════
 // GAME CONSTANTS — [FILL: Adjust to match your design]
+// SCOPE CONTRACT: Everything in this section is MODULE-LEVEL (global).
+//   • const  → values that never change     (PALETTE, GEM_COLORS, GRID_SIZE, ...)
+//   • let    → state that changes at runtime (score, moves, level, ...)
+//   • NEVER  → redeclare canvas/ctx/W/H/DPR/gameState/setState/Keys/Touch/Mouse (ENGINE owns these)
+//   • Where to put mutable game state: declare with `let` HERE, reset in startGame().
 // ══════════════════════════════════════════════════════════════════
 const GAME_TITLE = '[FILL: Game Title]';
 

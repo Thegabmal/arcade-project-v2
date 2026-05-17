@@ -344,6 +344,11 @@ function renderGameoverOverlay() {
 
 // ══════════════════════════════════════════════════════════════════
 // GAME CONSTANTS — [FILL: Adjust to match your game design]
+// SCOPE CONTRACT: Everything in this section is MODULE-LEVEL (global).
+//   • const  → values that never change     (PALETTE, ENEMY_TYPES, UPGRADES, ...)
+//   • let    → state that changes at runtime (score, wave, bossActive, ...)
+//   • NEVER  → redeclare canvas/ctx/W/H/DPR/gameState/setState/Keys/Touch/Mouse (ENGINE owns these)
+//   • Where to put mutable game state: declare with `let` HERE, reset in startGame().
 // ══════════════════════════════════════════════════════════════════
 const GAME_TITLE = '[FILL: Game Title]';
 

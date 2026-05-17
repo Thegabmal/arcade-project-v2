@@ -805,6 +805,24 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
         genre_profile.technologie_rendu = "canvas2d"
 
     # ─────────────────────────────────────────────
+    # PHASE 3.5 — Pre-flight JS check (Item 2.1)
+    # ─────────────────────────────────────────────
+    # Lightweight Playwright run to catch startup JS errors before the evaluation loop.
+    # Saves 5+ minutes of failed evaluation on runs with simple undefined-variable bugs.
+    try:
+        from agents.phase3.preflight_check import run as _preflight_run
+        code, _pf_fixed, _pf_errors = _preflight_run(code, genre_profile.genre_principal)
+        if _pf_errors:
+            # Seed past_errors so E1 / patcher know what failed before Phase 4
+            for _pf_err in _pf_errors[:2]:
+                _err_entry = f"[PRE-FLIGHT] JS error at startup: {_pf_err}"
+                if _err_entry not in past_errors:
+                    past_errors.append(_err_entry)
+            past_errors = past_errors[-MAX_ERREURS_PASSEES:]
+    except Exception as _pf_exc:
+        coordinateur_log.warning(f"Pre-flight check skipped: {_pf_exc}")
+
+    # ─────────────────────────────────────────────
     # REACT LOOP (Phases 4 + 5)
     # ─────────────────────────────────────────────
     coordinateur_log.section("PHASES 4-5 — Evaluation & Iteration")
@@ -1101,6 +1119,39 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
             code, genre_profile, bundle, iteration,
             corrections_deja_tentees=past_errors,
         )
+
+        # 3.1 — Inject exact Playwright JS errors as top-priority corrections.
+        # The Diagnostician interprets errors and can lose precision; runtime errors
+        # (ReferenceError, TypeError) should reach the Patcher verbatim so it can
+        # fix the exact failing symbol without guessing.
+        _exec_criteres = bundle.execution.criteres if bundle and bundle.execution else []
+        _raw_js_errors = []
+        for _c in _exec_criteres:
+            if _c.get("nom") == "Erreurs JS brutes" and _c.get("commentaire"):
+                _raw_js_errors = [e.strip() for e in _c["commentaire"].split("|") if e.strip()]
+                break
+        if _raw_js_errors and diagnostic:
+            _runtime_corrections = []
+            for _err in _raw_js_errors[:3]:  # max 3 direct errors
+                if any(kw in _err for kw in ("is not defined", "TypeError", "ReferenceError", "SyntaxError")):
+                    _runtime_corrections.append({
+                        "probleme": "ERREUR RUNTIME EXACTE (Playwright)",
+                        "correction": f"Fix this exact JS error: {_err}",
+                        "priorite": "CRITIQUE",
+                        "type": "B1",
+                        "source": "playwright_direct"
+                    })
+            if _runtime_corrections:
+                existing = diagnostic.get("corrections_prioritaires", [])
+                # Prepend runtime errors, deduplicate with existing corrections
+                diagnostic["corrections_prioritaires"] = _runtime_corrections + [
+                    c for c in existing
+                    if not any(e["correction"][:40] in c.get("correction", "") for e in _runtime_corrections)
+                ]
+                coordinateur_log.info(
+                    f"[3.1] {len(_runtime_corrections)} runtime error(s) injected directly into patcher: "
+                    + " | ".join(e["correction"][:60] for e in _runtime_corrections)
+                )
 
         # If diagnostician found nothing useful (fallback or API failure), skip patching
         _diag_corrections = diagnostic.get("corrections_prioritaires", []) if diagnostic else []

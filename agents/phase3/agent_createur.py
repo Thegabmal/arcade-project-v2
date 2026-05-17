@@ -317,6 +317,31 @@ NE PAS utiliser un stub vide `{ play(){} }` — implémenter la vraie version We
 Appels obligatoires : sfx.play() sur tir, collecte, mort ennemi, game over, et powerup.
 Un jeu sans son est immédiatement pénalisé en évaluation.
 
+RÈGLE ABSOLUE N°22 — RÉVISION FINALE OBLIGATOIRE (anti-crash) :
+AVANT de fermer le </script>, relis mentalement ton code dans CET ORDRE exact :
+
+□ 1. DOUBLE GAME LOOP : le mot `requestAnimationFrame` apparaît-il EXACTEMENT UNE FOIS
+      dans tes sections [FILL] ? L'ENGINE en a déjà un — si tu en as ajouté un autre,
+      SUPPRIME-LE immédiatement (double RAF = gameplay 2× trop rapide + crashes).
+
+□ 2. VARIABLES UNDEFINED : pour chaque variable dans tes [FILL], est-elle déclarée
+      (let/const) AVANT sa première utilisation dans le fichier ?
+      Vérifie notamment : timers (fireTimer, spawnTimer), flags (bossActive, isRunning),
+      compteurs (wave, level), tableaux (bullets, enemies, particles).
+      UNE variable non déclarée = ReferenceError = écran noir garanti.
+
+□ 3. GAMESTATES COMPLETS : chaque setState('X') que tu écris —
+      le state 'X' est-il géré dans switch(gameState) dans BOTH update() ET renderFrame() ?
+      Si tu crées setState('boss') tu DOIS avoir case 'boss': dans update ET render.
+      Un state manquant dans switch = freeze/écran blanc garanti à cette transition.
+
+□ 4. FONCTIONS APPELÉES : chaque fonction que tu appelles (ex: spawnBoss(), drawHUD(),
+      updateWave()) est-elle DÉFINIE quelque part dans ce fichier ?
+      Liste mentalement tes appels → cross-check avec tes définitions.
+      Une fonction appelée mais non définie = ReferenceError = crash immédiat.
+
+Si UNE de ces vérifications échoue → CORRIGE le code AVANT de terminer ta réponse.
+
 PATTERNS OBLIGATOIRES — reproduis-les exactement :
 
 0. STRUCTURE HTML COMPLÈTE [tags: always] (modèle à suivre) :

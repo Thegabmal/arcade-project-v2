@@ -1082,20 +1082,33 @@ def fix_palette_missing_keys(html: str) -> tuple[str, bool, list[str]]:
 
 
 def _guess_var_default(name: str) -> str:
-    """Infer a safe JS default value for an auto-declared variable."""
+    """Infer a safe JS default value for an auto-declared variable.
+    Rule: never return 0 for rendering/physics variables — 0 size = invisible game.
+    """
     n = name.lower()
-    if any(n.endswith(s) for s in ('active', 'visible', 'enabled', 'started', 'ready', 'open', 'alive')):
+    # Boolean flags (prefix-based)
+    if n.startswith(('is', 'has', 'can', 'was', 'did', 'should')):
         return 'false'
-    if any(n.endswith(s) for s in ('list', 'arr', 'items', 'tiles', 'nodes', 'enemies', 'bullets', 'particles', 'texts', 'stars', 'effects')):
+    if any(n.endswith(s) for s in ('active', 'visible', 'enabled', 'started', 'ready', 'open', 'alive', 'dead', 'paused', 'running', 'done', 'cleared', 'locked', 'flag')):
+        return 'false'
+    # Collections
+    if any(n.endswith(s) for s in ('list', 'arr', 'items', 'tiles', 'nodes', 'enemies', 'bullets', 'particles', 'texts', 'stars', 'effects', 'orbs', 'gems', 'coins', 'platforms', 'waves')):
         return '[]'
-    if any(n.endswith(s) for s in ('color', 'col', 'style', 'bg', 'fill', 'stroke')):
+    # Color strings
+    if any(n.endswith(s) for s in ('color', 'col', 'style', 'bg', 'fill', 'stroke', 'tint')):
         return '"#ffffff"'
-    if any(n.endswith(s) for s in ('size', 'width', 'height', 'radius', 'len', 'length', 'gap', 'spacing')):
+    # Dimensional vars — safe non-zero default (0 = invisible)
+    if any(n.endswith(s) for s in ('size', 'width', 'height', 'radius', 'len', 'length', 'gap', 'spacing', 'padding', 'margin')):
         return '32'
-    if any(n.endswith(s) for s in ('speed', 'rate', 'scale', 'factor', 'mult')):
+    # Scale/multiplier vars — MUST default to 1, never 0 (0 = renders nothing)
+    if any(n.endswith(s) for s in ('speed', 'rate', 'scale', 'factor', 'mult', 'multiplier', 'ratio', 'zoom', 'alpha', 'opacity')):
         return '1'
+    # Pool objects
     if n.endswith('pool'):
         return '{get:function(){return{};},release:function(){},items:[]}'
+    # Timer/counter vars — 0 is fine
+    if any(n.endswith(s) for s in ('timer', 'counter', 'count', 'idx', 'index', 'score', 'hp', 'time', 'delay', 'interval', 'phase', 'level', 'wave', 'combo')):
+        return '0'
     return '0'
 
 

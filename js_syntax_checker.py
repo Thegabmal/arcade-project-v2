@@ -41,6 +41,8 @@ _BROWSER_AND_TEMPLATE_GLOBALS = frozenset({
     'FIXED_DT', 'MAX_DT', 'accumulator', 'GAME_W', 'GAME_H', 'DPR',
     'TILE_SIZE', 'GAME_SCORE', 'GAME_TITLE',
     'cam', 'coinPool', 'tileMap', 'platforms', 'mapCols', 'mapRows',
+    # ENGINE utility functions — LLM must not redeclare or stub these
+    'dist', 'aabb', 'lerp', 'clamp', 'createPool', 'rand', 'randInt',
     # Three.js global namespace — never inject var THREE = 0
     'THREE',
 })
@@ -1131,7 +1133,7 @@ def check_undefined_vars_eslint(html: str) -> list[str]:
         result = subprocess.run(
             _eslint_cmd,
             shell=True,
-            capture_output=True, text=True, timeout=15
+            capture_output=True, text=True, timeout=30
         )
 
         if result.returncode == 0:
@@ -1167,7 +1169,7 @@ def check_undefined_vars_eslint(html: str) -> list[str]:
                 f2.write(truncated)
                 tmp2 = f2.name
             _cmd2 = f'npx --yes eslint --no-eslintrc --rule \'{{"no-undef":["error"]}}\' --env browser --format json "{tmp2}"'
-            result2 = subprocess.run(_cmd2, shell=True, capture_output=True, text=True, timeout=10)
+            result2 = subprocess.run(_cmd2, shell=True, capture_output=True, text=True, timeout=20)
             if result2.returncode == 0:
                 return []
             try:
@@ -1207,9 +1209,13 @@ def fix_undefined_runtime_vars(html: str, var_names: set) -> tuple[str, bool, li
     - Identifiant utilisé comme valeur → var X = <default déduit du nom>
     """
     js = extract_js_from_html(html)
+    # Skip variables that are computed distances/angles — stubbing them to 0 creates gameplay bugs
+    _SKIP_STUB_PREFIXES = ('dist', 'Dist', 'angle', 'Angle', 'dx', 'dy', 'dz')
     to_declare = sorted(
         v for v in var_names
-        if v and v.isidentifier() and v not in _BROWSER_AND_TEMPLATE_GLOBALS
+        if v and v.isidentifier()
+        and v not in _BROWSER_AND_TEMPLATE_GLOBALS
+        and not any(v.startswith(p) for p in _SKIP_STUB_PREFIXES)
     )
     if not to_declare:
         return html, False, []

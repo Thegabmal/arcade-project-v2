@@ -148,16 +148,20 @@ def _quick_checks(js: str, extra_declared: set | None = None) -> list[str]:
             )
 
     # 2. .clear() sur des tableaux (erreur runtime fréquente)
+    # Exclure les pools (createPool returns objects with .clear()) et Map/Set
     array_clears = re.findall(r'(\w+)\.clear\(\)', js)
     if array_clears:
-        # Vérifier que ce ne sont pas des Map/Set
+        pool_names = set(re.findall(r'(\w+)\s*=\s*createPool\s*\(', js))
         for name in array_clears:
-            if not re.search(rf'\b{re.escape(name)}\s*=\s*new\s+(?:Map|Set)\b', js):
-                issues.append(
-                    f"'{name}.clear()' : les tableaux n'ont pas de méthode .clear() "
-                    f"— remplacer par '{name}.length = 0'"
-                )
-                break  # Signaler une seule fois
+            if name in pool_names:
+                continue  # pool object — .clear() is valid
+            if re.search(rf'\b{re.escape(name)}\s*=\s*new\s+(?:Map|Set)\b', js):
+                continue  # Map/Set — .clear() is valid
+            issues.append(
+                f"'{name}.clear()' : les tableaux n'ont pas de méthode .clear() "
+                f"— remplacer par '{name}.length = 0'"
+            )
+            break  # Signaler une seule fois
 
     # 3. Callbacks appelés sur un objet-type sans optional chaining ni définition
     # Ex: ENEMY_TYPES.boss_X.onAttack(e) alors que boss_X n'a pas de onAttack

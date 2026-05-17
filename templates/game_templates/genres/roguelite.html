@@ -174,6 +174,7 @@ function clamp(v,mn,mx){return v<mn?mn:v>mx?mx:v;}
 function dist(ax,ay,bx,by){return Math.sqrt((ax-bx)**2+(ay-by)**2);}
 function aabb(ax,ay,aw,ah,bx,by,bw,bh){return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by;}
 function randInt(a,b){return a+Math.floor(Math.random()*(b-a+1));}
+function randFloat(a,b){return a+Math.random()*(b-a);}
 function randChoice(arr){return arr[Math.floor(Math.random()*arr.length)];}
 function drawText(t,x,y,c,s,a){ctx.fillStyle=c||'#fff';ctx.font=`bold ${s||13}px monospace`;ctx.textAlign=a||'left';ctx.fillText(t,x,y);}
 function drawBar(x,y,w,h,v,m,fg,bg){ctx.fillStyle=bg||'#333';ctx.fillRect(x,y,w,h);ctx.fillStyle=fg||'#0f0';ctx.fillRect(x,y,Math.round(w*clamp(v/m,0,1)),h);}

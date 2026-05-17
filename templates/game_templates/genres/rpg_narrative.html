@@ -157,6 +157,8 @@ play(f,d,t,v){try{this.init();if(!this._ctx)return;const o=this._ctx.createOscil
 function lerp(a,b,t){return a+(b-a)*t;}
 function clamp(v,mn,mx){return v<mn?mn:v>mx?mx:v;}
 function randInt(a,b){return a+Math.floor(Math.random()*(b-a+1));}
+function randFloat(a,b){return a+Math.random()*(b-a);}
+function randChoice(arr){return arr[Math.floor(Math.random()*arr.length)];}
 function drawText(t,x,y,c,s,a){ctx.fillStyle=c||'#fff';ctx.font=`${s||14}px 'Georgia',serif`;ctx.textAlign=a||'left';ctx.fillText(t,x,y);}
 function drawTextB(t,x,y,c,s,a){ctx.fillStyle=c||'#fff';ctx.font=`bold ${s||14}px monospace`;ctx.textAlign=a||'left';ctx.fillText(t,x,y);}
 function drawBar(x,y,w,h,v,m,fg,bg){ctx.fillStyle=bg||'#333';ctx.fillRect(x,y,w,h);ctx.fillStyle=fg||'#0f0';ctx.fillRect(x,y,Math.round(w*clamp(v/m,0,1)),h);ctx.strokeStyle='rgba(0,0,0,0.4)';ctx.lineWidth=1;ctx.strokeRect(x,y,w,h);}

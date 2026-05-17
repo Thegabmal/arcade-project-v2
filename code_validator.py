@@ -492,37 +492,73 @@ _SACRED_NULL_PAT = re.compile(
 
 def _sanitize_engine_globals(html: str) -> tuple[str, list[str]]:
     """
-    Remove any `var/let/const {sacred_name} = null/0/undefined` declarations
-    that appear AFTER the ENGINE section.
+    Remove ENGINE-sacred variable redeclarations that crash the game:
 
-    Layered generation's L1 often adds these as "clean-slate" initializations
-    (var canvas = null; var ctx = null;) which silently overwrite the ENGINE setup
-    and crash the game on the first draw call (ctx.save() → TypeError: null).
-
-    Only removes lines that:
-      - Declare a known ENGINE-sacred variable name
-      - Assign it to null, 0, undefined, false, '', or ""
-      - Use `var` (ENGINE uses const/let, so a later `var` is always a rogue duplicate)
-      - OR use let/const when the value is null/0 (equally wrong)
+    1. `var/let/const {sacred_name} = null/0/undefined` anywhere — overwrites ENGINE setup.
+    2. `const/let {sacred_name} = <any value>` INSIDE a function body (depth > 0) —
+       creates TDZ that makes every upstream reference in the same function throw
+       "Cannot access 'X' before initialization". Classic case: LLM adds
+       `const ctx = canvas.getContext('2d')` inside a draw function thinking ctx
+       isn't in scope, but the ENGINE already declared it at module level.
     """
-    # Works for both template-adapted games (have ENGINE section) and layered games
-    # (use _HTML_TEMPLATE header). In both cases these globals are set in the HTML header
-    # — any later `var X = null/0` is always a rogue duplicate that kills the game.
     fixes: list[str] = []
 
-    # Only sanitize if the HTML header already declares canvas/ctx (not an empty template stub)
     if (
         "document.getElementById('gameCanvas')" not in html
         and 'getContext' not in html
     ):
         return html, []
 
-    def _replace(m):
+    # Pass 1 — remove null/0/undefined assignments anywhere (existing rule)
+    def _replace_null(m):
         name = m.group('name')
-        fixes.append(f'[ENGINE GUARD] var {name} = null/0 removed — already declared in HTML header')
+        fixes.append(f'[ENGINE GUARD] var {name} = null/0 removed — already declared in ENGINE')
         return ''
 
-    new_html = _SACRED_NULL_PAT.sub(_replace, html)
+    new_html = _SACRED_NULL_PAT.sub(_replace_null, html)
+
+    # Pass 2 — remove const/let sacred redeclarations inside function bodies (TDZ fix)
+    # Extract the JS script section for depth tracking
+    script_match = re.search(r'<script(?:\s[^>]*)?>(.+?)</script>', new_html, re.DOTALL | re.IGNORECASE)
+    if not script_match:
+        return new_html, fixes
+
+    script = script_match.group(1)
+    lines = script.split('\n')
+    to_remove: set[int] = set()
+    depth = 0
+    in_str = False
+    str_char = ''
+
+    inner_decl_pat = re.compile(
+        r'^[ \t]*(?:let|const)\s+(?P<name>' + '|'.join(re.escape(n) for n in sorted(_ENGINE_SACRED)) + r')\s*='
+    )
+
+    for i, line in enumerate(lines):
+        for ch in line:
+            if in_str:
+                if ch == str_char:
+                    in_str = False
+                continue
+            if ch in ('"', "'", '`'):
+                in_str = True; str_char = ch
+            elif ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth = max(0, depth - 1)
+        if depth > 0:
+            m = inner_decl_pat.match(line)
+            if m:
+                to_remove.add(i)
+                fixes.append(
+                    f'[ENGINE GUARD] const/let {m.group("name")} inside function removed — '
+                    f'TDZ shadow of ENGINE module-level declaration'
+                )
+
+    if to_remove:
+        cleaned = '\n'.join(ln for i, ln in enumerate(lines) if i not in to_remove)
+        new_html = new_html[:script_match.start(1)] + cleaned + new_html[script_match.end(1):]
+
     return new_html, fixes
 
 

@@ -568,16 +568,42 @@ def _extract_snippet(script: str, keyword: str) -> tuple[str, int, int]:
     return "\n".join(lines[start_line:end_line]), start_line, end_line
 
 
+def _engine_end_line(lines: list[str]) -> int:
+    """
+    Item 3.3 — Returns the first line index AFTER the ENGINE block.
+
+    The ENGINE block is bounded by '// ENGINE — DO NOT MODIFY' at the top
+    and the closing '// ═══...' separator that follows window.__devPatch.
+    Extraction windows must never start before this boundary so the patcher
+    cannot accidentally rewrite canvas/ctx/W/H or window.__devPatch.
+    """
+    engine_start = None
+    for i, ln in enumerate(lines):
+        if "ENGINE" in ln and "DO NOT MODIFY" in ln:
+            engine_start = i
+            break
+    if engine_start is None:
+        return 0
+    # Scan forward for the closing '// ══...' separator (2+ = chars)
+    for i in range(engine_start + 1, min(engine_start + 20, len(lines))):
+        ln = lines[i]
+        if ln.strip().startswith("//") and "══" in ln and i > engine_start:
+            return i + 1  # first line after the closing separator
+    return engine_start + 1
+
+
 def _extract_function_window(script: str, keyword: str) -> tuple[str, int, int]:
     """
     Item 3.2 — Full function extraction (replaces fixed ±125-line window).
+    Item 3.3 — ENGINE-aware: extraction never starts inside the ENGINE block.
 
     Extracts the COMPLETE JavaScript function enclosing the keyword so the patcher
     always sees full scope context and brace-balance validation is meaningful.
 
     Algorithm:
     1. Locate target line (prefer function-definition line over first usage)
-    2. Scan backward ≤200 lines for the nearest named function definition
+    2. Scan backward ≤200 lines for the nearest named function definition,
+       never crossing into the ENGINE section
     3. Count braces from that definition to find the matching closing brace
     4. If the function is >500 lines, fall back to a windowed slice within bounds
     5. Fall back to _extract_snippet if no enclosing function is found
@@ -586,6 +612,9 @@ def _extract_function_window(script: str, keyword: str) -> tuple[str, int, int]:
     """
     import re as _re
     lines = script.split("\n")
+
+    # Item 3.3: compute ENGINE boundary — extraction must start at or after this line
+    engine_safe_start = _engine_end_line(lines)
 
     # Find target line — prefer function definition, then first usage
     fn_def_line = next(
@@ -597,9 +626,11 @@ def _extract_function_window(script: str, keyword: str) -> tuple[str, int, int]:
         (i for i, ln in enumerate(lines) if keyword in ln), 0
     )
 
-    # Scan backward to find the nearest enclosing named function definition
+    # Scan backward to find the nearest enclosing named function definition,
+    # stopping at the ENGINE boundary so we never pull in ENGINE-owned code.
     fn_start = None
-    for i in range(target_line, max(-1, target_line - 200), -1):
+    search_limit = max(engine_safe_start - 1, target_line - 200)
+    for i in range(target_line, search_limit, -1):
         ln = lines[i]
         if _re.search(r'^\s*(?:async\s+)?function\s+\w+\s*\(', ln):
             fn_start = i
@@ -607,6 +638,9 @@ def _extract_function_window(script: str, keyword: str) -> tuple[str, int, int]:
 
     if fn_start is None:
         return _extract_snippet(script, keyword)
+
+    # Ensure we never send ENGINE lines to the patcher
+    fn_start = max(fn_start, engine_safe_start)
 
     # Count braces from fn_start to find the matching close — cap at 600 lines
     region_lines = lines[fn_start: fn_start + 600]

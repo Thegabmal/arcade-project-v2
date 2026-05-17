@@ -169,10 +169,11 @@ INTERDIT :
     score = raw.score;  // CRASH : raw est une string, .score = undefined → NaN
   }
 
-RÈGLE ABSOLUE N°7 — JAMAIS eval() NI window.__devPatch :
-NE JAMAIS écrire eval(), new Function(), window.__devPatch, ou tout mécanisme d'exécution dynamique.
-Ce sont des restes de debug qui causent des fuites mémoire et des failles de sécurité.
-Si tu voulais faire du debug, ne l'écris pas du tout.
+RÈGLE ABSOLUE N°7 — JAMAIS eval() NI window.__devPatch dans tes [FILL] :
+NE JAMAIS écrire eval(), new Function(), ou un APPEL à window.__devPatch dans tes sections [FILL].
+IMPORTANT : la section ENGINE déclare déjà `window.__devPatch` pour la console de développement — c'est NORMAL.
+NE PAS la supprimer, NE PAS la dupliquer, NE PAS l'appeler.
+Ton code [FILL] ne doit jamais contenir : eval(...), new Function(...), window.__devPatch(...).
 
 RÈGLE ABSOLUE N°8 — DÉCLARER `dist` AVANT DE L'UTILISER :
 Toute variable `dist`, `distance`, `dx`, `dy` DOIT être calculée AVANT d'être testée dans un if().

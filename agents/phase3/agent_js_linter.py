@@ -540,6 +540,159 @@ def _quick_checks(js: str, extra_declared: set | None = None) -> list[str]:
                 f"— ReferenceError au runtime lors de l'interaction"
             )
 
+    # R1 — Fonctions update*/render* définies mais jamais appelées dans le switch gameState
+    # Pattern fréquent : LLM définit updateVictory/renderVictory mais oublie le case dans switch
+    all_update_fns = set(re.findall(r'\bfunction\s+(update\w+)\s*\(', js))
+    all_render_fns = set(re.findall(r'\bfunction\s+(render\w+)\s*\(', js))
+    # Exclure les fonctions qui ne correspondent pas à un état (updatePlaying, renderPlaying, etc.)
+    _state_fn_exclusions = {
+        'updatePlaying', 'renderPlaying', 'updateMenu', 'renderMenu',
+        'updateGameover', 'renderGameover', 'updateShop', 'renderShop',
+        'updatePause', 'renderPause', 'renderPauseOverlay', 'renderGameoverOverlay',
+        'renderHUD', 'renderBackground', 'renderUI', 'renderFrame',
+    }
+    switch_body_match = re.search(r'switch\s*\(\s*gameState\s*\)\s*\{(.{0,3000})\}', js, re.DOTALL)
+    switch_body = switch_body_match.group(1) if switch_body_match else ''
+    orphan_state_fns = []
+    for fn in (all_update_fns | all_render_fns) - _state_fn_exclusions:
+        if fn not in switch_body and re.search(rf'\b{re.escape(fn)}\s*\(', js):
+            # Only flag if the function name looks like it handles a game state
+            state_hint = re.sub(r'^(?:update|render)', '', fn).lower()
+            if state_hint and len(state_hint) >= 4:
+                orphan_state_fns.append(fn)
+    if orphan_state_fns:
+        issues.append(
+            f"Fonctions {orphan_state_fns[:4]} définies mais absentes du switch(gameState) "
+            f"— elles ne seront jamais appelées → état 'stuck'. "
+            f"Ajouter 'case \\'<état>\\': {orphan_state_fns[0]}(dt); break;' dans update() et renderFrame()."
+        )
+
+    # TD-1 — Input state read inside a render function (always false — flushed before render)
+    # Pattern: Pointer.justDown / Pointer.justUp / Keys.pressed inside render* / draw* function
+    render_fns_with_input = []
+    for fn_match in re.finditer(
+        r'\bfunction\s+((?:render|draw)\w*)\s*\([^)]*\)\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}',
+        js, re.DOTALL
+    ):
+        fn_name = fn_match.group(1)
+        fn_body = fn_match.group(2)
+        if re.search(r'Pointer\.justDown|Pointer\.justUp|Keys\.pressed', fn_body):
+            render_fns_with_input.append(fn_name)
+    if render_fns_with_input:
+        issues.append(
+            f"TD-1 — Input state (Pointer.justDown / Keys.pressed) used inside render function(s) "
+            f"{render_fns_with_input[:3]}: flushInput() runs at end of update() so justDown/justUp "
+            f"are always false in render. Move click handling to the corresponding update*() function."
+        )
+
+    # TD-2 — block-scoped variable declared inside for-loop, referenced outside
+    # Pattern: for(...){let x=...;} then ctx.fillRect(x,...) outside the loop
+    for_let_vars = re.findall(
+        r'for\s*\([^)]*\)\s*(?:for\s*\([^)]*\)\s*)?\{[^{}]*\blet\s+(\w+)\s*=',
+        js
+    )
+    for var_name in set(for_let_vars):
+        # Look for use of var_name outside a for-loop context (simplified: after the first for-loop block)
+        # Detect: ctx.someMethod(var_name, ...) or var_name used as argument/standalone
+        # We check if the var appears as a standalone identifier (not as a let/const declaration)
+        out_of_scope_uses = re.findall(
+            rf'(?<!\blet\s)(?<!\bconst\s)(?<!\bvar\s)(?<!\.)(?<!\w)\b{re.escape(var_name)}\b(?!\s*[=:])',
+            js
+        )
+        if len(out_of_scope_uses) > 3:  # appears enough times that it's likely used outside loop
+            # Only flag short single-char or two-char names that are typical loop-computed coords
+            if len(var_name) <= 2 and var_name in ('x', 'y', 'r', 'c', 'w', 'h'):
+                issues.append(
+                    f"TD-2 — '{var_name}' declared with 'let' inside a for-loop is block-scoped "
+                    f"and not accessible outside the loop — likely causes ReferenceError or stale value. "
+                    f"Use inline expressions like GRID_X+col*TILE instead of referencing the loop variable."
+                )
+                break
+
+    # TD-3 — Pool update callback missing e.alive guard
+    # Pattern: pool.update(e => { ... return ...; }) with no if(!e.alive) return false
+    pool_update_callbacks = re.finditer(
+        r'(\w+)\.update\s*\(\s*(?:e|enemy|p|proj|b|bullet|obj)\s*=>\s*\{([^}]{0,400})',
+        js, re.DOTALL
+    )
+    for m in pool_update_callbacks:
+        pool_var = m.group(1)
+        cb_body = m.group(2)
+        # Check if pool was created via createPool
+        if re.search(rf'\b{re.escape(pool_var)}\s*=\s*createPool\s*\(', js):
+            if not re.search(r'if\s*\(\s*!\s*\w+\.alive\s*\)', cb_body):
+                issues.append(
+                    f"TD-3 — Pool '{pool_var}'.update() callback missing alive guard: "
+                    f"killEnemy/killX sets e.alive=false but does not remove from pool immediately. "
+                    f"Add 'if(!e.alive) return false;' as the first line of the update callback "
+                    f"to remove dead entities from the active list on the next frame."
+                )
+
+    # R2 — Appels de fonctions helper jamais définies dans le script
+    # Pattern fréquent : LLM appelle enemyTakeDamage(), playerTakeDamage(), spawnEnemy()
+    # mais oublie de les définir
+    _common_missing = [
+        'enemyTakeDamage', 'spawnEnemy', 'spawnWave', 'createEnemy',
+        'applyDamage', 'killEnemy', 'damagePlayer', 'resetLevel',
+        'loadLevel', 'nextLevel', 'checkWin', 'checkLose',
+        'anyAction', 'checkCollision', 'getTarget',
+    ]
+    all_defined_fns = set(re.findall(r'\bfunction\s+(\w+)\s*\(', js))
+    # Include arrow functions assigned to const/let
+    all_defined_fns |= set(re.findall(r'(?:const|let|var)\s+(\w+)\s*=\s*(?:function|\([^)]*\)\s*=>)', js))
+    missing_helpers = []
+    for fn in _common_missing:
+        if fn in js and fn not in all_defined_fns:
+            missing_helpers.append(fn)
+    if missing_helpers:
+        issues.append(
+            f"Fonction(s) appelée(s) mais jamais définie(s) : {missing_helpers} "
+            f"— ReferenceError au premier appel → crash garanti. "
+            f"Ajouter la définition de chaque fonction ou remplacer l'appel."
+        )
+
+    # R3 — Pool objects cleared with .length = 0 instead of .clear()
+    # Pattern : enemyPool.length = 0 / bullets.length = 0 on pool objects (not arrays)
+    pool_length_zero = re.findall(
+        r'(\w+Pool|particles|Particles|bullets|enemies|projectiles)\s*\.\s*length\s*=\s*0',
+        js
+    )
+    # Filter: only flag if the variable was created via createPool()
+    pool_names = set(re.findall(r'(\w+)\s*=\s*createPool\s*\(', js))
+    bad_clears = [n for n in pool_length_zero if n.rstrip('Pool') in pool_names or n in pool_names]
+    if bad_clears:
+        issues.append(
+            f"Pool object(s) {bad_clears} vidé(s) avec .length = 0 — "
+            f"les pool custom utilisent .clear(), pas .length = 0. "
+            f"Remplacer par {bad_clears[0]}.clear() (et pareil pour les autres)."
+        )
+
+    # TD-4 — Spawner reads group.interval but wave structure has interval at wave level
+    # Pattern: spawner.spawnTimer = group.interval  where groups = [{type,count}] (no interval per group)
+    if re.search(r'spawner\.spawnTimer\s*=\s*group\.interval', js):
+        group_defs = re.findall(r'\{[^{}]*type\s*:\s*[\'"]?\w+[\'"]?[^{}]*\}', js)
+        groups_missing_interval = [g for g in group_defs[:10] if 'interval' not in g and 'type' in g and 'count' in g]
+        if groups_missing_interval:
+            issues.append(
+                "TD-4 — Spawner reads group.interval but enemy group objects lack an 'interval' property "
+                "— spawner.spawnTimer becomes undefined→NaN after first spawn, no more enemies spawn. "
+                "Add interval per group: {type:'X', count:N, interval:1.0} "
+                "OR use: spawner.spawnTimer = group.interval ?? WAVE_STRUCTURE[waveIndex]?.interval ?? 1.0;"
+            )
+
+    # TD-5 — ENEMY_TYPES entries missing 'size' property → NaN hit radius
+    enemy_types_match = re.search(r'(?:let|const|var)\s+ENEMY_TYPES\s*=\s*\{(.{0,3000})\};', js, re.DOTALL)
+    if enemy_types_match:
+        enemy_block = enemy_types_match.group(1)
+        entries = re.findall(r'(\w+)\s*:\s*\{([^{}]+)\}', enemy_block)
+        missing_size = [name for name, body in entries if 'size' not in body and 'hp' in body]
+        if missing_size:
+            issues.append(
+                f"TD-5 — ENEMY_TYPES entries missing 'size' property: {missing_size[:5]} "
+                f"— e.size = def.size*(sizeFactor||1) produces NaN, breaking hit detection and rendering. "
+                f"Add 'size: 14' to each entry."
+            )
+
     return issues
 
 

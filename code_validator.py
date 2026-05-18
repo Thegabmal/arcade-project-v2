@@ -563,6 +563,77 @@ def _sanitize_engine_globals(html: str) -> tuple[str, list[str]]:
 
 
 # ─────────────────────────────────────────────────────────────
+# FIX — Pool objects cleared with .length = 0 → .clear()
+# ─────────────────────────────────────────────────────────────
+
+def _fix_pool_length_zero(script: str) -> tuple[str, list[str]]:
+    """
+    Finds createPool()-based objects cleared with .length = 0 (array idiom)
+    and replaces with .clear() (correct pool method).
+
+    Example:
+    ❌ enemyPool.length = 0;
+    ✅ enemyPool.clear();
+    """
+    import re
+    fixes = []
+
+    pool_names = set(re.findall(r'(\w+)\s*=\s*createPool\s*\(', script))
+    if not pool_names:
+        return script, fixes
+
+    def _replace_length_zero(m: re.Match) -> str:
+        name = m.group(1)
+        fixes.append(f'[AUTO-FIX] {name}.length = 0 → {name}.clear() (pool object)')
+        return f'{name}.clear()'
+
+    pattern = re.compile(
+        r'(' + '|'.join(re.escape(n) for n in pool_names) + r')\s*\.\s*length\s*=\s*0'
+    )
+    script = pattern.sub(_replace_length_zero, script)
+
+    return script, fixes
+
+
+# ─────────────────────────────────────────────────────────────
+# FIX TD-3 — Pool update callbacks missing e.alive guard
+# ─────────────────────────────────────────────────────────────
+
+def _fix_pool_update_no_alive_guard(script: str) -> tuple[str, list[str]]:
+    """
+    TD-3: pool.update(e => { ... }) callbacks that don't start with
+    'if(!e.alive) return false;' → insert it as the first statement.
+    Only applies to pools created via createPool().
+    """
+    import re
+    fixes = []
+    pool_names = set(re.findall(r'(\w+)\s*=\s*createPool\s*\(', script))
+    if not pool_names:
+        return script, fixes
+
+    def _patch_callback(m: re.Match) -> str:
+        pool_var = m.group(1)
+        param_name = m.group(2).strip()
+        brace_open = m.group(3)
+        rest = m.group(4)
+        # Skip if alive guard already present
+        first_line = rest.lstrip()
+        if re.match(r'if\s*\(\s*!\s*\w+\.alive\s*\)', first_line):
+            return m.group(0)
+        if pool_var not in pool_names:
+            return m.group(0)
+        guard = f'if(!{param_name}.alive) return false;\n    '
+        fixes.append(f'[AUTO-FIX] {pool_var}.update() missing alive guard → inserted if(!{param_name}.alive) return false')
+        return f'{m.group(1)}.update({param_name} => {brace_open}\n    {guard}{rest}'
+
+    pattern = re.compile(
+        r'(\w+)\.update\s*\(\s*(e|enemy|p|proj|b|bullet|obj)\s*=>\s*(\{)([ \t]*\n?)',
+    )
+    script = pattern.sub(_patch_callback, script)
+    return script, fixes
+
+
+# ─────────────────────────────────────────────────────────────
 
 def check_fill_placeholders(html: str) -> list[str]:
     """
@@ -744,6 +815,12 @@ def validate_and_fix(html: str) -> tuple[str, list[str], bool]:
             issues.append(f'[SKIPPED] {dedup_count} redéclaration(s) — rollback (syntaxe cassée après dédup)')
         else:
             issues.append(f'[AUTO-FIX] {dedup_count} redéclaration(s) de variable(s) supprimée(s) → déduplication')
+
+    script, pool_fixes = _fix_pool_length_zero(script)
+    issues.extend(pool_fixes)
+
+    script, alive_fixes = _fix_pool_update_no_alive_guard(script)
+    issues.extend(alive_fixes)
 
     script, timer_fixes = _fix_enemy_timer_init(script)
     issues.extend(timer_fixes)

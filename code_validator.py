@@ -220,9 +220,15 @@ COMMON_VARS: dict[str, str] = {
     'range': '0',
     'cost': '0',
 
-    # Canvas dimensions — injected if missing (W/H no longer assumed always declared)
+    # Canvas dimensions — injected if missing (W/H/DPR no longer assumed always declared)
     'W': 'window.innerWidth',
     'H': 'window.innerHeight',
+    'DPR': 'Math.min(window.devicePixelRatio||1,2)',
+
+    # Match-3 / puzzle common vars seen undeclared across runs
+    'isUndo': 'false',
+    'currentLevelObjective': 'null',
+    'objective': 'null',
 
     # Fixed timestep game loop — CRITICAL: wrong defaults break the loop entirely
     'MAX_DT':      '0.1',        # cap delta-time cap — NEVER 0 (infinite loop)

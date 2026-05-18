@@ -286,7 +286,28 @@ def fix_exact_syntax_error(html: str) -> tuple[str, bool, list[str]]:
                 new_js = '\n'.join(js_lines)
                 fix_desc = f'Removed extra }} from line {line_num + 1}'
 
-        # ── Case 3: Missing semicolon / unexpected identifier → add ; ─────────
+        # ── Case 3a: missing ) after argument list → append ) before ; on that line ──
+        elif 'missing )' in err_msg.lower() and 'argument' in err_msg.lower() \
+                and line_num is not None and line_num < len(js_lines):
+            # Try appending ) to the reported line and its predecessor
+            for try_idx in (line_num, max(0, line_num - 1)):
+                candidate = js_lines[try_idx].rstrip()
+                if not candidate:
+                    continue
+                # Insert ) before any trailing ; or , to close the argument list
+                if candidate.endswith(';'):
+                    patched = candidate[:-1] + ');'
+                elif candidate.endswith(','):
+                    patched = candidate[:-1] + '),'
+                else:
+                    patched = candidate + ')'
+                js_lines_copy = js_lines[:]
+                js_lines_copy[try_idx] = patched
+                new_js = '\n'.join(js_lines_copy)
+                fix_desc = f'Added ) at line {try_idx + 1} (missing ) after argument list)'
+                break
+
+        # ── Case 3b: Missing semicolon / unexpected identifier → add ; ─────────
         elif ('Missing' in err_msg or 'missing' in err_msg or
               ('Unexpected' in err_msg and 'identifier' in err_msg.lower())) \
                 and line_num is not None and line_num > 0:
@@ -1097,6 +1118,11 @@ def _guess_var_default(name: str) -> str:
     # Color strings
     if any(n.endswith(s) for s in ('color', 'col', 'style', 'bg', 'fill', 'stroke', 'tint')):
         return '"#ffffff"'
+    # Map dimension vars — use level data if available, not a hardcoded constant
+    if n in ('currentmapwidth', 'mapwidth', 'levelwidth'):
+        return '(typeof LEVEL_DATA!=="undefined"&&typeof currentLevel!=="undefined"&&LEVEL_DATA[currentLevel]?LEVEL_DATA[currentLevel].mapWidth:800)'
+    if n in ('currentmapheight', 'mapheight', 'levelheight'):
+        return '(typeof LEVEL_DATA!=="undefined"&&typeof currentLevel!=="undefined"&&LEVEL_DATA[currentLevel]?LEVEL_DATA[currentLevel].mapHeight:600)'
     # Dimensional vars — safe non-zero default (0 = invisible)
     if any(n.endswith(s) for s in ('size', 'width', 'height', 'radius', 'len', 'length', 'gap', 'spacing', 'padding', 'margin')):
         return '32'

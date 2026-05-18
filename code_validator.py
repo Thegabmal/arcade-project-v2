@@ -640,6 +640,106 @@ def _fix_pool_update_no_alive_guard(script: str) -> tuple[str, list[str]]:
 
 
 # ─────────────────────────────────────────────────────────────
+# FIX M3-7 — hitstop frame counter never decremented
+# ─────────────────────────────────────────────────────────────
+
+def _fix_hitstop_decrement(script: str) -> tuple[str, list[str]]:
+    """
+    M3-7: hitstopFrames (or freezeFrames) used as a guard in state update functions
+    but never decremented in the main game loop → game freezes after every match/hit.
+
+    Pattern detected:
+      if (hitstopFrames > 0) return;   ← guard in updateResolving / updateFalling
+      function update(dt) { ... }       ← no hitstopFrames-- anywhere
+
+    Fix: inject  if(hitstopFrames>0)hitstopFrames--;  at start of update(dt).
+    """
+    fixes = []
+    for var_name in ('hitstopFrames', 'freezeFrames', 'hitstopTimer'):
+        guard_pat = re.compile(rf'\bif\s*\(\s*{re.escape(var_name)}\s*>\s*0\s*\)\s*return')
+        if not guard_pat.search(script):
+            continue
+        # Already decremented somewhere → nothing to do
+        if re.search(rf'\b{re.escape(var_name)}\s*--|\b{re.escape(var_name)}\s*-=\s*1', script):
+            continue
+        # Find the main update(dt) function opening brace
+        update_match = re.search(r'function\s+update\s*\(\s*dt\s*\)\s*\{', script)
+        if not update_match:
+            continue
+        inject_pos = update_match.end()
+        script = (script[:inject_pos]
+                  + f'if({var_name}>0){var_name}--;'
+                  + script[inject_pos:])
+        fixes.append(
+            f'[AUTO-FIX] M3-7: {var_name} used as freeze guard but never decremented '
+            f'→ injected decrement at start of update()'
+        )
+        break  # Only one hitstop var expected
+    return script, fixes
+
+
+# ─────────────────────────────────────────────────────────────
+# FIX M3-8 — setState('playing') overwrites gameover/victory after checkObjective
+# ─────────────────────────────────────────────────────────────
+
+def _fix_state_clobber_after_check_objective(script: str) -> tuple[str, list[str]]:
+    """
+    M3-8: checkObjective() may set state to 'gameover' or 'victory', but the
+    immediately following setState('playing') unconditionally overwrites it.
+
+    Pattern:
+      checkObjective();
+      setState('playing');   ← clobbers gameover/victory
+
+    Fix: guard with  if(gameState!=='gameover'&&gameState!=='victory')
+    """
+    fixes = []
+    pattern = re.compile(
+        r"(checkObjective\s*\(\s*\)\s*;[ \t]*\n?[ \t]*)setState\s*\(\s*'playing'\s*\)",
+    )
+    if not pattern.search(script):
+        return script, fixes
+
+    def _guard(m: re.Match) -> str:
+        fixes.append(
+            "[AUTO-FIX] M3-8: setState('playing') after checkObjective() "
+            "→ guarded to not overwrite 'gameover'/'victory'"
+        )
+        return m.group(1) + "if(gameState!=='gameover'&&gameState!=='victory') setState('playing')"
+
+    script = pattern.sub(_guard, script)
+    return script, fixes
+
+
+# ─────────────────────────────────────────────────────────────
+# FIX M3-9 — Match-3 gameover: extra !hasPossibleMoves() guard prevents gameover
+# ─────────────────────────────────────────────────────────────
+
+def _fix_match3_gameover_condition(script: str) -> tuple[str, list[str]]:
+    """
+    M3-9: LLM adds !hasPossibleMoves() to the gameover trigger, which prevents
+    gameover when the board still has valid swaps but no moves remain.
+    Gameover in match-3 must fire as soon as movesLeft reaches 0.
+
+    Pattern:
+      if (movesLeft <= 0 && !hasPossibleMoves()) { setState('gameover') }
+
+    Fix: remove the !hasPossibleMoves() condition.
+    """
+    fixes = []
+    pattern = re.compile(
+        r'if\s*\(\s*movesLeft\s*<=\s*0\s*&&\s*!hasPossibleMoves\s*\(\s*\)\s*\)'
+    )
+    if pattern.search(script):
+        script = pattern.sub('if (movesLeft<=0)', script)
+        fixes.append(
+            '[AUTO-FIX] M3-9: gameover condition had extra !hasPossibleMoves() guard '
+            '→ simplified to movesLeft<=0 (moves exhausted = game over)'
+        )
+    return script, fixes
+
+
+# ─────────────────────────────────────────────────────────────
 
 def check_fill_placeholders(html: str) -> list[str]:
     """
@@ -839,6 +939,15 @@ def validate_and_fix(html: str) -> tuple[str, list[str], bool]:
 
     script, sfx_fixes = _fix_sfx_missing_methods(script)
     issues.extend(sfx_fixes)
+
+    script, hitstop_fixes = _fix_hitstop_decrement(script)
+    issues.extend(hitstop_fixes)
+
+    script, clobber_fixes = _fix_state_clobber_after_check_objective(script)
+    issues.extend(clobber_fixes)
+
+    script, gameover_fixes = _fix_match3_gameover_condition(script)
+    issues.extend(gameover_fixes)
 
     script, eval_fixed = _fix_eval_in_production(script)
     if eval_fixed:

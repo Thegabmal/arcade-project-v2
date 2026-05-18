@@ -693,6 +693,45 @@ def _quick_checks(js: str, extra_declared: set | None = None) -> list[str]:
                 f"Add 'size: 14' to each entry."
             )
 
+    # M3-10 — Gem type counting AFTER gems cleared to type:-1
+    # Pattern: grid[r][c]={type:-1,...} (clearing) AND resolveQueue.filter(c=>grid[c.r][c.c].type===...)
+    # The filter runs post-clear so all types are -1 → objective collection always counts 0.
+    has_grid_clear = bool(re.search(r'grid\s*\[\s*\w+\s*\]\s*\[\s*\w+\s*\]\s*=\s*\{[\s\S]{0,30}type\s*:\s*-1', js))
+    has_post_clear_filter = bool(re.search(
+        r'(?:resolveQueue|matches|queue|matched)\.filter\s*\([^)]*grid\s*\[',
+        js
+    ))
+    if has_grid_clear and has_post_clear_filter:
+        issues.append(
+            "M3-10 — Gem type counting via .filter(c => grid[c.r][c.c].type) runs AFTER gems are "
+            "set to {type:-1} — all types are -1 at that point, so collection objectives always count 0. "
+            "Pre-count gem types before the clearing forEach: "
+            "let clearedByType={}; resolveQueue.forEach(({r,c})=>{let t=grid[r][c].type; "
+            "if(t>=0) clearedByType[t]=(clearedByType[t]||0)+1;}); "
+            "then use  clearedByType[objective.gemType]||0  in the objective update."
+        )
+
+    # M3-11 — renderShop() uses layout vars declared only inside updateShop() (block-scoped)
+    # Pattern: renderShop references sx/sy/cardW/cardH/gap/btnX/btnY without module-level declaration
+    render_shop_m = re.search(r'function\s+renderShop\s*\([^)]*\)\s*\{([^}]{0,3000})\}', js, re.DOTALL)
+    if render_shop_m:
+        render_body = render_shop_m.group(1)
+        shop_layout_vars = [v for v in ('cardW', 'cardH', 'gap', 'sx', 'sy', 'btnX', 'btnY', 'btnW', 'btnH')
+                            if re.search(rf'\b{v}\b', render_body)]
+        if shop_layout_vars:
+            # Check if they're declared at module level (before renderShop)
+            module_scope = js[:render_shop_m.start()]
+            undeclared_in_render = [
+                v for v in shop_layout_vars
+                if not re.search(rf'\b(?:let|const|var)\s+{v}\b', module_scope)
+            ]
+            if undeclared_in_render:
+                issues.append(
+                    f"M3-11 — renderShop() references {undeclared_in_render} which are only declared "
+                    f"inside updateShop() (block-scoped) → ReferenceError when shop is rendered. "
+                    f"Move these layout constants to module level so both functions share them."
+                )
+
     return issues
 
 

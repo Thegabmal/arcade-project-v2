@@ -5,19 +5,24 @@
 
 ---
 
-## Last session: 2026-05-19 (session 7) — FPS 3D gap analysis COMPLETE + reference game
+## Last session: 2026-05-19 (session 8) — FPS reference game polished + gap finalisé
 
 ### What to do FIRST next session
-1. Re-run FPS 3D to validate new rules (FPS-4→FPS-10) — expect score 7+ with template path
+1. Re-run FPS 3D to validate rules (FPS-4→FPS-10) — expect score 7+ with template path
 2. Continue genre cycle: 3D Platformer → Bullet Hell 3D
 3. Each genre: run → if score < 7.5 → gap analysis → rules → re-run
 
-### All fixes applied this session
+### All fixes applied this session (reference game polish — commits b9554f6, 0c0858f, 7a9266d)
 
-#### FPS 3D manual fix + reference game
+#### FPS reference game — polypulse_arena_reference.html
 | Item | File | Fix |
 |------|------|-----|
-| `polypulse_arena_reference.html` | `polypulse_arena_reference.html` (root) | Full reference FPS game using template structure. Features: 4 enemy types, headshot ×2, between-wave shop, drop mechanic (10% ammo / 5% heal), admin console (`` ` ``), meta-progression |
+| `polypulse_arena_reference.html` | root | Full reference FPS. Features: 4 enemy types, headshot ×2, swept-sphere collision, between-wave shop, drop mechanic, admin console, meta-progression, 120×120 arena, 3 elevated platforms + **staircases** (enemies climb), battlement windows, 9-point lighting, **ammo resupply** shop item (+30 rounds / 20 gold) |
+| Ramp collision bug | `polypulse_arena_reference.html` | West ramp formula was wrong (flip hack). Replaced RAMPS with STAIRS[] — `buildStairMesh()` draws 6 cumulative slabs, smooth-slope physics via `h0+t*(h1-h0)` |
+| Platform-edge obstacles | `polypulse_arena_reference.html` | Removed — they blocked ramp→platform transition (player radius + obstacle r blocked entry) |
+| Enemy y hardcoded | `polypulse_arena_reference.html` | Changed from `0.9*scale` to `(getFloorY(x,z)-EYE_H)+0.9*scale` — enemies climb stairs and can reach platforms |
+| Enemy speed | `polypulse_arena_reference.html` | −20%: grunt 3.0→2.4, runner 6.0→4.8, heavy 1.6→1.3, boss 1.8→1.4 |
+| Shop ammo resupply | `polypulse_arena_reference.html` | `flat:true` item in UPGRADES — always 20 gold, adds 30 to reserve, no level cap |
 | FPS-4: `init` overwrite | Linter FPS-4 | Detects `init = anyFunction` at global scope |
 | FPS-5: global `scene.add()` | Linter FPS-5 | Detects `.add()` calls outside function at global scope |
 | FPS-6: undefined click shooter | Linter FPS-6 | Detects `addEventListener('click', undefinedFn)` |

@@ -725,6 +725,7 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
         )
         if code and len(code) >= CODE_MIN_VIABLE:
             coordinateur_log.success(f"3D template code: {len(code)} characters")
+            genre_profile.est_template = True
         else:
             # Integrity check failed inside run_from_template_3d → fall back to modular
             coordinateur_log.warning("3D template adaptation failed — falling back to modular pipeline")
@@ -762,6 +763,7 @@ def run(user_prompt: str, style_graphique: str = "", stop_event=None,
                 game_logics=game_logics,
             )
             coordinateur_log.success(f"2D template code: {len(code)} characters")
+            genre_profile.est_template = True
         else:
             # 2D games without a template match — full 8-layer pipeline
             coordinateur_log.info("2D route: layered generation (no template match)")

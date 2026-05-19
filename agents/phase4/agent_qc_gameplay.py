@@ -141,9 +141,11 @@ def run(code: str, genre_profile: GenreProfile, gdd: dict) -> dict:
             + _checklist_raw + "\n"
         )
 
+    est_template = getattr(genre_profile, 'est_template', False)
+
     phase4_log.agent_start(
         "QC Gameplay + Anti-Pattern",
-        f"{genre_profile.genre_principal} ({'3D' if est_3d else '2D'}{', narratif' if est_narratif else ''})"
+        f"{genre_profile.genre_principal} ({'3D' if est_3d else '2D'}{', narratif' if est_narratif else ''}{', template' if est_template else ''})"
     )
 
     criteres = genre_profile.criteres_qc_gameplay
@@ -158,10 +160,30 @@ def run(code: str, genre_profile: GenreProfile, gdd: dict) -> dict:
         "- Contrôles 2D réactifs (clavier/touch, réponse immédiate aux inputs)"
     )
 
+    _engine_features_note = ""
+    if est_template:
+        _engine_features_note = """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ENGINE-PROVIDED FEATURES — créditez ces éléments comme PRÉSENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Ce jeu utilise un moteur (ENGINE) qui fournit automatiquement :
+  • Particules : spawnParticles(), updateParticles() — feedback visuel PRÉSENT
+  • Screen shake : triggerShake() — game feel PRÉSENT
+  • Textes flottants : spawnPopup() — feedback score PRÉSENT
+  • Audio : sfx.play() — sons synthétisés PRÉSENTS
+  • Input : Keys, Pointer, Mouse — gestion des entrées PRÉSENTE
+  • Machine à états : setState() / gameState — structure PRÉSENTE
+  • Boucle RAF avec delta time — PRÉSENTE (FIXED_DT)
+RÈGLE : Ne PAS pénaliser "particules absentes", "sfx absent", "shake absent" si sfx.play /
+spawnParticles / triggerShake sont appelés quelque part dans le code — ils sont dans l'ENGINE.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
+
     from utils import extract_js_sample
     code_extrait = extract_js_sample(code, 24000)
 
     prompt = f"""Analyse complète du gameplay de ce jeu {genre_profile.genre_principal} ({'Three.js 3D' if est_3d else 'Canvas 2D'}).
+{_engine_features_note}
 
 CODE :
 ```html

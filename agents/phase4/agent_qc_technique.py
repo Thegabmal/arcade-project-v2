@@ -82,6 +82,47 @@ DUNGEON/RPG criteria (if genre is RPG, dungeon, adventure — check imperatively
 - Post-attack boss recoil: boss._recoilTimer > 0 → boss retreats 0.6–1.0s after each hit (evasion window for player)
 - Distinctive boss visuals: pulsing aura (animated semi-transparent arc), ★ BOSS ★ indicator above, mini health bar on sprite, sizeFactor ≥ 2.0"""
 
+# Context injected into the prompt for template-generated games.
+# The ENGINE pre-wires all boilerplate — evaluate only the [FILL] contributions.
+ENGINE_CONTEXT_TEMPLATE = """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TEMPLATE-GENERATED GAME — ENGINE CONTEXT (read before evaluating)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+This game was generated using a fixed ENGINE template. The ENGINE already provides:
+  • Canvas & ctx setup — inline <script>, NOT DOMContentLoaded (this is CORRECT for this architecture)
+  • requestAnimationFrame loop — ENGINE's loop() function manages it
+  • Delta time — FIXED_DT + lastTime + accumulator pattern in ENGINE
+  • W, H, DPR — set by ENGINE's resizeCanvas()
+  • spawnParticles() / updateParticles() / drawParticles() — particle system in ENGINE
+  • triggerShake() — screen shake in ENGINE
+  • spawnPopup() — floating score text in ENGINE
+  • sfx.play() — synthesized WebAudio sound in ENGINE
+  • Keys, Pointer, Mouse — unified input handling in ENGINE
+  • setState() / gameState — state machine in ENGINE
+  • startGame() + initLevel() — initialization pattern (NOT initGame())
+  • Menu activated by Pointer.justDown (click/tap) — NOT SPACE/Enter (template design)
+
+EVALUATION RULE: Credit all ENGINE features as PRESENT. The LLM's contribution is ONLY
+the [FILL] sections. Do NOT penalize for "missing DOMContentLoaded", "missing RAF",
+"SPACE/Enter not wired to menu", or "initGame() not found" — these do not apply here.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
+
+# Template-adapted BLOCKING criteria — removes 4 false positives that penalize correct template games.
+CRITERES_BLOCKING_TEMPLATE_2D = """BLOCKING criteria — severe penalty if absent (non-functional game):
+- requestAnimationFrame loop present (ENGINE provides it — verify it is NOT replaced by setInterval)
+- Delta time used in movement — verify dt parameter passed to updatePlaying(dt) and used in physics
+- No .clear() on arrays (TypeError) — use .length = 0
+- LOOP VAR INIT: `for (let i = arr.length-1; i >= 0; i--)` → body starts with `const X = arr[i]`
+- FOR-OF SPLICE: `for (const x of arr)` must NEVER contain `arr.splice()`
+- CONST REASSIGNMENT: `const score = 0` then `score += 10` → TypeError — mutable scalars = `let`
+- DT PASSING: functions that use `dt` MUST have it as a parameter (updatePlaying, updateBoss, etc.)
+- `dist` calculated BEFORE being used in if(dist < ...) — no variable appearing out of thin air
+- NO eval() or new Function() in game logic (window.__devPatch from dev console is allowed)
+- Key functions NON-STUB: updatePlaying() with real game logic, renderPlaying() with real draw calls
+- Initialization: startGame() resets all module-level state, initLevel() populates the grid/level
+- Menu present: rendered by renderMenu(), transition to 'playing' state on interaction"""
+
 CRITERES_UNIVERSELS_3D = """BLOCKING criteria (error = non-functional game):
 - DOMContentLoaded wrapping all Three.js code (NEVER THREE.* at top-level)
 - THREE.WebGLRenderer created and added to body (document.body.appendChild(renderer.domElement))
@@ -154,11 +195,21 @@ def _detect_orphan_functions(code: str) -> list[str]:
 
 def run(code: str, genre_profile: GenreProfile) -> EvaluationResult:
     est_3d = genre_profile.technologie_rendu == "threejs"
-    phase4_log.agent_start("QC Technique", f"Technical analysis {'Three.js 3D' if est_3d else 'Canvas 2D'}")
+    est_template = getattr(genre_profile, 'est_template', False)
+    phase4_log.agent_start("QC Technique", f"Technical analysis {'Three.js 3D' if est_3d else 'Canvas 2D'}{' [template]' if est_template else ''}")
 
     criteres = genre_profile.criteres_qc_technique
     criteres_str = json.dumps(criteres, ensure_ascii=False) if criteres else "standard criteria"
-    criteres_universels = CRITERES_UNIVERSELS_3D if est_3d else CRITERES_UNIVERSELS_2D
+
+    # For template-generated 2D games, swap in template-compatible BLOCKING criteria
+    if est_template and not est_3d:
+        # Replace the full 2D criteria with a version that: (a) has correct BLOCKING for templates,
+        # (b) keeps BASIC QUALITY and DEPTH sections unchanged
+        _depth_start = CRITERES_UNIVERSELS_2D.find("BASIC QUALITY criteria")
+        criteres_universels = CRITERES_BLOCKING_TEMPLATE_2D + "\n\n" + CRITERES_UNIVERSELS_2D[_depth_start:]
+    else:
+        criteres_universels = CRITERES_UNIVERSELS_3D if est_3d else CRITERES_UNIVERSELS_2D
+
     system = SYSTEM_3D if est_3d else SYSTEM_2D
     techno_label = "Three.js (3D)" if est_3d else "Canvas 2D"
 
@@ -177,8 +228,10 @@ def run(code: str, genre_profile: GenreProfile) -> EvaluationResult:
             + "\nThese functions NEVER contribute to the game. Add a critical issue for each one."
         )
 
-    prompt = f"""Technically analyze this HTML5 game code ({techno_label}) for a {genre_profile.genre_principal}.
+    _engine_ctx = ENGINE_CONTEXT_TEMPLATE if est_template else ""
 
+    prompt = f"""Technically analyze this HTML5 game code ({techno_label}) for a {genre_profile.genre_principal}.
+{_engine_ctx}
 CODE (excerpt):
 ```html
 {code_extrait}

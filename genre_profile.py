@@ -74,6 +74,9 @@ class GenreProfile:
     # Narrative
     is_narrative: bool = False  # True si le jeu a une histoire/quêtes/dialogues
 
+    # Generation method — set by coordinateur after Phase 3, read by Phase 4 QC agents
+    est_template: bool = False  # True when generated via run_from_template / run_from_template_3d
+
     # Enriched prompts (final Phase 1 outputs)
     prompt_utilisateur_original: str = ""
     prompt_enrichi: str = ""

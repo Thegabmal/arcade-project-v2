@@ -122,6 +122,7 @@ const UPGRADES = [
   { id:'stopping_power', name:'Stopping Power', desc:'+25% damage per level',   cost:40, maxLv:3 },
   { id:'flak_vest',      name:'Flak Vest',       desc:'+25 max HP per level',    cost:50, maxLv:3 },
   { id:'quick_reload',   name:'Quick Reload',   desc:'-0.4s reload time',       cost:35, maxLv:3 },
+  { id:'ammo_resupply',  name:'Ammo Resupply',  desc:'+30 rounds to reserve',   cost:20, maxLv:99, flat:true },
 ];
 
 let meta = { coins:0, upgrades:{} };
@@ -132,9 +133,15 @@ function loadMeta() {
 function saveMeta() { try { localStorage.setItem(META_KEY,JSON.stringify(meta)); } catch(e){} }
 function buyUpgrade(id) {
   const u=UPGRADES.find(u=>u.id===id); if(!u) return;
-  const lv=meta.upgrades[id]; if(lv>=u.maxLv) return;
-  const cost=u.cost*(lv+1); if(meta.coins<cost) return;
-  meta.coins-=cost; meta.upgrades[id]++; saveMeta();
+  const lv=meta.upgrades[id]||0; if(lv>=u.maxLv) return;
+  const cost=u.flat?u.cost:u.cost*(lv+1); if(meta.coins<cost) return;
+  meta.coins-=cost;
+  if(u.flat) {
+    if(id==='ammo_resupply') player.reserve=Math.min(player.reserve+30,999);
+  } else {
+    meta.upgrades[id]++;
+  }
+  saveMeta();
 }
 loadMeta();
 
@@ -307,9 +314,12 @@ function renderShop() {
   document.getElementById('shop-coins').textContent=`🪙 ${meta.coins}`;
   const grid=document.getElementById('shop-grid'); grid.innerHTML='';
   UPGRADES.forEach(u=>{
-    const lv=meta.upgrades[u.id]||0, cost=u.cost*(lv+1), maxed=lv>=u.maxLv;
+    const lv=meta.upgrades[u.id]||0;
+    const cost=u.flat?u.cost:u.cost*(lv+1);
+    const maxed=!u.flat&&lv>=u.maxLv;
+    const lvBadge=u.flat?'':`<span class="lvl">LV ${lv}/${u.maxLv}</span>`;
     const card=document.createElement('div'); card.className='shop-card';
-    card.innerHTML=`<h3>${u.name}<span class="lvl">LV ${lv}/${u.maxLv}</span></h3><p>${u.desc}</p><span class="cost">${maxed?'— MAXED —':'🪙 '+cost}</span>`;
+    card.innerHTML=`<h3>${u.name}${lvBadge}</h3><p>${u.desc}</p><span class="cost">${maxed?'— MAXED —':'🪙 '+cost}</span>`;
     if(!maxed&&meta.coins>=cost) card.onclick=()=>{ buyUpgrade(u.id); renderShop(); };
     else card.style.opacity=maxed?'0.4':'0.6';
     grid.appendChild(card);

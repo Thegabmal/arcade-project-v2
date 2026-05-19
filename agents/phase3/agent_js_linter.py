@@ -732,6 +732,112 @@ def _quick_checks(js: str, extra_declared: set | None = None) -> list[str]:
                     f"Move these layout constants to module level so both functions share them."
                 )
 
+    # ── FPS-4 — ENGINE init overwritten by module code ────────────────────────
+    # Pattern: `init = entities_init_public;` or `init = someOtherFn;` at global scope
+    # Root cause: modular pipeline generates a module that reassigns the ENGINE's init(),
+    # replacing Three.js setup with entity init → playerBody/scene undefined at call time.
+    fps_init_overwrite = re.findall(
+        r'(?:^|\n)\s*init\s*=\s*(?!function\s*\()(\w+)\s*;',
+        js
+    )
+    if fps_init_overwrite:
+        issues.append(
+            f"FPS-4 — ENGINE `init` overwritten: `init = {fps_init_overwrite[0]}` at global scope. "
+            f"This replaces Three.js setup with the assigned function — playerBody/scene are undefined "
+            f"when it runs. Remove the assignment. Call entity initialisation from inside `buildArena()` "
+            f"or from within `updatePlaying(dt)` on the first frame instead."
+        )
+
+    # ── FPS-5 — scene.add() / playerBody.add() called at global scope ─────────
+    # Pattern: Three.js .add() call outside any function definition
+    # Root cause: module global code runs at parse time, before ENGINE init() creates scene/playerBody.
+    # Detect by looking for .add( calls that are NOT inside a function body.
+    # Heuristic: find `scene.add(` or `playerBody.add(` preceded only by whitespace/comments on the line
+    fps_global_add = re.findall(
+        r'(?m)^[ \t]*(?:scene|playerBody|camera)\.add\s*\(',
+        js
+    )
+    # Filter out lines that are inside a function (very rough: check if there's a 'function' keyword nearby before it)
+    # A robust check is hard statically; we flag if scene.add appears at column 0 indentation level
+    fps_global_add_suspicious = [m for m in fps_global_add if not m.strip().startswith('//')]
+    if fps_global_add_suspicious:
+        # Only fire if there's also a module-level variable assignment pattern (global code indicator)
+        has_global_var = bool(re.search(r'(?m)^var\s+\w+\s*=\s*new\s+THREE\.', js))
+        if has_global_var:
+            issues.append(
+                f"FPS-5 — `scene.add()` / `playerBody.add()` called at global scope (outside any function). "
+                f"Global module code runs at script parse time, before ENGINE `init()` creates scene/playerBody "
+                f"→ TypeError: Cannot read properties of null. "
+                f"Move all `scene.add()` calls inside `buildArena()`, `spawnEnemy()`, or `updatePlaying()`."
+            )
+
+    # ── FPS-6 — Undefined shoot function wired to click event ────────────────
+    # Pattern: document.addEventListener('click', playerShoot) where playerShoot is not defined.
+    # Root cause: LLM defines a click handler referencing a custom shoot fn it forgot to implement.
+    # ENGINE uses `shooting` bool (mousedown/mouseup) — a custom click listener is not needed.
+    fps_click_shoot = re.findall(
+        r"addEventListener\s*\(\s*['\"]click['\"]\s*,\s*(\w+)\s*\)",
+        js
+    )
+    for fn_name in fps_click_shoot:
+        if fn_name not in all_defined_fns and fn_name not in ('startGame', 'onClick'):
+            issues.append(
+                f"FPS-6 — `addEventListener('click', {fn_name})` but `{fn_name}` is never defined "
+                f"→ ReferenceError on first click. "
+                f"Remove this listener. ENGINE already handles shooting via the `shooting` bool "
+                f"(mousedown/mouseup) and calls spawnBullet() automatically in update()."
+            )
+
+    # ── FPS-7 — startWave() missing waveActive=true or waveEnemiesLeft assignment ──
+    # Pattern: startWave function exists but doesn't set both ENGINE-required variables.
+    fps_start_wave_m = re.search(r'function\s+startWave\s*\([^)]*\)\s*\{([^}]{0,2000})\}', js, re.DOTALL)
+    if fps_start_wave_m:
+        sw_body = fps_start_wave_m.group(1)
+        missing_assignments = []
+        if 'waveActive' not in sw_body:
+            missing_assignments.append('waveActive=true')
+        if 'waveEnemiesLeft' not in sw_body:
+            missing_assignments.append('waveEnemiesLeft=count')
+        if missing_assignments:
+            issues.append(
+                f"FPS-7 — `startWave()` missing required ENGINE assignments: {missing_assignments}. "
+                f"ENGINE wave management checks `waveEnemiesLeft===0 && enemies.length===0` to detect wave "
+                f"completion, and `!waveActive` to trigger the next wave. Without these, wave loop freezes. "
+                f"Add `waveActive=true; waveEnemiesLeft=<total_count>;` at the end of startWave()."
+            )
+
+    # ── FPS-8 — buildArena() never pushes to obstacles[] ──────────────────────
+    # Pattern: buildArena function exists but obstacles.push is absent → no wall collision.
+    fps_build_arena_m = re.search(r'function\s+buildArena\s*\([^)]*\)\s*\{([^}]{0,4000})\}', js, re.DOTALL)
+    if fps_build_arena_m:
+        ba_body = fps_build_arena_m.group(1)
+        if 'obstacles.push' not in ba_body and 'obstacles[' not in ba_body:
+            issues.append(
+                "FPS-8 — `buildArena()` never pushes to `obstacles[]`. "
+                "The ENGINE `circleBlocked()` function only checks this array for wall/pillar collision "
+                "→ player and enemies walk through all solid objects. "
+                "Add `obstacles.push({ pos: new THREE.Vector3(x,0,z), r: 1.5 })` for every pillar/wall."
+            )
+
+    # ── FPS-9 — onEnemyKilled callback not defined ────────────────────────────
+    # ENGINE calls `onEnemyKilled(e)` after each enemy death. If not defined, no drop/scoring hooks fire.
+    if 'onEnemyKilled' in js and 'function onEnemyKilled' not in js:
+        issues.append(
+            "FPS-9 — ENGINE calls `onEnemyKilled(e)` on enemy death but function is not defined "
+            "→ ReferenceError. Define `function onEnemyKilled(e) { /* drop roll, scoring */ }` "
+            "in the FILL section. Minimum: 10% ammo drop + 5% heal drop."
+        )
+
+    # ── FPS-10 — onWaveClear callback not defined ─────────────────────────────
+    # ENGINE calls `onWaveClear(waveNum, bonus)` when wave clears. Used for between-wave shop.
+    if 'onWaveClear' in js and 'function onWaveClear' not in js:
+        issues.append(
+            "FPS-10 — ENGINE calls `onWaveClear(waveNum, bonus)` on wave completion but function "
+            "is not defined → ReferenceError. Define `function onWaveClear(n, bonus) { ... }` "
+            "in the FILL section. Should call `openShop(callback, title, subtitle, skipLabel)` "
+            "to open the between-wave upgrade screen."
+        )
+
     return issues
 
 

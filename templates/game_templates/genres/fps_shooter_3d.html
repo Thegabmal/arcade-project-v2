@@ -25,6 +25,8 @@
 │  gameState  → 'menu' | 'playing' | 'gameover' | 'shop'                     │
 │  meta       → { coins:0, upgrades:{} }                                      │
 │  obstacles[]→ [{pos:Vector3, r:number}]  for collision                      │
+│  enemies[]  → active enemy objects [{grp, hp, maxHp, scale, speed, …}]     │
+│  player     → {pos, hp, maxHp, ammo, maxAmmo, reserve, dmg, score, wave…}  │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─ ENGINE HELPERS — USE, DON'T REWRITE ───────────────────────────────────────┐
@@ -33,6 +35,7 @@
 │  addKillFeed(label)   → floating kill text top-right                        │
 │  updateHUD()          → syncs all HUD elements from player/meta state       │
 │  spawnBullet(fromPlayer, origin?, direction?) → fires a projectile          │
+│  openShop(onClose, title, subtitle, skipLabel) → open upgrade shop          │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─ YOUR CONTRACT — FILL THESE ─────────────────────────────────────────────────┐
@@ -40,9 +43,25 @@
 │  UPGRADE_DEFS[]    → 4 upgrades with id, name, desc, cost, maxLv            │
 │  applyUpgrades()   → reads meta.upgrades, sets player.* vars                │
 │  buildArena()      → THREE.Mesh floor/walls/pillars/cover, fills obstacles[]│
+│                       RULE: MUST call obstacles.push() for every solid       │
 │  ENEMY_TYPES{}     → { typeName: { hp, speed, reward, color, scale, sInt } }│
-│  startWave(n)      → spawns enemies for wave n                              │
-│  updatePlaying(dt) → full game loop: movement, shoot, enemies, waves        │
+│  spawnEnemy(type)  → build THREE.Group with body + head child (1.15*scale)  │
+│                       RULE: head mesh at y=1.15*scale for headshot detection │
+│  startWave(n)      → spawn enemies; MUST set waveActive=true AND             │
+│                       waveEnemiesLeft=<total_count> (ENGINE checks these)    │
+│  updatePlaying(dt) → per-frame FILL logic (enemies, drops, etc.)            │
+│  onEnemyKilled(e)  → called by ENGINE on kill; implement drop roll here     │
+│                       RULE: 10% ammo drop (+10), 5% heal drop (+20hp)       │
+│  onWaveClear(n,b)  → called by ENGINE on wave completion; MUST call         │
+│                       openShop(callback, title, subtitle, skipLabel)         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ABSOLUTE PROHIBITIONS (FPS-4, FPS-5, FPS-6) ───────────────────────────────┐
+│  NEVER: init = anyFunction        — overwrites ENGINE Three.js setup         │
+│  NEVER: scene.add() at global scope — runs before ENGINE init(), NPE         │
+│  NEVER: playerBody.add() at global scope — playerBody undefined at parse     │
+│  NEVER: addEventListener('click', customShootFn) — use `shooting` bool       │
+│  NEVER: let/var/const scene, camera, renderer, clock, enemies, player        │
 └─────────────────────────────────────────────────────────────────────────────┘
 -->
 <!DOCTYPE html>

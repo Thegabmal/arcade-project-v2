@@ -5,14 +5,33 @@
 
 ---
 
-## Last session: 2026-05-19 (session 6) — FPS 3D gap analysis + template-aware evaluation
+## Last session: 2026-05-19 (session 7) — FPS 3D gap analysis COMPLETE + reference game
 
 ### What to do FIRST next session
-1. Open the FPS 3D game in `needs_review/` — find the file from the last run
-2. Fix it manually until it is perfectly playable (same process as TD and M3 gap analyses)
-3. Document every bug with root cause → extract FPS-specific pipeline rules
-4. Commit rules to linter / auto-fix / template as appropriate
-5. After rules are extracted → re-run FPS 3D to validate, then continue genre cycle (3D Platformer, Bullet Hell 3D)
+1. Re-run FPS 3D to validate new rules (FPS-4→FPS-10) — expect score 7+ with template path
+2. Continue genre cycle: 3D Platformer → Bullet Hell 3D
+3. Each genre: run → if score < 7.5 → gap analysis → rules → re-run
+
+### All fixes applied this session
+
+#### FPS 3D manual fix + reference game
+| Item | File | Fix |
+|------|------|-----|
+| `polypulse_arena_reference.html` | `polypulse_arena_reference.html` (root) | Full reference FPS game using template structure. Features: 4 enemy types, headshot ×2, between-wave shop, drop mechanic (10% ammo / 5% heal), admin console (`` ` ``), meta-progression |
+| FPS-4: `init` overwrite | Linter FPS-4 | Detects `init = anyFunction` at global scope |
+| FPS-5: global `scene.add()` | Linter FPS-5 | Detects `.add()` calls outside function at global scope |
+| FPS-6: undefined click shooter | Linter FPS-6 | Detects `addEventListener('click', undefinedFn)` |
+| FPS-7: startWave missing assignments | Linter FPS-7 | Detects missing `waveActive=true` / `waveEnemiesLeft` |
+| FPS-8: buildArena no obstacles | Linter FPS-8 | Detects `buildArena()` without `obstacles.push()` |
+| FPS-9: onEnemyKilled undefined | Linter FPS-9 | Detects ENGINE callback call without definition |
+| FPS-10: onWaveClear undefined | Linter FPS-10 | Detects ENGINE callback call without definition |
+| Template scope contracts | `fps_shooter_3d.html` | Added: spawnEnemy head rule, startWave contracts, onEnemyKilled/onWaveClear contracts, ABSOLUTE PROHIBITIONS block |
+
+### Root cause of original 4.5/10 score
+The modular pipeline (fallback path) generated a `entities` module with `init = entities_init_public` at global scope, which:
+1. Overwrote ENGINE's `init()` so Three.js setup never ran
+2. Called `playerBody.add(player)` before playerBody existed → TypeError → game never started
+Template path (FPS-2 fixed in prev session) avoids all of this by design.
 
 ### All fixes applied this session
 

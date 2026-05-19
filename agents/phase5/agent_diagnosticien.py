@@ -275,7 +275,9 @@ def run(code: str, genre_profile: GenreProfile, bundle: EvaluationBundle, iterat
             runtime_bugs_hints.append(f"⚠️ DT PASSING : fonctions sans paramètre dt : {', '.join(missing_dt[:3])}")
     if _re.search(r'localStorage\.getItem', code) and not _re.search(r'JSON\.parse', code):
         runtime_bugs_hints.append("⚠️ JSON.PARSE MANQUANT : localStorage.getItem sans JSON.parse()")
-    if _re.search(r'window\.__(?:devPatch|debug|patch)|eval\(', code):
+    # Strip ENGINE's devPatch definition before checking — it's intentional boilerplate, not a bug
+    _code_no_engine_patch = _re.sub(r'window\.__devPatch\s*=\s*function[^;]+;', '', code)
+    if _re.search(r'window\.__(?:devPatch|debug|patch)|eval\(', _code_no_engine_patch):
         runtime_bugs_hints.append("⚠️ EVAL/DEVPATCH détecté dans le code — à supprimer")
     # Détecter les boucles for-of qui splicent le tableau itéré
     _for_of_splices = _re.findall(
@@ -323,7 +325,7 @@ def run(code: str, genre_profile: GenreProfile, bundle: EvaluationBundle, iterat
         depth_missing.append("COMBO ABSENT — pas de système multiplicateur → playtester -0.5pt")
     if not _re2.search(r'particles\s*=\s*\[\]|spawnExplosion|spawnParticle', code):
         depth_missing.append("PARTICULES ABSENTES — pas d'effets de mort/impact → visuel -0.8pt")
-    if not _re2.search(r'spawnFloatText|floatTexts|floatingText', code):
+    if not _re2.search(r'spawnFloatText|floatTexts|floatingText|spawnPopup', code):
         depth_missing.append("FLOAT TEXTS ABSENTS — pas de feedback score flottant → visuel -0.5pt")
     if not _re2.search(r'powerUp|power_up|POWERUP|collectible', code, _re2.IGNORECASE):
         depth_missing.append("POWER-UPS ABSENTS — pas de collectibles → gameplay -0.5pt")
@@ -392,8 +394,20 @@ def run(code: str, genre_profile: GenreProfile, bundle: EvaluationBundle, iterat
                              + "\n".join(f"- {c}" for c in _recent)
                              + "\n→ Proposer des corrections DIFFÉRENTES de celles ci-dessus.\n")
 
+    _template_guard = ""
+    if getattr(genre_profile, 'est_template', False):
+        _template_guard = (
+            "⚙️  JEU TEMPLATE — RÈGLES ABSOLUES :\n"
+            "  • Ne PAS recommander d'ajouter DOMContentLoaded — le script inline est l'architecture correcte\n"
+            "  • Ne PAS déplacer les canvas.addEventListener — ils sont dans le bon scope\n"
+            "  • Ne PAS supprimer window.__devPatch — c'est le pont dev console de l'ENGINE\n"
+            "  • Ne PAS réécrire startGame()/initLevel() en initGame() — ce sont les noms ENGINE\n"
+            "  • Ne PAS remplacer Pointer.justDown par SPACE/Enter — le menu click/tap est voulu\n"
+            "  Corriger UNIQUEMENT les bugs dans les sections [FILL] écrites par le LLM.\n\n"
+        )
+
     prompt = f"""Diagnostic de correction pour ce jeu {genre_profile.genre_principal} (itération {iteration}).
-{exec_header}
+{_template_guard}{exec_header}
 SCORES (du plus bas au plus haut) :
 {json.dumps(scores_tries, ensure_ascii=False)}
 Axes prioritaires à corriger : {axes_prioritaires}

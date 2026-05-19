@@ -84,8 +84,10 @@ def run(
     # Déclarer les variables globales
     globals_decl = _build_globals_declaration(arch)
 
-    # Code de démarrage
+    # Code de démarrage — sanitize LLM output: core.* calls crash when game uses standalone functions
     startup = arch.startup_code or "init(); requestAnimationFrame(gameLoop);"
+    if "core.init" in startup or "core.start" in startup:
+        startup = "init(); requestAnimationFrame(gameLoop);"
 
     if est_3d:
         js_code = _inject_trycatch_animate_3d(js_code)
@@ -252,19 +254,18 @@ def _build_3d_html(
     window.addEventListener('load', function() {{
       // Pre-initialize UI module before core setup to avoid undefined DOM refs
       if (typeof ui !== 'undefined' && typeof ui.initUI === 'function') {{ ui.initUI(); }}
-      // Bridge: expose core.init / core.gameLoop as globals in case startup_code uses plain init()
-      if (typeof init === 'undefined' && typeof core !== 'undefined') {{
-        if (typeof core.init === 'function') window.init = function() {{ return core.init(); }};
-        if (typeof core.gameLoop === 'function') window.gameLoop = function(ts) {{ return core.gameLoop(ts); }};
+      // Bridge: if game uses core object, delegate; otherwise call standalone init()
+      if (typeof core !== 'undefined' && typeof core.init === 'function') {{
+        core.init();
+      }} else {{
+        {startup}
       }}
-      {startup}
       // Ensure startGame() is defined — generated code may use core.setState() instead
       if (typeof startGame !== 'function') {{
         window.startGame = function() {{
           var _ovl = document.getElementById('overlay');
           if (_ovl) _ovl.style.display = 'none';
-          if (typeof core !== 'undefined' && typeof core.setState === 'function') {{ core.setState('PLAYING'); }}
-          else if (typeof setState === 'function') {{ setState('PLAYING'); }}
+          if (typeof setState === 'function') {{ setState('playing'); }}
         }};
       }}
     }});

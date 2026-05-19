@@ -1258,6 +1258,9 @@ def fix_undefined_runtime_vars(html: str, var_names: set) -> tuple[str, bool, li
         if v and v.isidentifier()
         and v not in _BROWSER_AND_TEMPLATE_GLOBALS
         and not any(v.startswith(p) for p in _SKIP_STUB_PREFIXES)
+        # Don't inject var X if the script already declares it with let/const — would cause
+        # SyntaxError: Identifier 'X' has already been declared (var+let conflict)
+        and not (js and re.search(r'\b(?:let|const)\s+' + re.escape(v) + r'\b', js))
     )
     if not to_declare:
         return html, False, []

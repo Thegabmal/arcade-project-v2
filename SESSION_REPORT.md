@@ -5,6 +5,50 @@
 
 ---
 
+## Last session: 2026-05-19 (session 6) — FPS 3D gap analysis + template-aware evaluation
+
+### What to do FIRST next session
+1. Start Flask: `python app.py`
+2. Run FPS 3D genre — both fixes from this session should let the template path succeed
+3. Next genre in cycle: 3D Platformer, then Bullet Hell 3D
+4. RAG is seeded (25 model games) — already done this session
+
+### All fixes applied this session
+
+#### Template-aware evaluation (Phase 4-5 agents)
+| Item | File | Fix |
+|------|------|-----|
+| `est_template` flag | `genre_profile.py` | New `est_template: bool = False` field, set True after successful `run_from_template`/`run_from_template_3d` |
+| `est_template` propagation | `coordinateur.py` | Set `genre_profile.est_template = True` on template success paths |
+| QC Technique template criteria | `agents/phase4/agent_qc_technique.py` | `CRITERES_BLOCKING_TEMPLATE_2D` + `ENGINE_CONTEXT_TEMPLATE` injected when `est_template=True and not est_3d` — removes 4 false-positive BLOCKING checks |
+| QC Gameplay ENGINE credit | `agents/phase4/agent_qc_gameplay.py` | `_engine_features_note` injected when `est_template=True` — credits spawnParticles, sfx.play, triggerShake, etc. as present |
+| Diagnosticien devPatch false positive | `agents/phase5/agent_diagnosticien.py` | Strip ENGINE's `window.__devPatch` def before eval check |
+| Diagnosticien spawnFloatText false positive | `agents/phase5/agent_diagnosticien.py` | Add `spawnPopup` to spawnFloatText detection regex |
+| Diagnosticien DOMContentLoaded rule | `agents/phase5/agent_diagnosticien.py` | `_template_guard` block added to prompt — prevents wrong DOMContentLoaded/initGame() recommendations |
+
+#### M3 scope contracts (6 uncovered bugs)
+| Item | File | Fix |
+|------|------|-----|
+| 6-rule SCOPE CONTRACTS block | `templates/game_templates/genres/puzzle_match3.html` | Prevents gem/matches/r-c/end/nr-nc/dr silent failures on next M3 run |
+
+#### FPS 3D gap analysis — 2 structural bugs fixed
+| Item | File | Fix |
+|------|------|-----|
+| FPS-2: ENGINE marker mismatch | `templates/game_templates/genres/fps_shooter_3d.html` | Changed 3-line header to `// ═══ ENGINE — DO NOT MODIFY ═══` + `// ═══ END ENGINE ═══` — matches what `_validate_template_integrity_3d` expects |
+| FPS-1: `core` namespace collision | `js_syntax_checker.py` | `fix_undefined_runtime_vars` now skips injection for variables with existing `let`/`const` declaration anywhere in script — prevents `var core` + `let core` SyntaxError |
+
+#### Other
+| Item | Fix |
+|------|-----|
+| RAG seeded | 25 model games seeded into ChromaDB via `seed_rag_models.py` |
+| `STACK.md` created | Full technology reference (15 techs, connectivity diagram) |
+
+### FPS-3 still open
+Cross-module weapon/reload/wave state coordination in modular fallback path — not fixed yet.
+If FPS template path now works (FPS-2 fixed), this should not be needed for most runs.
+
+---
+
 ## Last session: 2026-05-17 (session 5) — Zero défaut plan COMPLETE (all 4 sessions A-D)
 
 ### What to do FIRST next session

@@ -426,27 +426,23 @@ const PLATFORMS = [
   // North mezzanine
   { x1:-15, x2:15, z1:50, z2:57, h:3.5 },
 ];
-const RAMPS = [
-  // East platform ramp: x=18 (h=0) → x=32 (h=5)
-  { x1:18, x2:32, z1:-10, z2:10, h0:0, h1:5 },
-  // West platform ramp: x=-32 (h=4) → x=-18 (h=0)
-  { x1:-32, x2:-18, z1:-8, z2:8, h0:4, h1:0 },
-  // North mezzanine ramp: z=40 (h=0) → z=50 (h=3.5)
-  { zRamp:true, z1:40, z2:50, x1:-10, x2:10, h0:0, h1:3.5 },
+// Stairs: same smooth-slope physics as ramps, but drawn as step slabs.
+// h0 = floor height at a1/z1 (low end), h1 = height at a2/z2 (high end).
+const STAIRS = [
+  // East stairs: x=26→32, ascending to platform h=5 (z width 14)
+  { axis:'x', a1:26, a2:32, b1:-7, b2:7, h0:0, h1:5 },
+  // West stairs: x=-32→-26, descending from platform h=4 to ground
+  { axis:'x', a1:-32, a2:-26, b1:-7, b2:7, h0:4, h1:0 },
+  // North stairs: z=44→50, ascending to mezzanine h=3.5 (x width 14)
+  { axis:'z', a1:44, a2:50, b1:-7, b2:7, h0:0, h1:3.5 },
 ];
 
 function getFloorY(x, z) {
-  for(const r of RAMPS) {
-    if(r.zRamp) {
-      if(z>=r.z1&&z<=r.z2&&x>=r.x1&&x<=r.x2) {
-        const t=(z-r.z1)/(r.z2-r.z1);
-        return EYE_H + r.h0 + t*(r.h1-r.h0);
-      }
-    } else {
-      if(x>=r.x1&&x<=r.x2&&z>=r.z1&&z<=r.z2) {
-        const t=(x-r.x1)/(r.x2-r.x1);
-        return EYE_H + r.h0 + t*(r.h1-r.h0);
-      }
+  for(const s of STAIRS) {
+    const a=s.axis==='x'?x:z, b=s.axis==='x'?z:x;
+    if(a>=s.a1&&a<=s.a2&&b>=s.b1&&b<=s.b2) {
+      const t=(a-s.a1)/(s.a2-s.a1);
+      return EYE_H + s.h0 + t*(s.h1-s.h0);
     }
   }
   for(const p of PLATFORMS) {
@@ -477,59 +473,58 @@ function buildArena() {
     m.position.set(x,y,z); m.receiveShadow=true; m.castShadow=true; scene.add(m);
   });
 
-  // ── East elevated platform (h=5) ─────────────────────────────────────
-  const platMat=new THREE.MeshLambertMaterial({ color:0x263060 });
-  const battMat=new THREE.MeshLambertMaterial({ color:0x344282 });
-  const rampMat=new THREE.MeshLambertMaterial({ color:0x222855 });
+  // ── Materials ─────────────────────────────────────────────────────────
+  const platMat =new THREE.MeshLambertMaterial({ color:0x263060 });
+  const battMat =new THREE.MeshLambertMaterial({ color:0x344282 });
+  const stairMat=new THREE.MeshLambertMaterial({ color:0x1e2a58 });
 
-  // Platform floor slab
+  // Helper: build a staircase as stacked step slabs
+  // axis 'x': steps advance along x, depth along z; axis 'z': reverse
+  function buildStairMesh(axis, a1, a2, b1, b2, hLo, hHi) {
+    const steps=Math.round(Math.abs(a2-a1));
+    const dH=Math.abs(hHi-hLo)/steps;
+    const bLen=b2-b1, bMid=(b1+b2)/2;
+    const ascending=(hHi>hLo);
+    for(let i=0;i<steps;i++){
+      const cumH=(i+1)*dH;
+      const aCenter = ascending ? a1+i+0.5 : a2-i-0.5;
+      const geo = axis==='x'
+        ? new THREE.BoxGeometry(1, cumH, bLen)
+        : new THREE.BoxGeometry(bLen, cumH, 1);
+      const m=new THREE.Mesh(geo,stairMat);
+      m.position.set(axis==='x'?aCenter:bMid, cumH/2, axis==='x'?bMid:aCenter);
+      m.receiveShadow=true; m.castShadow=true; scene.add(m);
+    }
+  }
+
+  // ── East elevated platform (h=5) ─────────────────────────────────────
   const plat1=new THREE.Mesh(new THREE.BoxGeometry(25,0.4,30),platMat);
   plat1.position.set(44.5,5,0); plat1.receiveShadow=true; plat1.castShadow=true; scene.add(plat1);
+  buildStairMesh('x', 26,32, -7,7, 0,5);
 
-  // Ramp (visual wedge)
-  const rampGeo=new THREE.BufferGeometry();
-  // wedge: 14 wide, 5 high, 20 deep
-  const verts=new Float32Array([
-    18,-0.1,-10,  32,5,-10,  32,5,10,  18,-0.1,10,  // top face
-    18,-0.1,-10,  18,-0.1,10, 18,-0.1,10,  // sides (simplified)
-  ]);
-  // Use a simple box rotated instead
-  const rampMesh=new THREE.Mesh(new THREE.BoxGeometry(14,0.3,20),rampMat);
-  rampMesh.position.set(25,2.5,0); rampMesh.rotation.z=-Math.atan2(5,14);
-  rampMesh.receiveShadow=true; rampMesh.castShadow=true; scene.add(rampMesh);
-
-  // Battlements (3 solid panels + 2 window gaps) — south wall z=15
   _addBattlementsZ(32,57, 15, 5, 2.0, battMat);
-  // north wall z=-15
   _addBattlementsZ(32,57,-15, 5, 2.0, battMat);
-  // east back wall x=57 (solid)
   const backWall=new THREE.Mesh(new THREE.BoxGeometry(0.5,7.5,30),wallMat);
   backWall.position.set(57,3.75,0); backWall.castShadow=true; backWall.receiveShadow=true; scene.add(backWall);
-  // west face x=32 — low parapet with WIDE windows (shoot-down perch)
   _addBattlementsX(32,-15,15, 5, 1.5, battMat);
-
-  // No 2D obstacles along platform edges — getFloorY handles vertical transitions
-  // (obstacles here blocked ramp entry from ramp zone into platform)
 
   // ── West elevated platform (h=4) ─────────────────────────────────────
   const plat2=new THREE.Mesh(new THREE.BoxGeometry(25,0.4,26),platMat);
   plat2.position.set(-44.5,4,0); plat2.receiveShadow=true; plat2.castShadow=true; scene.add(plat2);
-  const rampMesh2=new THREE.Mesh(new THREE.BoxGeometry(14,0.3,18),rampMat);
-  rampMesh2.position.set(-25,2,0); rampMesh2.rotation.z=Math.atan2(4,14);
-  rampMesh2.receiveShadow=true; scene.add(rampMesh2);
+  buildStairMesh('x', -32,-26, -7,7, 4,0);
+
   _addBattlementsZ(-57,-32, 13, 4, 1.8, battMat);
   _addBattlementsZ(-57,-32,-13, 4, 1.8, battMat);
   _addBattlementsX(-32,-13,13, 4, 1.4, battMat);
   const backWall2=new THREE.Mesh(new THREE.BoxGeometry(0.5,6,26),wallMat);
   backWall2.position.set(-57,3,0); backWall2.castShadow=true; scene.add(backWall2);
-  // (no 2D obstacles on west platform edges — same reason as east)
 
   // ── North mezzanine (h=3.5) ───────────────────────────────────────────
   const plat3=new THREE.Mesh(new THREE.BoxGeometry(30,0.4,7),platMat);
   plat3.position.set(0,3.5,53.5); plat3.receiveShadow=true; plat3.castShadow=true; scene.add(plat3);
+  buildStairMesh('z', 44,50, -7,7, 0,3.5);
   _addBattlementsX( 15, 50, 57, 3.5, 1.4, battMat);
   _addBattlementsX(-15, 50, 57, 3.5, 1.4, battMat);
-  // (no 2D obstacles on north mezzanine ramp face)
 
   // ── Ground-level pillars ──────────────────────────────────────────────
   const pillarMat=new THREE.MeshLambertMaterial({ color:0x2e3a70 });
@@ -690,7 +685,7 @@ function updateEnemies(dt) {
       if(!circleBlocked(e.grp.position.x,nz,0.5)) e.grp.position.z=nz;
       e.grp.rotation.y=Math.atan2(_edir.x,_edir.z);
     }
-    e.grp.position.y=0.9*e.scale;
+    e.grp.position.y=(getFloorY(e.grp.position.x,e.grp.position.z)-EYE_H)+0.9*e.scale;
 
     // HP bar
     const bar=e.grp.children.find(c=>c.userData.isHpBar);

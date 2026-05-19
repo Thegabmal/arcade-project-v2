@@ -427,11 +427,11 @@ const PLATFORMS = [
   { x1:-15, x2:15, z1:50, z2:57, h:3.5 },
 ];
 const RAMPS = [
-  // East platform ramp (walk east to go up)
+  // East platform ramp: x=18 (h=0) → x=32 (h=5)
   { x1:18, x2:32, z1:-10, z2:10, h0:0, h1:5 },
-  // West platform ramp (walk west to go up)
-  { x1:-32, x2:-18, z1:-8, z2:8, h0:5, h1:0, flip:true },
-  // North mezzanine ramp (walk north to go up)
+  // West platform ramp: x=-32 (h=4) → x=-18 (h=0)
+  { x1:-32, x2:-18, z1:-8, z2:8, h0:4, h1:0 },
+  // North mezzanine ramp: z=40 (h=0) → z=50 (h=3.5)
   { zRamp:true, z1:40, z2:50, x1:-10, x2:10, h0:0, h1:3.5 },
 ];
 
@@ -439,12 +439,13 @@ function getFloorY(x, z) {
   for(const r of RAMPS) {
     if(r.zRamp) {
       if(z>=r.z1&&z<=r.z2&&x>=r.x1&&x<=r.x2) {
-        const t=(z-r.z1)/(r.z2-r.z1); return EYE_H+t*r.h1;
+        const t=(z-r.z1)/(r.z2-r.z1);
+        return EYE_H + r.h0 + t*(r.h1-r.h0);
       }
     } else {
       if(x>=r.x1&&x<=r.x2&&z>=r.z1&&z<=r.z2) {
         const t=(x-r.x1)/(r.x2-r.x1);
-        return EYE_H+(r.flip?r.h0+(1-t)*(r.h1<r.h0?r.h0-r.h1:r.h1-r.h0)*(r.h0>r.h1?-1:1):t*(r.h1-r.h0));
+        return EYE_H + r.h0 + t*(r.h1-r.h0);
       }
     }
   }
@@ -507,10 +508,8 @@ function buildArena() {
   // west face x=32 — low parapet with WIDE windows (shoot-down perch)
   _addBattlementsX(32,-15,15, 5, 1.5, battMat);
 
-  // Add platform walls as obstacles for circleBlocked
-  for(let z=-15;z<=15;z+=4){ obstacles.push({pos:new THREE.Vector3(32,0,z),r:1}); }
-  for(let x=32;x<=57;x+=5){ obstacles.push({pos:new THREE.Vector3(x,0,15),r:1}); obstacles.push({pos:new THREE.Vector3(x,0,-15),r:1}); }
-  obstacles.push({pos:new THREE.Vector3(57,0,0),r:1.5});
+  // No 2D obstacles along platform edges — getFloorY handles vertical transitions
+  // (obstacles here blocked ramp entry from ramp zone into platform)
 
   // ── West elevated platform (h=4) ─────────────────────────────────────
   const plat2=new THREE.Mesh(new THREE.BoxGeometry(25,0.4,26),platMat);
@@ -523,15 +522,14 @@ function buildArena() {
   _addBattlementsX(-32,-13,13, 4, 1.4, battMat);
   const backWall2=new THREE.Mesh(new THREE.BoxGeometry(0.5,6,26),wallMat);
   backWall2.position.set(-57,3,0); backWall2.castShadow=true; scene.add(backWall2);
-  for(let z=-13;z<=13;z+=4){ obstacles.push({pos:new THREE.Vector3(-32,0,z),r:1}); }
-  for(let x=-57;x<=-32;x+=5){ obstacles.push({pos:new THREE.Vector3(x,0,13),r:1}); obstacles.push({pos:new THREE.Vector3(x,0,-13),r:1}); }
+  // (no 2D obstacles on west platform edges — same reason as east)
 
   // ── North mezzanine (h=3.5) ───────────────────────────────────────────
   const plat3=new THREE.Mesh(new THREE.BoxGeometry(30,0.4,7),platMat);
   plat3.position.set(0,3.5,53.5); plat3.receiveShadow=true; plat3.castShadow=true; scene.add(plat3);
   _addBattlementsX( 15, 50, 57, 3.5, 1.4, battMat);
   _addBattlementsX(-15, 50, 57, 3.5, 1.4, battMat);
-  for(let x=-15;x<=15;x+=5){ obstacles.push({pos:new THREE.Vector3(x,0,50),r:1}); }
+  // (no 2D obstacles on north mezzanine ramp face)
 
   // ── Ground-level pillars ──────────────────────────────────────────────
   const pillarMat=new THREE.MeshLambertMaterial({ color:0x2e3a70 });
@@ -621,10 +619,10 @@ function _addBattlementsX(x,z1,z2,baseY,wallH,mat) {
 
 // ── ENEMY TYPES ───────────────────────────────────────────────────────
 const ENEMY_TYPES = {
-  grunt:  { hp:4,  speed:3.0, reward:100,  color:0xe94560, scale:1.0, shootInterval:2.2 },
-  runner: { hp:2,  speed:6.0, reward:150,  color:0x44aaff, scale:0.8, shootInterval:3.5 },
-  heavy:  { hp:10, speed:1.6, reward:300,  color:0xff8800, scale:1.4, shootInterval:1.8 },
-  boss:   { hp:30, speed:1.8, reward:1000, color:0xcc00ff, scale:1.9, shootInterval:1.0 },
+  grunt:  { hp:4,  speed:2.4, reward:100,  color:0xe94560, scale:1.0, shootInterval:2.2 },
+  runner: { hp:2,  speed:4.8, reward:150,  color:0x44aaff, scale:0.8, shootInterval:3.5 },
+  heavy:  { hp:10, speed:1.3, reward:300,  color:0xff8800, scale:1.4, shootInterval:1.8 },
+  boss:   { hp:30, speed:1.4, reward:1000, color:0xcc00ff, scale:1.9, shootInterval:1.0 },
 };
 
 // ── SPAWN ENEMY ───────────────────────────────────────────────────────

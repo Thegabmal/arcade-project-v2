@@ -1,721 +1,5 @@
 [
   {
-    "timestamp": "2026-03-28T17:40:46.222779",
-    "titre": "dungeon_dashers_20260328_",
-    "genre": "dungeon",
-    "score": 6.5,
-    "approuve": false,
-    "html_size": 126741,
-    "new_common_vars_candidates": [
-      {
-        "varname": "active",
-        "occurrences": 10,
-        "suggested_default": "false"
-      },
-      {
-        "varname": "attackFlash",
-        "occurrences": 6,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "bought",
-        "occurrences": 6,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "chargeTargetX",
-        "occurrences": 4,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "chargeTargetY",
-        "occurrences": 4,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "chargeTimer",
-        "occurrences": 8,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "clicked",
-        "occurrences": 12,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "count",
-        "occurrences": 10,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "critChance",
-        "occurrences": 8,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "critMult",
-        "occurrences": 7,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "currentClassId",
-        "occurrences": 10,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "down",
-        "occurrences": 11,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "down_pressed",
-        "occurrences": 9,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "e_prev",
-        "occurrences": 3,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "equipment",
-        "occurrences": 13,
-        "suggested_default": "null"
-      }
-    ],
-    "missing_functions": [],
-    "residual_patterns": [
-      {
-        "type": "double_raf",
-        "description": "requestAnimationFrame appelé 3× — possible double game loop",
-        "severity": "medium"
-      },
-      {
-        "type": "ctx_before_init",
-        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
-        "severity": "high"
-      },
-      {
-        "type": "draw_no_clear",
-        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
-        "severity": "medium"
-      }
-    ],
-    "has_new_findings": true
-  },
-  {
-    "timestamp": "2026-03-28T17:40:46.794712",
-    "titre": "dungeon_dash__the_lo_2026",
-    "genre": "dungeon",
-    "score": 6.5,
-    "approuve": false,
-    "html_size": 75744,
-    "new_common_vars_candidates": [
-      {
-        "varname": "active",
-        "occurrences": 3,
-        "suggested_default": "false"
-      },
-      {
-        "varname": "attackFlash",
-        "occurrences": 4,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "classId",
-        "occurrences": 16,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "clicked",
-        "occurrences": 9,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "completed",
-        "occurrences": 5,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "critChance",
-        "occurrences": 8,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "critDamage",
-        "occurrences": 7,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "distance",
-        "occurrences": 3,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "down",
-        "occurrences": 9,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "down_pressed",
-        "occurrences": 3,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "ennemis",
-        "occurrences": 3,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "escape",
-        "occurrences": 5,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "escape_pressed",
-        "occurrences": 9,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "event",
-        "occurrences": 3,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "facing",
-        "occurrences": 14,
-        "suggested_default": "null"
-      }
-    ],
-    "missing_functions": [
-      {
-        "function": "showDialog",
-        "call_count": 4
-      },
-      {
-        "function": "initGame",
-        "call_count": 3
-      },
-      {
-        "function": "createInteractable",
-        "call_count": 3
-      },
-      {
-        "function": "corridor",
-        "call_count": 2
-      },
-      {
-        "function": "drop",
-        "call_count": 2
-      },
-      {
-        "function": "completion",
-        "call_count": 2
-      }
-    ],
-    "residual_patterns": [],
-    "has_new_findings": true
-  },
-  {
-    "timestamp": "2026-03-28T17:40:47.711568",
-    "titre": "dungeon_s_ascent_20260328",
-    "genre": "dungeon",
-    "score": 6.5,
-    "approuve": false,
-    "html_size": 110800,
-    "new_common_vars_candidates": [
-      {
-        "varname": "activated",
-        "occurrences": 7,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "attackFlash",
-        "occurrences": 7,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "base",
-        "occurrences": 5,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "baseAtk",
-        "occurrences": 10,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "baseDef",
-        "occurrences": 9,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "bought",
-        "occurrences": 13,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "buffer",
-        "occurrences": 6,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "bulletCooldown",
-        "occurrences": 5,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "classId",
-        "occurrences": 9,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "clicked",
-        "occurrences": 19,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "comp",
-        "occurrences": 19,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "composition",
-        "occurrences": 5,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "count",
-        "occurrences": 19,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "currentAtk",
-        "occurrences": 7,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "currentPattern",
-        "occurrences": 3,
-        "suggested_default": "null"
-      }
-    ],
-    "missing_functions": [],
-    "residual_patterns": [
-      {
-        "type": "ctx_before_init",
-        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
-        "severity": "high"
-      },
-      {
-        "type": "draw_no_clear",
-        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
-        "severity": "medium"
-      }
-    ],
-    "has_new_findings": true
-  },
-  {
-    "timestamp": "2026-03-28T18:28:17.637431",
-    "titre": "Dungeon Ascendant",
-    "genre": "rpg",
-    "score": 6.18,
-    "approuve": false,
-    "html_size": 118489,
-    "new_common_vars_candidates": [
-      {
-        "varname": "active",
-        "occurrences": 14,
-        "suggested_default": "false"
-      },
-      {
-        "varname": "agility",
-        "occurrences": 4,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "aoeAttack",
-        "occurrences": 3,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "artifacts",
-        "occurrences": 10,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "attackFlash",
-        "occurrences": 3,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "bestScore",
-        "occurrences": 9,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "classId",
-        "occurrences": 5,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "cleared",
-        "occurrences": 7,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "clicked",
-        "occurrences": 10,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "crit_chance",
-        "occurrences": 9,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "crit_mult",
-        "occurrences": 7,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "currentAtk",
-        "occurrences": 15,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "currentHp",
-        "occurrences": 17,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "currentXP",
-        "occurrences": 7,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "dashTimer",
-        "occurrences": 5,
-        "suggested_default": "0"
-      }
-    ],
-    "missing_functions": [
-      {
-        "function": "bar",
-        "call_count": 3
-      },
-      {
-        "function": "drawFloatingTexts",
-        "call_count": 2
-      },
-      {
-        "function": "drawParticles",
-        "call_count": 2
-      },
-      {
-        "function": "chance",
-        "call_count": 2
-      },
-      {
-        "function": "wide",
-        "call_count": 2
-      }
-    ],
-    "residual_patterns": [
-      {
-        "type": "ctx_before_init",
-        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
-        "severity": "high"
-      },
-      {
-        "type": "draw_no_clear",
-        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
-        "severity": "medium"
-      }
-    ],
-    "has_new_findings": true
-  },
-  {
-    "timestamp": "2026-03-28T20:10:16.605099",
-    "titre": "Donjon des Chroma-Ombres",
-    "genre": "rpg",
-    "score": 7.16,
-    "approuve": false,
-    "html_size": 83574,
-    "new_common_vars_candidates": [
-      {
-        "varname": "active",
-        "occurrences": 6,
-        "suggested_default": "false"
-      },
-      {
-        "varname": "chargeTimer",
-        "occurrences": 10,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "clicked",
-        "occurrences": 12,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "current",
-        "occurrences": 5,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "currentDir",
-        "occurrences": 24,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "currentXP",
-        "occurrences": 7,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "e_pressed",
-        "occurrences": 6,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "equipment",
-        "occurrences": 13,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "escape",
-        "occurrences": 4,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "escape_pressed",
-        "occurrences": 5,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "fillStyle",
-        "occurrences": 36,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "flashTimer",
-        "occurrences": 7,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "font",
-        "occurrences": 24,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "gain",
-        "occurrences": 6,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "globalAlpha",
-        "occurrences": 4,
-        "suggested_default": "null"
-      }
-    ],
-    "missing_functions": [],
-    "residual_patterns": [
-      {
-        "type": "unhandled_gamestate",
-        "description": "États gameState assignés mais jamais vérifiés : ['boss_fight', 'loading']",
-        "severity": "medium"
-      }
-    ],
-    "has_new_findings": true
-  },
-  {
-    "timestamp": "2026-03-29T12:39:35.169744",
-    "titre": "Pixel Dash: Shadow King's Gauntlet",
-    "genre": "platformer",
-    "score": 7.4,
-    "approuve": true,
-    "html_size": 23486,
-    "new_common_vars_candidates": [
-      {
-        "varname": "fillStyle",
-        "occurrences": 25,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "font",
-        "occurrences": 14,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "function",
-        "occurrences": 62,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "height",
-        "occurrences": 34,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "leftClicked",
-        "occurrences": 3,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "leftDown",
-        "occurrences": 4,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "length",
-        "occurrences": 21,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "onGround",
-        "occurrences": 6,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "rightClicked",
-        "occurrences": 3,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "rightDown",
-        "occurrences": 4,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "state",
-        "occurrences": 7,
-        "suggested_default": "{}"
-      },
-      {
-        "varname": "textAlign",
-        "occurrences": 9,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "width",
-        "occurrences": 36,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "yVelocity",
-        "occurrences": 6,
-        "suggested_default": "0"
-      }
-    ],
-    "missing_functions": [],
-    "residual_patterns": [],
-    "has_new_findings": true
-  },
-  {
-    "timestamp": "2026-03-29T13:13:41.051467",
-    "titre": "Le Donjon de l'Épée Éclair",
-    "genre": "rpg",
-    "score": 6.93,
-    "approuve": true,
-    "html_size": 36079,
-    "new_common_vars_candidates": [
-      {
-        "varname": "assets",
-        "occurrences": 4,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "attack",
-        "occurrences": 6,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "currentAttackCooldown",
-        "occurrences": 6,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "currentDashCooldown",
-        "occurrences": 6,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "currentHP",
-        "occurrences": 9,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "dash",
-        "occurrences": 12,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "dashTimer",
-        "occurrences": 4,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "donjon",
-        "occurrences": 4,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "down",
-        "occurrences": 9,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "ennemis",
-        "occurrences": 6,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "fillStyle",
-        "occurrences": 22,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "font",
-        "occurrences": 9,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "goblin",
-        "occurrences": 8,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "height",
-        "occurrences": 32,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "isAlive",
-        "occurrences": 6,
-        "suggested_default": "false"
-      }
-    ],
-    "missing_functions": [
-      {
-        "function": "jeu",
-        "call_count": 2
-      },
-      {
-        "function": "joueur",
-        "call_count": 2
-      }
-    ],
-    "residual_patterns": [
-      {
-        "type": "draw_no_clear",
-        "description": "draw() ne commence pas par clearRect/fillRect → ghosting ou écran noir",
-        "severity": "medium"
-      }
-    ],
-    "has_new_findings": true
-  },
-  {
     "timestamp": "2026-03-30T10:35:45.127678",
     "titre": "Donjon des Héros",
     "genre": "rpg",
@@ -4727,6 +4011,932 @@
       {
         "varname": "initFn",
         "occurrences": 3,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-16T16:12:06.673011",
+    "titre": "Bolt & Circuit: Neo-Scrap Odyssey",
+    "genre": "platformer",
+    "score": 5.89,
+    "approuve": false,
+    "html_size": 84800,
+    "new_common_vars_candidates": [
+      {
+        "varname": "alive",
+        "occurrences": 9,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "animState",
+        "occurrences": 15,
+        "suggested_default": "{}"
+      },
+      {
+        "varname": "bobTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "canInfiniteJump",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "checkpoint",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "coin",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "coyoteTimer",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currentHP",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "damage",
+        "occurrences": 17,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashCooldown",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashCooldownMultiplier",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashDirectionX",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashDirectionY",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashDistanceMultiplier",
+        "occurrences": 4,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-16T17:32:47.024832",
+    "titre": "Knight's Leap: Sir Reginald's Redemption",
+    "genre": "platformer",
+    "score": 6.24,
+    "approuve": false,
+    "html_size": 108081,
+    "new_common_vars_candidates": [
+      {
+        "varname": "alive",
+        "occurrences": 12,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "bobTimer",
+        "occurrences": 12,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bossTeleportTimer",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bridgeRef",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "canMove",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "canPassThroughWalls",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "checkpoint",
+        "occurrences": 12,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "collidingWall",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "coyoteTimer",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "damage",
+        "occurrences": 17,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashCharge",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashCooldownBoost",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashCooldownTimer",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashDirection",
+        "occurrences": 8,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-16T19:21:56.066939",
+    "titre": "Knight's Leap",
+    "genre": "platformer",
+    "score": 6.27,
+    "approuve": false,
+    "html_size": 102223,
+    "new_common_vars_candidates": [
+      {
+        "varname": "alive",
+        "occurrences": 15,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "attackDuration",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "bobTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bounceAnimTimer",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "checkpoint",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "coin",
+        "occurrences": 12,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "coyoteTimer",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashCooldown",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashDirection",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dashDuration",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "disappearTimer",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "enhancedDashActive",
+        "occurrences": 8,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "enhancedDashTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "facingRight",
+        "occurrences": 45,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "jump",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-16T22:18:04.685875",
+    "titre": "Gemstone Gauntlet",
+    "genre": "puzzle",
+    "score": 8.23,
+    "approuve": true,
+    "html_size": 69637,
+    "new_common_vars_candidates": [
+      {
+        "varname": "animY",
+        "occurrences": 14,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "boosters",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "cascade",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "cascades",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "check",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "current",
+        "occurrences": 41,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "down",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dragX",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "dragY",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "drawY",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "elapsed",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 38,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 23,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "isUndo",
+        "occurrences": 9,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "match",
+        "call_count": 4
+      },
+      {
+        "function": "randChoice",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-16T23:11:52.142829",
+    "titre": "Neon Rush: Cyber-Dash",
+    "genre": "arcade",
+    "score": 6.58,
+    "approuve": false,
+    "html_size": 51466,
+    "new_common_vars_candidates": [
+      {
+        "varname": "activeTimer",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "alive",
+        "occurrences": 7,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "animTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bobTimer",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "coinMagnetTimer",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "coyoteTimer",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "crouching",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "currentLane",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 63,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "font",
+        "occurrences": 29,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gravity",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "hasCoinMagnet",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 11,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-17T14:39:51.927131",
+    "titre": "Robo-Dash: Neon Uprising",
+    "genre": "platformer",
+    "score": 7.64,
+    "approuve": true,
+    "html_size": 67904,
+    "new_common_vars_candidates": [
+      {
+        "varname": "alive",
+        "occurrences": 9,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "animState",
+        "occurrences": 3,
+        "suggested_default": "{}"
+      },
+      {
+        "varname": "attackCooldownTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bobTimer",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "brokenTimer",
+        "occurrences": 5,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "canDash",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "chargeTargetX",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "chargeTargetY",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "checkpoint",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "cooldownTimer",
+        "occurrences": 15,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "countdown",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "coyoteTimer",
+        "occurrences": 9,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "currency",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashCooldownTimer",
+        "occurrences": 6,
+        "suggested_default": "0"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "randFloat",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-17T16:47:10.101739",
+    "titre": "Neon Rush",
+    "genre": "racing",
+    "score": 5.1,
+    "approuve": false,
+    "html_size": 33252,
+    "new_common_vars_candidates": [
+      {
+        "varname": "active",
+        "occurrences": 27,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "background",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "bottom",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "castShadow",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "changedTouches",
+        "occurrences": 3,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "classList",
+        "occurrences": 13,
+        "suggested_default": "[]"
+      },
+      {
+        "varname": "className",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "color",
+        "occurrences": 13,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "core",
+        "occurrences": 15,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "display",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gameLogic",
+        "occurrences": 11,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "innerHTML",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "left",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "mesh",
+        "occurrences": 25,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "remove",
+        "call_count": 7
+      },
+      {
+        "function": "setFromObject",
+        "call_count": 6
+      },
+      {
+        "function": "lerp",
+        "call_count": 3
+      },
+      {
+        "function": "arrow",
+        "call_count": 2
+      },
+      {
+        "function": "setSize",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['LOADING', 'loading']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-17T20:11:50.669155",
+    "titre": "Astro Blasters: Galactic Gauntlet",
+    "genre": "shooter",
+    "score": 6.5,
+    "approuve": false,
+    "html_size": 53182,
+    "new_common_vars_candidates": [
+      {
+        "varname": "alive",
+        "occurrences": 18,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "bobTimer",
+        "occurrences": 3,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "bossPhase",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "enemiesLeft",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fillStyle",
+        "occurrences": 36,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "fireRate",
+        "occurrences": 24,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "fireTimer",
+        "occurrences": 28,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "flashTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "font",
+        "occurrences": 17,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "game",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "globalAlpha",
+        "occurrences": 12,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "gravity",
+        "occurrences": 10,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "height",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "iframes",
+        "occurrences": 14,
+        "suggested_default": "null"
+      }
+    ],
+    "missing_functions": [],
+    "residual_patterns": [
+      {
+        "type": "double_raf",
+        "description": "requestAnimationFrame appelé 3× — possible double game loop",
+        "severity": "medium"
+      },
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-17T21:09:26.361498",
+    "titre": "Astro-Crystal Quest",
+    "genre": "platformer",
+    "score": 7.38,
+    "approuve": false,
+    "html_size": 90155,
+    "new_common_vars_candidates": [
+      {
+        "varname": "alive",
+        "occurrences": 11,
+        "suggested_default": "false"
+      },
+      {
+        "varname": "attackRange",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "bobTimer",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "canDash",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "canFly",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "clicked",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "collected",
+        "occurrences": 6,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "cooldownTimer",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "coyoteTimer",
+        "occurrences": 12,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "crystals",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "crystalsCollectedInLevel",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashCooldownTimer",
+        "occurrences": 7,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "dashTimer",
+        "occurrences": 8,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "detectRange",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "facingRight",
+        "occurrences": 53,
         "suggested_default": "null"
       }
     ],

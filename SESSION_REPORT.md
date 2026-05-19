@@ -5,6 +5,55 @@
 
 ---
 
+## Last session: 2026-05-17 (session 5) — Zero défaut plan COMPLETE (all 4 sessions A-D)
+
+### What to do FIRST next session
+1. Start Flask: `python app.py`
+2. Run 8-genre test sequence — all 12 zero-défaut fixes are live
+3. Expected: save rate moves from ~10% toward 60-70%; no more "4.9 forever" stagnation
+
+### All fixes applied this session (commit a56a4ba — Session D)
+
+| Item | File | Fix |
+|------|------|-----|
+| 1.4 `__devPatch` contradiction | `agent_createur.py` | RULE N°7 updated: ENGINE's `__devPatch` must not be removed; LLM's [FILL] must never add eval/new Function/`__devPatch(...)` calls |
+| 3.3 ENGINE-aware extraction | `agent_patcher.py` | New `_engine_end_line()` helper; `_extract_function_window` now clamps `fn_start` to after ENGINE block — patcher can never rewrite canvas/ctx/W/H |
+
+---
+
+## Last session: 2026-05-17 (session 4) — Zero défaut Sessions A+B+C complete
+
+### What to do FIRST next session
+1. Start Flask: `python app.py`
+2. Run 8-genre test sequence — pipeline has 10 major fixes across Sessions A-C
+3. Watch for: pre-flight catching startup errors, E1-tardif triggering on stagnating games, linter catching more undefined vars
+
+### All fixes applied this session (commits a30bd31 + c87a3bf + 0ef5e4c)
+
+**Session A** — startup crash prevention
+| Item | File | Fix |
+|------|------|-----|
+| 1.2 Self-review rule | `agent_createur.py` | RULE 22: 4-point checklist (double RAF, undefined vars, gamestates, missing functions) |
+| 2.3 A2 smart stubs | `js_syntax_checker.py` | scale/radius/speed default to 1/10/1 — never 0 for rendering vars |
+| 3.1 Runtime errors → patcher | `coordinateur.py` | Playwright JS errors bypass Diagnosticien, go directly to patcher |
+| 2.1 Pre-flight check | `preflight_check.py` (NEW) | Phase 3.5: Playwright run before eval loop, up to 2 LLM fix rounds |
+
+**Session B** — context and rescue
+| Item | File | Fix |
+|------|------|-----|
+| 1.1 Scope contracts | 6 templates | `[FILL]` sections now have MODULE-LEVEL vs ENGINE ownership comments |
+| 3.2 Full function extraction | `agent_patcher.py` | `_extract_function_window`: finds enclosing function, falls back to ±125-line window |
+| 4.1 needs_review folder | `coordinateur.py` | Saves games with score≥5.0 + exec≥5.0 to `needs_review/` instead of dropping |
+
+**Session C** — quality and stagnation recovery
+| Item | File | Fix |
+|------|------|-----|
+| 2.2 Linter full-file | `agent_js_linter.py` | `_quick_checks` runs on FULL script (was 28K sample); LLM analysis stays 28K |
+| 4.2 E1-tardif | `coordinateur.py` | Stagnation + exec<6.0 → full regen instead of stop; resets stagnation counter |
+| 1.3 Few-shot examples | `agent_createur.py` | ~80-line correct shooter added at end of SYSTEM_2D as positive reference |
+
+---
+
 ## Last session: 2026-05-17 (session 3) — Full pipeline audit + 14 critical/high fixes
 
 ### What to do FIRST next session

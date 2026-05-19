@@ -202,6 +202,45 @@ function renderFrame(){switch(gameState){case'menu':renderMenu();break;case'play
 //   • NEVER  → redeclare canvas/ctx/W/H/DPR/gameState/setState/Keys/Touch/Mouse (ENGINE owns these)
 //   • Where to put mutable game state: declare with `let` HERE, reset in startGame().
 // ══════════════════════════════════════════════════════════════════
+
+// ── MATCH-3 SCOPE CONTRACTS — 6 rules that MUST be followed ──────
+// These patterns WILL cause silent failures if missed — follow them exactly.
+//
+// CONTRACT 1 — Any grid loop (render, scan, effect):
+//   for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) {
+//     let gem = grid[r][c];   ← REQUIRED as first line of inner loop body
+//     if(gem.type<0) continue;
+//   }
+//
+// CONTRACT 2 — startResolve() or any custom resolve function:
+//   function startResolve() {
+//     let matches = findAllMatches();   ← REQUIRED first line
+//     if(matches.length===0) { checkObjective(); setState('playing'); return; }
+//   }
+//
+// CONTRACT 3 — addLevelObstacles() or any obstacle placement loop:
+//   for(let attempt=0;attempt<MAX;attempt++){
+//     let r=randInt(1,ROWS-2);   ← REQUIRED inside EACH loop body (block-scoped)
+//     let c=randInt(1,COLS-2);   ← REQUIRED inside EACH loop body (block-scoped)
+//     if(!isOccupied(r,c)){ grid[r][c].obstacle=...; break; }
+//   }
+//
+// CONTRACT 4 — findAllMatches() or any dual horizontal+vertical scan:
+//   // Horizontal: let end=c+1;
+//   // Vertical:   let end=r+1;   ← REQUIRED separate declaration, not reuse of c-scan's end
+//
+// CONTRACT 5 — bomb/chain effects with dr/dc offset loops:
+//   for(let dr=-R;dr<=R;dr++) for(let dc=-R;dc<=R;dc++){
+//     let nr=r+dr, nc=c+dc;   ← REQUIRED inside inner loop before any use of nr/nc
+//     if(inGrid(nr,nc)) { ... }
+//   }
+//
+// CONTRACT 6 — drag direction detection in updatePlaying():
+//   let dr = ady>adx ? (Pointer.dragY>0?1:-1) : 0;   ← REQUIRED before dc
+//   let dc = adx>=ady ? (Pointer.dragX>0?1:-1) : 0;
+//   let nr = selR+dr;   ← uses dr — dr must be declared FIRST
+// ─────────────────────────────────────────────────────────────────
+
 const GAME_TITLE = '[FILL: Game Title]';
 
 // [FILL: color palette — one color per gem type]
@@ -426,6 +465,16 @@ function getObjective(n) {
   // [FILL: define objectives per level]
   if (n%3===0) return {type:'clear_type', gemType:n%GEM_TYPES, target:15+n*3, current:0};
   return {type:'score', target:800+n*400, current:0};
+}
+
+// [FILL: addLevelObstacles(level) — place ice/honey/chained gems on the grid]
+// CONTRACT 3: Each obstacle category MUST use its own let r / let c declaration.
+// CORRECT:
+//   for(let attempt=0;attempt<8;attempt++){ let r=randInt(1,ROWS-2); let c=randInt(1,COLS-2); if(grid[r][c].obstacle)continue; grid[r][c].obstacle='ice'; break; }
+//   for(let attempt=0;attempt<5;attempt++){ let r=randInt(1,ROWS-2); let c=randInt(1,COLS-2); if(grid[r][c].obstacle)continue; grid[r][c].obstacle='honey'; break; }
+// WRONG (block-scope bug): let r=randInt(...); let c=randInt(...); for(let i...){ grid[r][c] }  ← r/c from previous loop
+function addLevelObstacles(n) {
+  // [FILL: obstacle placement — use CONTRACT 3 pattern above]
 }
 
 function startGame() {
@@ -655,6 +704,7 @@ function renderGameoverOverlay() { ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fillRec
 function renderPlaying() {
   ctx.fillStyle=PALETTE.bg; ctx.fillRect(0,0,W,H);
   // [FILL: animated background — glowing grid, floating particles]
+  // CONTRACT 1: If you loop over grid cells here, ALWAYS declare `let gem = grid[r][c];` as the first line of the inner loop body.
 
   // ── Grid background ───────────────────────────────────────────
   ctx.fillStyle=PALETTE.board;

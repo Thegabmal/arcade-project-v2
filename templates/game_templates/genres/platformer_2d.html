@@ -96,6 +96,17 @@
 │  ✗  location.reload()      Reset variables in JS — never force a reload.   │
 │  ✗  Truncating output      Incomplete HTML always crashes. Finish the file. │
 │                                                                              │
+│  ✗  Sharing local vars between updateX and renderX via function scope.      │
+│     updateShop() and renderShop() are SEPARATE function calls — variables   │
+│     declared inside updateShop are NOT visible inside renderShop.           │
+│     → Any layout/position values needed by renderX MUST be either:         │
+│       (a) re-computed inside renderX, OR                                    │
+│       (b) stored in module-level variables declared outside both functions. │
+│     The same rule applies to all update*/render* pairs (updateVictory /    │
+│     renderVictory, updateBoss / renderBoss, etc.).                          │
+│                                                                              │
+│  ✗  pool.length = 0        Pools are NOT arrays. Use pool.clear() instead.  │
+│                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─ QUALITY CHECKLIST — verify before submitting ──────────────────────────────┐

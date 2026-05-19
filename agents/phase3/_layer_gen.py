@@ -1853,7 +1853,13 @@ def _run_compact_fallback(context, erreurs_passees=None) -> str:
         html = raw
 
     html, _, _ = fix_all_auto(html)
-    html, _, _ = validate_and_fix(html)
+    html, _val_issues, _ = validate_and_fix(html)
+    if _val_issues:
+        try:
+            import memory as _mem
+            _mem.save_validator_errors(context.genre_profile.genre_principal, [i for i in _val_issues if '[AUTO-FIX]' in i])
+        except Exception:
+            pass
     phase3_log.info("[layered] Compact fallback : %d chars" % len(html))
     return html
 
@@ -3110,7 +3116,13 @@ def run_from_template(
         phase3_log.info("[template] Integrity %d/10 — minor issues: %s" % (integrity_score, ', '.join(failed)))
 
     # Code validator pass (sanitizes null overrides, spawnPlayer, etc.)
-    html, _, _ = validate_and_fix(html)
+    html, _val_issues, _ = validate_and_fix(html)
+    if _val_issues:
+        try:
+            import memory as _mem
+            _mem.save_validator_errors(context.genre_profile.genre_principal, [i for i in _val_issues if '[AUTO-FIX]' in i])
+        except Exception:
+            pass
 
     remaining_fills = html.count('[FILL:')
     if remaining_fills > 0:
@@ -3314,7 +3326,13 @@ def run_from_template_3d(
         )
 
     # Code validator pass
-    html, _, _ = validate_and_fix(html)
+    html, _val_issues, _ = validate_and_fix(html)
+    if _val_issues:
+        try:
+            import memory as _mem
+            _mem.save_validator_errors(context.genre_profile.genre_principal, [i for i in _val_issues if '[AUTO-FIX]' in i])
+        except Exception:
+            pass
 
     remaining_fills = html.count('[FILL:')
     if remaining_fills > 0:
@@ -5277,7 +5295,13 @@ def run_layered(context, patterns_reussis=None, erreurs_passees=None, game_logic
 
     # validate_and_fix avec rollback si la syntaxe est cassée après
     _pre_validate_html = final_html
-    final_html, _, _ = validate_and_fix(final_html)
+    final_html, _val_issues, _ = validate_and_fix(final_html)
+    if _val_issues:
+        try:
+            import memory as _mem
+            _mem.save_validator_errors(context.genre_profile.genre_principal, [i for i in _val_issues if '[AUTO-FIX]' in i])
+        except Exception:
+            pass
 
     # Vérification syntaxe POST validate_and_fix (peut introduire des ] ou } orphelins)
     try:

@@ -8,10 +8,11 @@
 ## Last session: 2026-05-19 (session 6) — FPS 3D gap analysis + template-aware evaluation
 
 ### What to do FIRST next session
-1. Start Flask: `python app.py`
-2. Run FPS 3D genre — both fixes from this session should let the template path succeed
-3. Next genre in cycle: 3D Platformer, then Bullet Hell 3D
-4. RAG is seeded (25 model games) — already done this session
+1. Open the FPS 3D game in `needs_review/` — find the file from the last run
+2. Fix it manually until it is perfectly playable (same process as TD and M3 gap analyses)
+3. Document every bug with root cause → extract FPS-specific pipeline rules
+4. Commit rules to linter / auto-fix / template as appropriate
+5. After rules are extracted → re-run FPS 3D to validate, then continue genre cycle (3D Platformer, Bullet Hell 3D)
 
 ### All fixes applied this session
 

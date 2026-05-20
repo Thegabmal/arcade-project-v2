@@ -1,137 +1,5 @@
 [
   {
-    "timestamp": "2026-03-30T10:35:45.127678",
-    "titre": "Donjon des Héros",
-    "genre": "rpg",
-    "score": 6.87,
-    "approuve": false,
-    "html_size": 101670,
-    "new_common_vars_candidates": [
-      {
-        "varname": "actionTaken",
-        "occurrences": 15,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "active",
-        "occurrences": 9,
-        "suggested_default": "false"
-      },
-      {
-        "varname": "activeSkills",
-        "occurrences": 7,
-        "suggested_default": "false"
-      },
-      {
-        "varname": "attacker",
-        "occurrences": 8,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "buffs",
-        "occurrences": 37,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "caster",
-        "occurrences": 21,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "clicked",
-        "occurrences": 13,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "combatant",
-        "occurrences": 4,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "crit_chance",
-        "occurrences": 3,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "crit_damage",
-        "occurrences": 5,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "currentCooldown",
-        "occurrences": 12,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "currentMp",
-        "occurrences": 5,
-        "suggested_default": "0"
-      },
-      {
-        "varname": "currentPa",
-        "occurrences": 10,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "currentPm",
-        "occurrences": 14,
-        "suggested_default": "null"
-      },
-      {
-        "varname": "description",
-        "occurrences": 12,
-        "suggested_default": "null"
-      }
-    ],
-    "missing_functions": [
-      {
-        "function": "flash",
-        "call_count": 4
-      },
-      {
-        "function": "bar",
-        "call_count": 3
-      },
-      {
-        "function": "interactables",
-        "call_count": 2
-      },
-      {
-        "function": "appris",
-        "call_count": 2
-      },
-      {
-        "function": "archer",
-        "call_count": 2
-      },
-      {
-        "function": "activateQuest",
-        "call_count": 2
-      },
-      {
-        "function": "value",
-        "call_count": 2
-      },
-      {
-        "function": "mage",
-        "call_count": 2
-      }
-    ],
-    "residual_patterns": [
-      {
-        "type": "unhandled_gamestate",
-        "description": "États gameState assignés mais jamais vérifiés : ['playing']",
-        "severity": "medium"
-      },
-      {
-        "type": "ctx_before_init",
-        "description": "ctx utilisé au niveau global avant canvas.getContext() — possible undefined",
-        "severity": "high"
-      }
-    ],
-    "has_new_findings": true
-  },
-  {
     "timestamp": "2026-03-30T11:46:35.912009",
     "titre": "Cartoon Dungeons",
     "genre": "rpg",
@@ -4950,6 +4818,137 @@
       {
         "type": "unhandled_gamestate",
         "description": "États gameState assignés mais jamais vérifiés : ['menu']",
+        "severity": "medium"
+      }
+    ],
+    "has_new_findings": true
+  },
+  {
+    "timestamp": "2026-05-19T12:22:40.927818",
+    "titre": "PolyPulse Arena",
+    "genre": "shooter",
+    "score": 4.61,
+    "approuve": false,
+    "html_size": 30690,
+    "new_common_vars_candidates": [
+      {
+        "varname": "ammo",
+        "occurrences": 7,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "background",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "backgroundColor",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "body",
+        "occurrences": 8,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "border",
+        "occurrences": 9,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "boundingBox",
+        "occurrences": 4,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "color",
+        "occurrences": 19,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "core",
+        "occurrences": 21,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "damage",
+        "occurrences": 6,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "display",
+        "occurrences": 21,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "health",
+        "occurrences": 4,
+        "suggested_default": "0"
+      },
+      {
+        "varname": "height",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "innerHTML",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "isLocked",
+        "occurrences": 5,
+        "suggested_default": "null"
+      },
+      {
+        "varname": "lastShotTime",
+        "occurrences": 3,
+        "suggested_default": "0"
+      }
+    ],
+    "missing_functions": [
+      {
+        "function": "addScaledVector",
+        "call_count": 3
+      },
+      {
+        "function": "remove",
+        "call_count": 3
+      },
+      {
+        "function": "copy",
+        "call_count": 3
+      },
+      {
+        "function": "setFromObject",
+        "call_count": 3
+      },
+      {
+        "function": "material",
+        "call_count": 2
+      },
+      {
+        "function": "intersectsBox",
+        "call_count": 2
+      },
+      {
+        "function": "getElapsedTime",
+        "call_count": 2
+      },
+      {
+        "function": "setSize",
+        "call_count": 2
+      },
+      {
+        "function": "updateAmmo",
+        "call_count": 2
+      }
+    ],
+    "residual_patterns": [
+      {
+        "type": "unhandled_gamestate",
+        "description": "États gameState assignés mais jamais vérifiés : ['loading']",
         "severity": "medium"
       }
     ],

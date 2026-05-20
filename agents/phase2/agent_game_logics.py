@@ -409,8 +409,65 @@ Toutes les valeurs doivent être directement implémentables en JavaScript Canva
 {instr}"""))
 
     # ── Section 3D si applicable ──
+    is_fps = any(g in genre+' '+sous_genre for g in ["fps", "first-person", "first person"])
     if is_3d:
-        sections.insert(0, ("ARCHITECTURE 3D", f"""{context}
+        if is_fps:
+            sections.insert(0, ("FPS 3D — MÉCHANIQUES & VALEURS", f"""{context}
+
+Tu génères un FPS 3D (Three.js r160, pointer lock, WASD+souris).
+Remplis les sections FILL du template : ENEMY_TYPES, spawnEnemy, startWave, onWaveClear, onEnemyKilled, updateEnemies, buildArena.
+
+=== ENNEMI TYPES — adapte noms/couleurs au thème "{titre}" ===
+// RÈGLE CRITIQUE : boss.scale DOIT être 1.0 — si scale>1.0, les balles passent au-dessus du joueur (origine bullet Y=1.3*scale > camera Y=1.65)
+const ENEMY_TYPES = {{
+  grunt:  {{ hp:4,  speed:2.4, reward:100, color:0xe94560, scale:1.0, dmg:13, shootInterval:2.2 }},
+  runner: {{ hp:2,  speed:4.8, reward:150, color:0x44aaff, scale:0.8, dmg:13, shootInterval:3.5 }},
+  heavy:  {{ hp:10, speed:1.3, reward:300, color:0xff8800, scale:1.4, dmg:13, shootInterval:1.8 }},
+  boss:   {{ hp:30, speed:1.4, reward:1000,color:0xcc00ff, scale:1.0, dmg:26, shootInterval:1.0 }},
+}};
+
+=== FORMULE DE VAGUE ===
+// Wave N total = 5+N*5. Boss wave si waveNum%5===0.
+// heavies=waveNum>=3?Math.floor(waveNum/3):0
+// runners=waveNum>=2?Math.floor(waveNum/2):0
+// grunts=Math.max(2, total-heavies-runners)
+// Boss wave : 1 boss + Math.floor(waveNum/5)*2 grunts escorte. Afficher #boss-wrap.
+
+=== BOSS MÉCHANIQUES (dans updateEnemies) ===
+// Summon toutes les 20s : spawn 3 grunts à 120° autour du boss, waveEnemiesLeft+=3.
+// HP bar : document.getElementById('boss-fill').style.width=(e.hp/e.maxHp*100)+'%' chaque frame.
+// Masquer #boss-wrap dans onWaveClear.
+
+=== DROPS dans onEnemyKilled ===
+// meta.coins+=e.reward; saveMeta();
+// const r=Math.random();
+// if(r<0.15) spawnDrop('heal',...);       // 15% heal +20hp
+// else if(r<0.325) spawnDrop('ammo',...); // 17.5% ammo +10 reserve
+// else if(r<0.375){{ meta.coins+=15; saveMeta(); addKillFeed('🪙 +15'); }} // 5% coins
+
+=== HITBOXES COVER WALLS (dans buildArena) ===
+// Un mur long (w>d) doit utiliser n=Math.ceil(w) cercles sur la longueur, r=Math.min(w,d)/2.
+// for(let i=0;i<n;i++) obstacles.push({{pos:new THREE.Vector3(x-w/2+(i+0.5)*w/n,0,z),r}})
+// NE PAS utiliser un seul grand cercle — le joueur contourne les extrémités.
+
+=== SHOP dans onWaveClear ===
+// openShop(()=>{{ applyUpgrades(); canvas.requestPointerLock(); waveCooldown=3; }}, 'ARMORY', 'WAVE '+n+' CLEAR — +'+b+'🪙', '[ DEPLOY → ]')
+
+=== UPGRADES RECOMMANDÉS ===
+// {{ id:'mag_ext', name:'Extended Mag', desc:'+15 max ammo per level', cost:30, maxLv:3 }},
+// {{ id:'stopping_power', name:'Stopping Power', desc:'+25% damage per level', cost:40, maxLv:3 }},
+// {{ id:'flak_vest', name:'Flak Vest', desc:'+25 max HP per level', cost:50, maxLv:3 }},
+// {{ id:'quick_reload', name:'Quick Reload', desc:'-0.5s reload per level', cost:35, maxLv:3 }},
+
+=== ARENA ===
+// Floor 120×120 units. 4 outer walls (obstacles). Central pillars. Cover walls courts multi-cercles.
+// Éclairage : AmbientLight 0x404040 + 2-3 PointLights colorées selon le thème.
+// Option multi-étage : plateforme surélevée + escalier, getFloorY(x,z,currentY) pour ennemis.
+
+Donne uniquement les blocs de code FILL à copier-coller, adaptés au thème "{titre}".
+{instr}"""))
+        else:
+            sections.insert(0, ("ARCHITECTURE 3D", f"""{context}
 
 Architecture Three.js r160 pour ce jeu :
 Caméra : type exact (FPS/TPS/top-down), FOV, position initiale, lerp factor.

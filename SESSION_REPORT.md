@@ -5,12 +5,42 @@
 
 ---
 
-## Last session: 2026-05-19 (session 8) — FPS reference game polished + gap finalisé
+## Last session: 2026-05-20 (session 8 cont.) — FPS reference finalized + template FILL stubs complete
 
 ### What to do FIRST next session
-1. Re-run FPS 3D to validate rules (FPS-4→FPS-10) — expect score 7+ with template path
+1. Re-run FPS 3D to validate template stubs — expect score 7+ with all FILL guidance
 2. Continue genre cycle: 3D Platformer → Bullet Hell 3D
 3. Each genre: run → if score < 7.5 → gap analysis → rules → re-run
+
+### New fixes this session (2026-05-20)
+
+#### polypulse_arena_reference.html — final polish
+| Item | Fix |
+|------|-----|
+| Enemy damage ×1.25 | 10→13 per bullet, boss 20→26 |
+| Wave scaling | Wave N = 5+N*5 total (was 4+N*2). Wave1=10, wave2=15… |
+| Shop pointer lock | `openShop()` calls `document.exitPointerLock()` directly — no Escape needed |
+| Boss scale | 1.9→1.0 — bullets at Y=1.3 now hit player at Y=1.65 (was passing above) |
+| Boss mechanics | 30HP, damage ×2, HP bar top-left, summons 3 grunts every 20s |
+| Dead zone fix | Body hitbox center +0.2*scale, radius 0.75*scale — closes gap between head and body |
+| Platform teleport fix | `getFloorY(x,z,currentY)` — only elevates player if `currentY >= EYE_H+p.h-0.3` |
+| Cover wall hitboxes | Multi-circle: n=ceil(length) circles along wall, r=min(w,d)/2 — no more walk-through ends |
+| Drop rates | Heal 15%, ammo 17.5%, coins 5% (+15🪙 direct) |
+| Gold per wave | `75+(wave-1)*25` (wave1=100, wave2=125…) |
+| Reset per game | Coins and upgrades reset to 0 in `startGame()` |
+
+#### fps_shooter_3d.html FILL stubs
+| Stub | Content added |
+|------|--------------|
+| Header | Drop rate rule updated (15/17.5/5%), boss wave rule added |
+| `startWave` | Wave formula (5+N*5), boss branch, `showWaveAnnounce`, `#boss-wrap` |
+| `onWaveClear` (new) | Hide boss-wrap, openShop with applyUpgrades + pointer lock callback |
+| `onEnemyKilled` (new) | e.reward coins, drop roll with exact rates, clearDrops rule |
+| `updateEnemies` | Per-axis obstacle avoidance, HP bar billboard, boss summon, getFloorY note |
+
+#### agent_game_logics.py
+- Added `is_fps` detection
+- When `is_fps and is_3d`: injects "FPS 3D — MÉCHANIQUES & VALEURS" section with all reference values (enemy types, wave formula, drop rates, boss rules, cover wall multi-circle, shop callback pattern)
 
 ### All fixes applied this session (reference game polish — commits b9554f6, 0c0858f, 7a9266d)
 

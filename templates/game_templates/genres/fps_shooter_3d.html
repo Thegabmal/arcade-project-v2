@@ -51,7 +51,8 @@
 │                       waveEnemiesLeft=<total_count> (ENGINE checks these)    │
 │  updatePlaying(dt) → per-frame FILL logic (enemies, drops, etc.)            │
 │  onEnemyKilled(e)  → called by ENGINE on kill; implement drop roll here     │
-│                       RULE: 10% ammo drop (+10), 5% heal drop (+20hp)       │
+│                       RULE: 15% heal (+20hp), 17.5% ammo (+10 reserve),    │
+│                             5% coins (+15🪙 direct). Add e.reward to coins. │
 │  onWaveClear(n,b)  → called by ENGINE on wave completion; MUST call         │
 │                       openShop(callback, title, subtitle, skipLabel)         │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -120,6 +121,7 @@
 <!-- HUD (pointer-events:none — do not add clickable elements here) -->
 <div id="hud" style="display:none;">
   <div id="hit-flash"></div>
+  <div id="heal-flash" style="position:absolute;inset:0;background:rgba(0,255,100,0);pointer-events:none;transition:background .12s;"></div>
   <div id="crosshair"></div>
   <div id="score-disp">0</div>
   <div id="wave-disp">WAVE 1</div>
@@ -128,6 +130,12 @@
   <div id="ammo-disp"><div id="ammo-label">AMMO</div><div id="ammo-count">30 / 90</div></div>
   <div id="reload-msg">[ RELOADING ]</div>
   <div id="kill-feed"></div>
+  <div id="headshot-msg" style="position:absolute;top:44%;left:50%;transform:translate(-50%,-50%);color:#ffd700;font-size:16px;font-weight:900;letter-spacing:4px;opacity:0;pointer-events:none;transition:opacity .08s;text-shadow:0 0 10px #ffd700;">HEADSHOT ×2</div>
+  <div id="wave-announce" style="position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);color:#0ff;font-size:32px;font-weight:900;letter-spacing:5px;text-align:center;text-shadow:0 0 20px #0ff,0 0 40px #0ff4;opacity:0;pointer-events:none;transition:opacity 0.4s;"></div>
+  <div id="boss-wrap" style="display:none;position:absolute;top:18px;left:24px;">
+    <div style="font-size:10px;color:#cc00ff;letter-spacing:2px;margin-bottom:3px;text-shadow:0 0 6px #cc00ff;">⚡ BOSS</div>
+    <div style="width:180px;height:12px;background:#333;border-radius:6px;overflow:hidden;"><div id="boss-fill" style="height:100%;background:linear-gradient(90deg,#7700cc,#cc00ff);border-radius:6px;transition:width .15s;width:100%;"></div></div>
+  </div>
 </div>
 
 <div id="overlay">
@@ -139,6 +147,7 @@
 
 <div id="shop-overlay">
   <h2 id="shop-title">[FILL: SHOP_TITLE]</h2>
+  <div id="shop-subtitle" style="font-size:13px;color:#ffd700;margin-bottom:16px;letter-spacing:2px;"></div>
   <div id="shop-coins">🪙 0</div>
   <div id="shop-grid"></div>
   <div id="shop-skip">[ SKIP → ]</div>
@@ -180,7 +189,7 @@ renderer.shadowMap.enabled = true;
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 const scene  = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 300);
 const clock  = new THREE.Clock();
 
 window.addEventListener('resize', () => {
@@ -191,7 +200,7 @@ window.addEventListener('resize', () => {
 
 // ── Input ─────────────────────────────────────────────────────────────
 const keys = {};
-window.addEventListener('keydown', e => { keys[e.code]=true; });
+window.addEventListener('keydown', e => { keys[e.code]=true; if(e.code==='Space') e.preventDefault(); });
 window.addEventListener('keyup',   e => { keys[e.code]=false; });
 
 let yaw=0, pitch=0, locked=false;
@@ -211,23 +220,38 @@ window.addEventListener('keydown', e=>{
 // ── Obstacle collision ────────────────────────────────────────────────
 const obstacles = [];
 function circleBlocked(x,z,r) {
-  if(Math.abs(x)>19.5||Math.abs(z)>19.5) return true;
+  if(Math.abs(x)>59.5||Math.abs(z)>59.5) return true;
   for(const o of obstacles) if(Math.hypot(x-o.pos.x,z-o.pos.z)<r+o.r) return true;
   return false;
 }
+
+// ── Swept-sphere bullet collision (prevents skip-through at high speed) ──
+const _segD=new THREE.Vector3(), _segF=new THREE.Vector3();
+function segSphereHit(p0,p1,center,r){
+  _segD.subVectors(p1,p0); _segF.subVectors(p0,center);
+  const a=_segD.dot(_segD); if(a<1e-12) return _segF.length()<r;
+  const b2=_segF.dot(_segD), c=_segF.dot(_segF)-r*r, disc=b2*b2-a*c;
+  if(disc<0) return false;
+  const sqD=Math.sqrt(disc), t1=(-b2-sqD)/a, t2=(-b2+sqD)/a;
+  return (t1>=0&&t1<=1)||(t2>=0&&t2<=1)||(t1<0&&t2>1);
+}
+const _hc=new THREE.Vector3(), _bc=new THREE.Vector3();
+function isOOB(p){ return Math.abs(p.x)>65||p.y<-5||p.y>40||Math.abs(p.z)>65; }
 
 // ── Bullets ───────────────────────────────────────────────────────────
 const bullets=[], eBullets=[];
 const bMat = new THREE.MeshBasicMaterial({color:0xffd700});
 const eMat = new THREE.MeshBasicMaterial({color:0xff4444});
-function spawnBullet(fromPlayer=true, origin, direction) {
+function spawnBullet(fromPlayer=true, origin, direction, dmg=10) {
   const geo = new THREE.SphereGeometry(0.07,4,4);
   const mesh = new THREE.Mesh(geo, fromPlayer?bMat:eMat);
   const pos  = fromPlayer ? camera.position.clone() : origin.clone();
   mesh.position.copy(pos);
   const dir = fromPlayer ? (()=>{ const d=new THREE.Vector3(); camera.getWorldDirection(d); return d; })() : direction.clone().normalize();
   scene.add(mesh);
-  (fromPlayer?bullets:eBullets).push({ mesh, dir, life:1.5 });
+  const b = { mesh, dir, life:1.5, dmg };
+  b.prevPos = pos.clone();
+  (fromPlayer?bullets:eBullets).push(b);
 }
 
 // ── Player state ──────────────────────────────────────────────────────
@@ -280,6 +304,8 @@ function startGame() {
   enemies.forEach(e=>scene.remove(e.grp)); enemies.length=0;
   bullets.forEach(b=>scene.remove(b.mesh)); bullets.length=0;
   eBullets.forEach(b=>scene.remove(b.mesh)); eBullets.length=0;
+  if(typeof clearDrops==='function') clearDrops();
+  UPGRADES.forEach(u=>{ meta.upgrades[u.id]=0; }); meta.coins=0; saveMeta();
   applyUpgrades();
   player.hp=player.maxHp; player.ammo=player.maxAmmo; player.reserve=90;
   player.score=0; player.wave=1; player.dead=false; player.isReloading=false;
@@ -304,12 +330,25 @@ function triggerGameOver() {
     <button class="menu-btn" id="btn-shop">[FILL: SHOP_LABEL]</button>
     <button class="menu-btn" id="btn-retry">[FILL: RETRY_LABEL]</button>`;
   ov.style.display='flex';
-  document.getElementById('btn-shop').onclick=()=>{ ov.style.display='none'; openShop(); };
+  document.getElementById('btn-shop').onclick=()=>{ ov.style.display='none'; openShop(startGame,'UPGRADE LOADOUT','GAME OVER — WAVE '+player.wave,'[ SKIP → ]'); };
   document.getElementById('btn-retry').onclick=startGame;
 }
 
-function openShop()  { gameState='shop'; renderShop(); document.getElementById('shop-overlay').style.display='flex'; }
-function closeShop() { document.getElementById('shop-overlay').style.display='none'; startGame(); }
+let _shopOnClose=null;
+function openShop(onClose,title,subtitle,skipLabel){
+  _shopOnClose=onClose||startGame;
+  document.exitPointerLock(); locked=false;
+  if(title) document.getElementById('shop-title').textContent=title;
+  if(subtitle){ const s=document.getElementById('shop-subtitle'); if(s) s.textContent=subtitle; }
+  if(skipLabel){ const sk=document.getElementById('shop-skip'); if(sk) sk.textContent=skipLabel; }
+  renderShop();
+  document.getElementById('shop-overlay').style.display='flex';
+  gameState='shop';
+}
+function closeShop(){
+  document.getElementById('shop-overlay').style.display='none';
+  const cb=_shopOnClose; _shopOnClose=null; if(cb) cb();
+}
 function renderShop() {
   document.getElementById('shop-coins').textContent=`🪙 ${meta.coins}`;
   const grid=document.getElementById('shop-grid'); grid.innerHTML='';
@@ -353,37 +392,57 @@ function update(dt) {
     if(player.ammo===0&&player.reserve>0) startReload();
   }
 
-  // Player bullet update
+  // Player bullets — swept-sphere (headshot ×2)
   for(let i=bullets.length-1;i>=0;i--) {
-    const b=bullets[i]; b.mesh.position.addScaledVector(b.dir,30*dt); b.life-=dt;
-    if(b.life<=0) { scene.remove(b.mesh); bullets.splice(i,1); continue; }
+    const b=bullets[i];
+    b.prevPos.copy(b.mesh.position);
+    b.mesh.position.addScaledVector(b.dir,28*dt);
+    b.life-=dt;
+    if(b.life<=0||isOOB(b.mesh.position)){ scene.remove(b.mesh); bullets.splice(i,1); continue; }
     let hit=false;
     for(let j=enemies.length-1;j>=0;j--) {
       const e=enemies[j]; if(e.dead) continue;
-      if(b.mesh.position.distanceTo(e.grp.position)<.9*e.scale) {
-        e.hp-=player.dmg; hit=true;
-        if(e.hp<=0) { e.dead=true; scene.remove(e.grp); enemies.splice(j,1);
-          player.score+=e.reward; addKillFeed(e.type.toUpperCase()+' DOWN');
-          waveEnemiesLeft=Math.max(0,waveEnemiesLeft-1); }
+      const headCtr=_hc.set(e.grp.position.x, e.grp.position.y+1.15*e.scale, e.grp.position.z);
+      const bodyCtr=_bc.set(e.grp.position.x, e.grp.position.y+0.2*e.scale,  e.grp.position.z);
+      const isHead = segSphereHit(b.prevPos, b.mesh.position, headCtr, 0.32*e.scale);
+      const isBody = !isHead && segSphereHit(b.prevPos, b.mesh.position, bodyCtr, 0.75*e.scale);
+      if(isHead||isBody){
+        const dmg=isHead?player.dmg*2:player.dmg;
+        e.hp-=dmg; hit=true;
+        if(isHead&&typeof showHeadshot==='function') showHeadshot();
+        if(e.hp<=0){
+          e.dead=true; scene.remove(e.grp); enemies.splice(j,1);
+          player.score+=e.reward*(isHead?2:1);
+          addKillFeed((isHead?'⭐ HEADSHOT — ':'')+e.type.toUpperCase()+' DOWN');
+          waveEnemiesLeft=Math.max(0,waveEnemiesLeft-1);
+          if(typeof onEnemyKilled==='function') onEnemyKilled(e);
+        }
         break;
       }
     }
-    if(hit) { scene.remove(b.mesh); bullets.splice(i,1); }
+    if(hit){ scene.remove(b.mesh); bullets.splice(i,1); }
   }
 
-  // Enemy bullet update
+  // Enemy bullets — swept-sphere vs player
   for(let i=eBullets.length-1;i>=0;i--) {
-    const b=eBullets[i]; b.mesh.position.addScaledVector(b.dir,12*dt); b.life-=dt;
-    if(b.life<=0) { scene.remove(b.mesh); eBullets.splice(i,1); continue; }
-    if(b.mesh.position.distanceTo(camera.position)<.5) {
-      player.hp-=10; flashHit(); scene.remove(b.mesh); eBullets.splice(i,1);
-      if(player.hp<=0) { player.hp=0; triggerGameOver(); return; }
+    const b=eBullets[i];
+    b.prevPos.copy(b.mesh.position);
+    b.mesh.position.addScaledVector(b.dir,14*dt);
+    b.life-=dt;
+    if(b.life<=0||isOOB(b.mesh.position)){ scene.remove(b.mesh); eBullets.splice(i,1); continue; }
+    if(segSphereHit(b.prevPos, b.mesh.position, camera.position, 0.5)){
+      player.hp-=b.dmg; flashHit(); scene.remove(b.mesh); eBullets.splice(i,1);
+      if(player.hp<=0){ player.hp=0; triggerGameOver(); return; }
     }
   }
 
   // Wave management
   if(!waveActive) { waveCooldown-=dt; if(waveCooldown<=0) startWave(player.wave); }
-  else if(waveEnemiesLeft===0&&enemies.length===0) { waveActive=false; player.wave++; waveCooldown=4; }
+  else if(waveEnemiesLeft===0&&enemies.length===0){
+    waveActive=false; player.wave++;
+    const bonus=75+(player.wave-1)*25; meta.coins+=bonus; saveMeta();
+    if(typeof onWaveClear==='function') onWaveClear(player.wave-1,bonus);
+  }
 
   updatePlaying(dt); // [FILL: custom per-frame logic called here]
   updateHUD();
@@ -431,32 +490,108 @@ function buildArena() {
 const ENEMY_TYPES = { [FILL: ENEMY_TYPES] };
 
 // ── [FILL: SPAWN_ENEMY] ───────────────────────────────────────────────
-// Builds enemy group (body + head), places at random perimeter point, pushes to enemies[].
-function spawnEnemy(type) {
+// RULE: head mesh at y=1.15*scale for headshot detection (ENGINE uses this offset).
+// RULE: add health bar (PlaneGeometry, depthTest:false) as child, userData.isHpBar=true.
+// RULE: posOverride allows boss summon to place minions near boss position.
+// RULE: obstacles[] does NOT need enemy entries — only static geometry.
+function spawnEnemy(type, posOverride=null) {
   // [FILL: SPAWN_ENEMY]
-  // const def=ENEMY_TYPES[type]; ... build THREE.Group, push to enemies[]
+  // const def=ENEMY_TYPES[type];
+  // const grp=new THREE.Group();
+  // — body —
+  // const body=new THREE.Mesh(new THREE.BoxGeometry(0.9*def.scale,1.8*def.scale,0.9*def.scale), bodyMat);
+  // body.castShadow=true; grp.add(body);
+  // — head —
+  // const head=new THREE.Mesh(new THREE.BoxGeometry(0.55*def.scale,0.55*def.scale,0.55*def.scale), headMat);
+  // head.position.y=1.15*def.scale; grp.add(head);
+  // — health bar (billboard in updateEnemies) —
+  // const barBg=new THREE.Mesh(new THREE.PlaneGeometry(def.scale,0.13), new THREE.MeshBasicMaterial({color:0x333333,side:THREE.DoubleSide,depthTest:false}));
+  // const barFg=new THREE.Mesh(new THREE.PlaneGeometry(def.scale,0.13), new THREE.MeshBasicMaterial({color:0x00ff66,side:THREE.DoubleSide,depthTest:false}));
+  // barBg.position.set(0,1.85*def.scale,0); barFg.position.set(0,1.85*def.scale,0.02);
+  // barFg.userData.isHpBar=true; grp.add(barBg); grp.add(barFg);
+  // — position —
+  // if(posOverride){ grp.position.set(posOverride.x, 0.9*def.scale, posOverride.z); }
+  // else { /* random perimeter spawn far from player */ }
+  // scene.add(grp);
+  // const eObj={grp,type,scale:def.scale,hp:def.hp,maxHp:def.hp,speed:def.speed,reward:def.reward,shootInterval:def.shootInterval,shootTimer:def.shootInterval*Math.random(),dead:false};
+  // if(type==='boss') eObj.summonTimer=20;
+  // enemies.push(eObj);
 }
 
 // ── [FILL: START_WAVE] ────────────────────────────────────────────────
-// Determines which enemy types and count for wave n.
-// Every 5th wave = boss only. Other waves = mix scaling with wave number.
+// RULE: waveActive=true AND waveEnemiesLeft=<total_count> are MANDATORY (ENGINE checks these).
+// RULE: boss wave every 5th (waveNum%5===0) — spawnEnemy('boss') + escort grunts.
+// RULE: call showWaveAnnounce() and show #boss-wrap on boss waves.
+// Wave formula: total=5+waveNum*5; heavies=waveNum>=3?Math.floor(waveNum/3):0;
+//   runners=waveNum>=2?Math.floor(waveNum/2):0; grunts=Math.max(2,total-heavies-runners)
+// Boss wave: spawnEnemy('boss'); for(let i=0;i<Math.floor(waveNum/5)*2;i++) spawnEnemy('grunt');
+//   document.getElementById('boss-wrap').style.display='block';
 function startWave(waveNum) {
   // [FILL: START_WAVE]
-  waveActive=true;
-  // const count=4+waveNum*2; for(let i=0;i<count;i++) spawnEnemy('grunt');
-  // waveEnemiesLeft=count;
+  waveActive=true; let count=0;
+  // const total=5+waveNum*5; const heavies=waveNum>=3?Math.floor(waveNum/3):0; const runners=waveNum>=2?Math.floor(waveNum/2):0; const grunts=Math.max(2,total-heavies-runners);
+  // if(waveNum%5===0){ spawnEnemy('boss'); count++; for(let i=0;i<Math.floor(waveNum/5)*2;i++){ spawnEnemy('grunt'); count++; } document.getElementById('boss-wrap').style.display='block'; }
+  // else { for(let i=0;i<grunts;i++) spawnEnemy('grunt'); for(let i=0;i<runners;i++) spawnEnemy('runner'); for(let i=0;i<heavies;i++) spawnEnemy('heavy'); count=total; }
+  waveEnemiesLeft=count;
+  // showWaveAnnounce(waveNum%5===0?'⚡ BOSS WAVE '+waveNum:'WAVE '+waveNum);
+}
+
+// ── [FILL: ON_WAVE_CLEAR] ─────────────────────────────────────────────
+// Called by ENGINE after all enemies in a wave die. n=wave cleared, b=bonus already added to coins.
+// RULE: MUST call openShop(onClose, title, subtitle, skipLabel).
+// RULE: onClose callback MUST call applyUpgrades() then canvas.requestPointerLock().
+// RULE: hide #boss-wrap here (boss was on this wave or prior).
+function onWaveClear(waveNum, bonus) {
+  // [FILL: ON_WAVE_CLEAR]
+  // document.getElementById('boss-wrap').style.display='none';
+  // openShop(
+  //   ()=>{ applyUpgrades(); canvas.requestPointerLock(); waveCooldown=3; },
+  //   'ARMORY', 'WAVE '+waveNum+' CLEAR — +'+bonus+'🪙', '[ DEPLOY → ]'
+  // );
+}
+
+// ── [FILL: ON_ENEMY_KILLED] ───────────────────────────────────────────
+// Called by ENGINE per kill. e = enemy obj {reward, type, grp.position, scale}.
+// RULE: add e.reward to meta.coins. RULE: drop roll per the rates below.
+// RULE: drops are 3D PlaneGeometry facing camera; store in drops[] array.
+// RULE: define clearDrops()=>{drops.forEach(d=>scene.remove(d.mesh));drops.length=0;} (ENGINE calls it)
+function onEnemyKilled(e) {
+  // [FILL: ON_ENEMY_KILLED]
+  // meta.coins+=e.reward; saveMeta();
+  // const r=Math.random();
+  // if(r<0.15){ spawnDrop('heal', e.grp.position); }           // 15% heal +20hp
+  // else if(r<0.325){ spawnDrop('ammo', e.grp.position); }     // 17.5% ammo +10 reserve
+  // else if(r<0.375){ meta.coins+=15; saveMeta(); addKillFeed('🪙 +15'); } // 5% coins
 }
 
 // ── [FILL: ENEMY_AI] ─────────────────────────────────────────────────
 // Called inside updatePlaying(dt). Move enemies toward player, rotate, shoot.
+// RULE: separate X/Z movement so enemies slide along obstacles (circleBlocked per axis).
+// RULE: bullet origin at e.grp.position + y=1.3*e.scale to match player camera height.
+// RULE: billboard HP bars — bar.lookAt(camera.position) every frame.
+// RULE: boss summon every 20s — spawn 3 grunts around boss, increment waveEnemiesLeft.
+// RULE: update #boss-fill width from boss.hp/boss.maxHp each frame.
+// RULE: if arena has platforms, use getFloorY(x,z,currentY) instead of fixed y=0.9*scale.
 function updateEnemies(dt) {
   // [FILL: ENEMY_AI]
   // enemies.forEach(e=>{
   //   if(e.dead) return;
-  //   const toP=new THREE.Vector3().subVectors(player.pos,e.grp.position); toP.y=0;
-  //   toP.normalize(); e.grp.position.addScaledVector(toP,e.speed*dt);
-  //   e.grp.lookAt(player.pos); e.grp.position.y=...;
-  //   e.shootTimer-=dt; if(e.shootTimer<=0){ e.shootTimer=e.shootInterval; /* fire */ }
+  //   const toP=new THREE.Vector3().subVectors(player.pos,e.grp.position); toP.y=0; toP.normalize();
+  //   const nx=e.grp.position.x+toP.x*e.speed*dt, nz=e.grp.position.z+toP.z*e.speed*dt;
+  //   if(!circleBlocked(nx,e.grp.position.z,0.5)) e.grp.position.x=nx;
+  //   if(!circleBlocked(e.grp.position.x,nz,0.5)) e.grp.position.z=nz;
+  //   e.grp.position.y=0.9*e.scale;
+  //   e.grp.lookAt(player.pos);
+  //   e.shootTimer-=dt; if(e.shootTimer<=0){ e.shootTimer=e.shootInterval;
+  //     const dir=new THREE.Vector3().subVectors(camera.position,e.grp.position).normalize();
+  //     const origin=e.grp.position.clone(); origin.y+=1.3*e.scale;
+  //     spawnBullet(false,origin,dir,ENEMY_TYPES[e.type].dmg||13);
+  //   }
+  //   e.grp.children.filter(c=>c.userData.isHpBar).forEach(bar=>{ bar.lookAt(camera.position); bar.scale.x=e.hp/e.maxHp; });
+  //   if(e.type==='boss'){
+  //     e.summonTimer-=dt; if(e.summonTimer<=0){ e.summonTimer=20; for(let i=0;i<3;i++){ const ang=(i/3)*Math.PI*2; spawnEnemy('grunt',{x:e.grp.position.x+Math.cos(ang)*3,z:e.grp.position.z+Math.sin(ang)*3}); waveEnemiesLeft++; } }
+  //     document.getElementById('boss-fill').style.width=(e.hp/e.maxHp*100)+'%';
+  //   }
   // });
 }
 
@@ -466,6 +601,13 @@ function updatePlaying(dt) {
   // [FILL: UPDATE_PLAYING]
   updateEnemies(dt);
 }
+
+// ── Feedback helpers ──────────────────────────────────────────────────
+function flashHeal(){ const el=document.getElementById('heal-flash'); el.style.background='rgba(0,255,100,.28)'; setTimeout(()=>el.style.background='rgba(0,255,100,0)',200); }
+let _annTimer=null;
+function showWaveAnnounce(text){ const el=document.getElementById('wave-announce'); el.textContent=text; el.style.opacity='1'; clearTimeout(_annTimer); _annTimer=setTimeout(()=>el.style.opacity='0',2500); }
+let _hsTimer=null;
+function showHeadshot(){ const el=document.getElementById('headshot-msg'); el.style.opacity='1'; clearTimeout(_hsTimer); _hsTimer=setTimeout(()=>el.style.opacity='0',600); }
 
 // ── BOOT ──────────────────────────────────────────────────────────────
 buildArena();

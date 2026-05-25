@@ -273,7 +273,7 @@ Generation time: 7m 42s — 2 patch iterations.
 ### Installation
 
 ```bash
-git clone https://github.com/your-username/arcade-project-v2.git
+git clone https://github.com/Thegabmal/arcade-project-v2.git
 cd arcade-project-v2
 
 pip install -r requirements.txt

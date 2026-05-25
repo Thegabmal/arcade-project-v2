@@ -12,7 +12,7 @@ This pipeline turns a natural language prompt into a complete, standalone HTML5 
 
 ```bash
 python coordinateur.py "a bullet-hell space shooter with shield mechanics and a final boss"
-# → jeux_sauvegardes/galactic_fury_20260425.html  (score: 8.4/10, approved)
+# → generated_games/galactic_fury.html  (score: 8.4/10, approved)
 ```
 
 ---
@@ -93,7 +93,7 @@ User Prompt
 └─────────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
-              jeux_sauvegardes/<game-title>.html   ✓ playable
+              jeux_sauvegardes/<game-title>.html   ✓ playable  (local only, gitignored)
 ```
 
 ---
@@ -326,7 +326,7 @@ python app.py
 python coordinateur.py "a top-down dungeon crawler with traps and keys"
 ```
 
-The generated `.html` file is saved to `jeux_sauvegardes/` and immediately playable in any browser.
+The generated `.html` file is saved to `jeux_sauvegardes/` (local only, gitignored) and immediately playable in any browser. See [`generated_games/`](generated_games/) for real pipeline output examples.
 
 ---
 

@@ -1,0 +1,1678 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8"><title>Gem Cascade: Sparkle Saga</title><style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;}
+canvas{display:block;}
+</style></head><body>
+<canvas id="gameCanvas"></canvas>
+<script>let coins = 0;
+let center = null;
+
+// ══════════════════════════════════════════════════════════════════
+// ENGINE — DO NOT MODIFY
+// Dev console bridge — AI patches execute in game scope via eval
+/* debug removed */
+// ══════════════════════════════════════════════════════════════════
+let canvas = document.getElementById('gameCanvas');
+let ctx = canvas.getContext('2d');
+let DPR = Math.min(window.devicePixelRatio || 1, 2);
+let W = 480, H = 640;
+function resizeCanvas() {
+  let vw=window.innerWidth,vh=window.innerHeight;
+  let scale=Math.min(vw/W,vh/H);
+  canvas.style.width=Math.round(W*scale)+'px'; canvas.style.height=Math.round(H*scale)+'px';
+  canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR); ctx.scale(DPR,DPR);
+}
+resizeCanvas(); window.addEventListener('resize',()=>{resizeCanvas();ctx.scale(DPR,DPR);});
+
+// States: menu | playing | swapping | resolving | falling | victory | gameover
+let gameState = 'menu';
+function setState(s) { gameState = s; }
+
+const Keys={down:{},pressed:{}};
+window.addEventListener('keydown',e=>{if(!Keys.down[e.code])Keys.pressed[e.code]=true;Keys.down[e.code]=true;});
+window.addEventListener('keyup',e=>{Keys.down[e.code]=false;});
+
+// Mouse and touch unified input
+const Pointer={x:0,y:0,down:false,justDown:false,justUp:false,startX:0,startY:0,dragX:0,dragY:0};
+function pointerDown(cx,cy){Pointer.x=cx;Pointer.y=cy;Pointer.startX=cx;Pointer.startY=cy;Pointer.dragX=0;Pointer.dragY=0;Pointer.down=true;Pointer.justDown=true;}
+function pointerMove(cx,cy){Pointer.x=cx;Pointer.y=cy;Pointer.dragX=cx-Pointer.startX;Pointer.dragY=cy-Pointer.startY;}
+function pointerUp(){Pointer.down=false;Pointer.justUp=true;}
+canvas.addEventListener('mousedown',e=>{const r=canvas.getBoundingClientRect();pointerDown((e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height));});
+canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect();pointerMove((e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height));});
+canvas.addEventListener('mouseup',()=>pointerUp());
+canvas.addEventListener('touchstart',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();pointerDown((e.touches[0].clientX-r.left)*(W/r.width),(e.touches[0].clientY-r.top)*(H/r.height));},{passive:false});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();pointerMove((e.touches[0].clientX-r.left)*(W/r.width),(e.touches[0].clientY-r.top)*(H/r.height));},{passive:false});
+canvas.addEventListener('touchend',e=>{e.preventDefault();pointerUp();},{passive:false});
+
+function flushInput(){Keys.pressed={};Pointer.justDown=false;Pointer.justUp=false;}
+
+// Particles
+const Particles=[];
+function spawnParticles(x,y,count,opts){
+  opts=opts||{};
+  for(let i=0;i<count;i++){
+    let a=opts.angle!==undefined?opts.angle+(Math.random()-0.5)*(opts.spread||Math.PI*2):Math.random()*Math.PI*2;
+    let sp=opts.speed||(50+Math.random()*80);
+    Particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:opts.life||(0.4+Math.random()*0.4),maxLife:opts.life||(0.4+Math.random()*0.4),size:opts.size||(3+Math.random()*4),color:opts.color||'#fff',gravity:opts.gravity!==undefined?opts.gravity:100});
+  }
+}
+function updateParticles(dt){for(let i=Particles.length-1;i>=0;i--){const p=Particles[i];p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=p.gravity*dt;if(p.life<=0)Particles.splice(i,1);}}
+function drawParticles(){Particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life/p.maxLife);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size*0.5,0,Math.PI*2);ctx.fill();});ctx.globalAlpha=1;}
+
+// Popups
+const Popups=[];
+function spawnPopup(x,y,text,color,size){Popups.push({x,y,text,color:color||'#fff',size:size||14,vy:-50,life:1.2});}
+function updatePopups(dt){for(let i=Popups.length-1;i>=0;i--){Popups[i].y+=Popups[i].vy*dt;Popups[i].life-=dt;if(Popups[i].life<=0)Popups.splice(i,1);}}
+function drawPopups(){Popups.forEach(p=>{ctx.globalAlpha=Math.min(p.life,1);ctx.fillStyle=p.color;ctx.font=`bold ${p.size}px monospace`;ctx.textAlign='center';ctx.fillText(p.text,p.x,p.y);});ctx.globalAlpha=1;ctx.textAlign='left';}
+
+const sfx={_ctx:null,init(){try{if(!this._ctx)this._ctx=new(window.AudioContext||window.webkitAudioContext)();if(this._ctx.state==='suspended')this._ctx.resume();}catch(e){}},
+play(f,d,t,v){try{this.init();if(!this._ctx)return;const o=this._ctx.createOscillator(),g=this._ctx.createGain();o.type=t||'sine';o.frequency.value=f||440;g.gain.setValueAtTime(v||0.12,this._ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,this._ctx.currentTime+(d||0.1));o.connect(g);g.connect(this._ctx.destination);o.start();o.stop(this._ctx.currentTime+(d||0.1));}catch(e){}}};
+
+function lerp(a,b,t){return a+(b-a)*t;}
+function clamp(v,mn,mx){return v<mn?mn:v>mx?mx:v;}
+function randInt(a,b){return a+Math.floor(Math.random()*(b-a+1));}
+function randFloat(a,b){return a+Math.random()*(b-a);}
+function randChoice(arr){return arr[Math.floor(Math.random()*arr.length)];}
+function drawText(t,x,y,c,s,a){ctx.fillStyle=c||'#fff';ctx.font=`bold ${s||14}px monospace`;ctx.textAlign=a||'left';ctx.fillText(t,x,y);}
+let _hiScore=parseInt(localStorage.getItem('hs_match3')||'0');
+function saveHiScore(s){if(s>_hiScore){_hiScore=s;localStorage.setItem('hs_match3',s);}}
+
+let FIXED_DT=1/60,MAX_DT=0.1;let lastTime=0,accumulator=0;
+function loop(ts){const rd=Math.min((ts-lastTime)/1000,MAX_DT);lastTime=ts;accumulator+=rd;while(accumulator>=FIXED_DT){update(FIXED_DT);accumulator-=FIXED_DT;}renderFrame();requestAnimationFrame(loop);}
+function update(dt){if(hitstopFrames>0)hitstopFrames--;updateParticles(dt);updatePopups(dt);switch(gameState){case'menu':if(Pointer.justDown){sfx.play(440,0.08,'sine',0.1);startGame();setState('playing');}break;case'playing':updatePlaying(dt);break;case'swapping':updateSwapping(dt);break;case'resolving':updateResolving(dt);break;case'falling':updateFalling(dt);break;case'victory':if(Pointer.justDown){nextLevel();}break;case'gameover':updateGameover(dt);break;case'shop':updateShop(dt);break;}flushInput();}
+function renderFrame(){switch(gameState){case'menu':renderMenu();break;case'playing':case'swapping':case'resolving':case'falling':renderPlaying();break;case'victory':renderPlaying();renderVictoryOverlay();break;case'gameover':renderPlaying();renderGameoverOverlay();break;case'shop':renderShop();break;}drawParticles();drawPopups();}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME CONSTANTS
+// SCOPE CONTRACT: Everything in this section is MODULE-LEVEL (global).
+//   • const  → values that never change     (PALETTE, GEM_COLORS, GRID_SIZE, ...)
+//   • let    → state that changes at runtime (score, moves, level, ...)
+//   • NEVER  → redeclare canvas/ctx/W/H/DPR/gameState/setState/Keys/Touch/Mouse (ENGINE owns these)
+//   • Where to put mutable game state: declare with `let` HERE, reset in startGame().
+// ══════════════════════════════════════════════════════════════════
+let GAME_TITLE = 'Gem Cascade: Sparkle Saga';
+
+let GEM_COLORS  = ['#E74C3C','#3498DB','#2ECC71','#F1C40F','#9B59B6','#ECF0F1'];
+let GEM_LABELS  = ['♦','●','★','♣','▲','◆'];
+
+let PALETTE = {
+  bg:     '#0d0d1f',
+  board:  '#1a1a3a',
+  select: '#ffffff',
+  ui:     '#ffffff',
+  accent: '#ffdd00',
+  combo:  ['#fff','#ff0','#f80','#f00','#f0f','#0ff'],
+  shopBg:   '#0a1a0a',
+  shopCard: '#1a2a1a',
+  shopSel:  '#2a4a2a'
+};
+
+let ROWS = 9, COLS = 9;
+let GEM_TYPES = GEM_COLORS.length;
+
+let CELL = Math.floor((W - 20) / COLS);
+let scale = 1;
+let GRID_X = Math.floor((W - COLS * CELL) / 2);
+let GRID_Y = 120;
+let GRID_W = COLS * CELL;
+let GRID_H = ROWS * CELL;
+
+let GAME_SCORE = 0;
+let level = 1;
+let movesLeft = 25;
+let cascadeDepth = 0;
+
+let objective = { type:'score', target:500, current:0 };
+let currentLevelObjective = objective;
+
+let BASE_GEM_SCORE = 10;
+let COMBO_MULTIPLIERS = {
+  4: 2,
+  5: 3,
+  6: 5
+};
+let CASCADE_BONUS_PER_GEM = 5;
+let BOOSTER_CREATION_SCORE_BONUS = 25;
+
+let BOOSTER_TYPES = [
+  { id: 'sparkle_row', label: 'Sparkle Row', color: '#F39C12', icon: '⚡️' },
+  { id: 'sparkle_col', label: 'Sparkle Column', color: '#1ABC9C', icon: '⚡️' },
+  { id: 'radiant_bomb', label: 'Radiant Bomb', color: '#E67E22', icon: '💥' },
+  { id: 'prism_blast', label: 'Prism Blast', color: '#8E44AD', icon: '🌈' },
+  { id: 'cosmic_shuffle', label: 'Cosmic Shuffle', color: '#34495E', icon: '🔄' }
+];
+
+let selectedBooster = null; // For `prism_blast` activation
+
+// Environmental objects
+let ENV_TYPE = {
+  LOCKED_CRYSTAL: 'locked_crystal',
+  TWIN_PORTAL: 'twin_portal',
+  SEALED_CHEST: 'sealed_chest',
+  TIMED_PLATE: 'timed_plate',
+  ICE_BLOCK: 'ice_block',
+  HONEY_BLOCK: 'honey_block',
+  CHAINED_GEM: 'chained_gem',
+  ARTIFACT: 'artifact'
+};
+
+let envObjects = []; // Array of {type, r, c, state, ...}
+let sparkleKeysCollected = 0;
+let runeKeysCollected = { green:0, blue:0, red:0 };
+let currentTimedPlates = []; // {r,c,movesLeft}
+
+// ══════════════════════════════════════════════════════════════════
+// GRID — DO NOT MODIFY the grid management logic
+// ══════════════════════════════════════════════════════════════════
+// grid[r][c] = { type: 0-5, special: null|'hline'|'vline'|'bomb'|'rainbow', drawY: (animated) }
+let grid = [];
+
+function cellToPixel(r,c) {
+  return { x: GRID_X + c*CELL + CELL/2, y: GRID_Y + r*CELL + CELL/2 };
+}
+function pixelToCell(px,py) {
+  let c = Math.floor((px - GRID_X) / CELL);
+  let r = Math.floor((py - GRID_Y) / CELL);
+  return { r, c };
+}
+function inGrid(r,c) { return r>=0&&r<ROWS&&c>=0&&c<COLS; }
+
+function fillGrid() {
+  grid = [];
+  for (let r=0;r<ROWS;r++) {
+    grid[r]=[];
+    for (let c=0;c<COLS;c++) {
+      grid[r][c] = makeGem(Math.floor(Math.random()*GEM_TYPES));
+    }
+  }
+  // Avoid starting matches
+  for (let pass=0;pass<3;pass++) {
+    for (let r=0;r<ROWS;r++) {
+      for (let c=0;c<COLS;c++) {
+        while (causesMatch(r,c)) {
+          grid[r][c].type = Math.floor(Math.random()*GEM_TYPES);
+        }
+      }
+    }
+  }
+}
+
+function makeGem(type, special, obstacle) {
+  return { type: type>=0?type:Math.floor(Math.random()*GEM_TYPES), special:special||null, obstacle:obstacle||null, drawY:0, animY:0, scale:1.0, chained: false, honeyHits:0, iceHits:0 };
+}
+
+function causesMatch(r,c) {
+  let t=grid[r][c].type;
+  if (t < 0) return false;
+  if (c>=2 && grid[r][c-1].type===t && grid[r][c-2].type===t) return true;
+  if (r>=2 && grid[r-1][c].type===t && grid[r-2][c].type===t) return true;
+  return false;
+}
+
+// ── Selection & swap state ────────────────────────────────────────
+let selR=-1,selC=-1;
+let swapState=null;
+let resolveQueue=[];
+let fallState=null;
+let resolveTimer=0;
+let hitstopFrames = 0;
+let floatingTexts = [];
+
+// ══════════════════════════════════════════════════════════════════
+// MATCH DETECTION — DO NOT MODIFY
+// Returns array of {r,c} cells that are part of a match (3+).
+// ══════════════════════════════════════════════════════════════════
+function findAllMatches() {
+  let matched = new Set();
+  let key = (r,c) => r*COLS+c;
+
+  // Horizontal
+  for (let r=0;r<ROWS;r++) {
+    let c=0;
+    while (c<COLS) {
+      let end=c+1;
+      while (end<COLS && grid[r][end].type===grid[r][c].type && grid[r][c].type>=0 && !grid[r][c].chained) end++;
+      if (end-c>=3) { for(let k=c;k<end;k++) matched.add(key(r,k)); }
+      c=end;
+    }
+  }
+  // Vertical
+  for (let c=0;c<COLS;c++) {
+    let r=0;
+    while (r<ROWS) {
+      let end=r+1;
+      while (end<ROWS && grid[end][c].type===grid[r][c].type && grid[r][c].type>=0 && !grid[r][c].chained) end++;
+      if (end-r>=3) { for(let k=r;k<end;k++) matched.add(key(k,c)); }
+      r=end;
+    }
+  }
+  return [...matched].map(k=>({r:Math.floor(k/COLS),c:k%COLS}));
+}
+
+function getSpecialForMatch(matchedCells, lastSwappedR, lastSwappedC) {
+  // Check for T/L shapes first
+  let rows = new Set(matchedCells.map(c => c.r));
+  let cols = new Set(matchedCells.map(c => c.c));
+
+  if (rows.size >= 2 && cols.size >= 2 && matchedCells.length >= 5) {
+    return 'radiant_bomb'; // T/L shape
+  }
+
+  if (matchedCells.length >= 6) { // 6+ gems in a line
+    return 'prism_blast_and_bomb'; // special combo
+  }
+  if (matchedCells.length >= 5) { // 5 in a line
+    return 'prism_blast';
+  }
+  if (matchedCells.length === 4) { // 4 in a line
+    // Prioritize based on swipe direction if available
+    if (lastSwappedR !== undefined && lastSwappedC !== undefined) {
+      let isHorizontal = matchedCells.every(c => c.r === lastSwappedR);
+      return isHorizontal ? 'sparkle_row' : 'sparkle_col';
+    }
+    // Fallback if no swipe info or not relevant
+    let isHorizontalMatch = matchedCells.every(cell => cell.r === matchedCells[0].r);
+    return isHorizontalMatch ? 'sparkle_row' : 'sparkle_col';
+  }
+  return null;
+}
+
+// ── Meta-progression runtime ──────────────────────────────────────────────────
+let _runCoins      = 0;
+let _gameoverTimer = 0;
+let _shopIdx       = 0;
+let _scoreMultiplier = 1.0;
+let _extraMoves    = 0;
+
+let UPGRADES = [
+  {id:'moves',   name:'Extra Moves',   desc:'+5 moves per run',        maxLevel:3, costs:[25,55,110],  icon:'🔀'},
+  {id:'cascade', name:'Cascade Boost', desc:'Cascade score ×1.5',      maxLevel:2, costs:[50,120],     icon:'💫'},
+  {id:'special', name:'Special Gems',  desc:'More special gem spawns', maxLevel:2, costs:[40,90],      icon:'💎'},
+  {id:'time',    name:'Time Bonus',    desc:'+30 seconds per level',   maxLevel:2, costs:[35,80],      icon:'⏱️'}
+];
+
+let _META_KEY = 'meta_match3';
+let _meta = { coins:0, upgrades:{} };
+const _SHOP_CW=100,_SHOP_CH=110,_SHOP_GAP=8,_SHOP_COLS=4;
+const _SHOP_TW=_SHOP_COLS*_SHOP_CW+(_SHOP_COLS-1)*_SHOP_GAP;
+const _SHOP_SX=Math.round((W-_SHOP_TW)/2),_SHOP_SY=Math.round(H*0.22);
+const _SHOP_BW=160,_SHOP_BH=42,_SHOP_BX=Math.round((W-160)/2),_SHOP_BY=_SHOP_SY+_SHOP_CH+32;
+function loadMeta(){try{_meta=JSON.parse(localStorage.getItem(_META_KEY))||{coins:0,upgrades:{}};}catch(e){_meta={coins:0,upgrades:{}};} if(!_meta.upgrades)_meta.upgrades={};}
+function saveMeta(){try{localStorage.setItem(_META_KEY,JSON.stringify(_meta));}catch(e){}}
+function addRunCoins(n){_meta.coins+=Math.floor(n);saveMeta();}
+function getUpgradeLevel(id){return _meta.upgrades[id]||0;}
+function buyUpgrade(id){const up=UPGRADES.find(u=>u.id===id);if(!up)return false;let lvl=getUpgradeLevel(id);if(lvl>=up.maxLevel)return false;const cost=up.costs[lvl];if(_meta.coins<cost)return false;_meta.coins-=cost;_meta.upgrades[id]=lvl+1;saveMeta();return true;}
+
+function updateGameover(dt){_gameoverTimer-=dt;if(_gameoverTimer<=0||Pointer.justDown){addRunCoins(_runCoins);_shopIdx=0;setState('shop');}}
+function _shopHit(mx,my,x,y,w,h){return mx>=x&&mx<=x+w&&my>=y&&my<=y+h;}
+function updateShop(dt){
+  if(!Pointer.justDown)return;
+  for(let i=0;i<UPGRADES.length;i++){
+    if(_shopHit(Pointer.x,Pointer.y,_SHOP_SX+i*(_SHOP_CW+_SHOP_GAP),_SHOP_SY,_SHOP_CW,_SHOP_CH)){_shopIdx=i;if(buyUpgrade(UPGRADES[i].id)){sfx.play(660,0.12,'sine',0.1);applyUpgrades();}else sfx.play(110,0.06,'sawtooth',0.08);return;}
+  }
+  if(_shopHit(Pointer.x,Pointer.y,_SHOP_BX,_SHOP_BY,_SHOP_BW,_SHOP_BH)){sfx.play(440,0.08,'square',0.1);startGame();setState('playing');}
+}
+function renderShop(){
+  ctx.fillStyle=PALETTE.shopBg;ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle=PALETTE.accent||'#ffdd00';ctx.font='bold 24px system-ui,sans-serif';ctx.fillText('UPGRADE SHOP',W/2,Math.round(H*0.10));
+  ctx.fillStyle='#ffdd00';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,Math.round(H*0.18));
+  for(let i=0;i<UPGRADES.length;i++){
+    let up=UPGRADES[i],lvl=getUpgradeLevel(up.id),cx=_SHOP_SX+i*(_SHOP_CW+_SHOP_GAP),maxed=lvl>=up.maxLevel,canBuy=!maxed&&_meta.coins>=up.costs[lvl];
+    ctx.fillStyle=i===_shopIdx?PALETTE.shopSel:PALETTE.shopCard;ctx.strokeStyle=maxed?'#4caf50':canBuy?'#ffdd00':'#444';ctx.lineWidth=i===_shopIdx?2:1;
+    ctx.beginPath();ctx.roundRect(cx,_SHOP_SY,_SHOP_CW,_SHOP_CH,8);ctx.fill();ctx.stroke();
+    ctx.font='18px system-ui,sans-serif';ctx.fillStyle='#fff';ctx.fillText(up.icon,cx+_SHOP_CW/2,_SHOP_SY+24);
+    ctx.font='bold 10px system-ui,sans-serif';ctx.fillText(up.name,cx+_SHOP_CW/2,_SHOP_SY+42);
+    ctx.fillStyle='#aaa';ctx.font='9px system-ui,sans-serif';ctx.fillText(up.desc,cx+_SHOP_CW/2,_SHOP_SY+55);
+    for(let p=0;p<up.maxLevel;p++){ctx.fillStyle=p<lvl?'#ffdd00':'#333';ctx.beginPath();ctx.arc(cx+_SHOP_CW/2-(up.maxLevel-1)*7+p*14,_SHOP_SY+72,5,0,Math.PI*2);ctx.fill();}
+    ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle=maxed?'#4caf50':canBuy?'#ffdd00':'#555';ctx.fillText(maxed?'MAXED':`${up.costs[lvl]}c`,cx+_SHOP_CW/2,_SHOP_SY+92);
+  }
+  ctx.fillStyle='#1a4a1a';ctx.strokeStyle='#4caf50';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(_SHOP_BX,_SHOP_BY,_SHOP_BW,_SHOP_BH,8);ctx.fill();ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='bold 16px system-ui,sans-serif';ctx.fillText('▶  PLAY',W/2,_SHOP_BY+26);
+  ctx.textAlign='left';
+}
+
+function applyUpgrades(){
+  _extraMoves=[0,5,10,15][getUpgradeLevel('moves')];
+  _scoreMultiplier=getUpgradeLevel('cascade')>=1?1.5:1.0;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME INIT
+// ══════════════════════════════════════════════════════════════════
+function getObjective(level) {
+  return { type: 'collect', target: 10, current: 0 };
+}
+
+function initLevel() {
+  loadMeta();
+  movesLeft = getMovesForLevel(level) + _extraMoves;
+  objective = getObjective(level);
+  objective.current = 0;
+  currentLevelObjective = objective;
+  envObjects = [];
+  sparkleKeysCollected = 0;
+  runeKeysCollected = { green:0, blue:0, red:0 };
+  currentTimedPlates = [];
+
+  fillGrid();
+  addLevelObstacles(level);
+
+  selR=-1; selC=-1; resolveQueue=[]; fallState=null; cascadeDepth=0;
+}
+
+function getMovesForLevel(n) {
+  if (n <= 2) return 25;
+  if (n <= 4) return 22;
+  if (n <= 6) return 20;
+  if (n <= 8) return 18;
+  return 15;
+}
+
+function getObjective(n) {
+  if (n === 1 || n === 2) return {type:'score', target:500 + (n-1)*200, current:0};
+  if (n === 3 || n === 4) return {type:'collect_gems', gemType: (n%2 === 0 ? 1 : 0), target:15 + (n-3)*5, current:0}; // Ruby/Sapphire
+  if (n === 5 || n === 6) return {type:'score_and_collect', scoreTarget: 2000 + (n-5)*500, gemType: (n%2 === 0 ? 3 : 2), collectTarget: 20 + (n-5)*5, currentScore:0, currentCollect:0}; // Emerald/Topaz
+  if (n === 7 || n === 8) return {type:'collect_artifacts', target: 2 + (n-7), current:0};
+  if (n === 9 || n === 10) return {type:'complex', scoreTarget: 3000 + (n-9)*1000, collectGemType: 4, collectGemTarget: 25 + (n-9)*5, collectArtifactTarget: 3 + (n-9), currentScore:0, currentCollectGem:0, currentCollectArtifact:0};
+  return {type:'score', target: 5000 + (n-10)*1000, current:0}; // Default for higher levels
+}
+
+function addLevelObstacles(n) {
+  // Clear existing obstacles and special gems
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      grid[r][c].obstacle = null;
+      grid[r][c].chained = false;
+      grid[r][c].honeyHits = 0;
+      grid[r][c].iceHits = 0;
+    }
+  }
+  envObjects = [];
+
+  if (n >= 3) { // Ice blocks
+    for (let i = 0; i < 5 + (n-3)*2; i++) {
+      let r = randInt(0, ROWS - 1);
+      let c = randInt(0, COLS - 1);
+      grid[r][c].obstacle = ENV_TYPE.ICE_BLOCK;
+      grid[r][c].iceHits = 1;
+    }
+  }
+  if (n >= 5) { // Honey blocks
+    for (let i = 0; i < 3 + (n-5)*2; i++) {
+      let r = randInt(0, ROWS - 1); let c = randInt(0, COLS - 1);
+      grid[r][c].obstacle = ENV_TYPE.HONEY_BLOCK;
+      grid[r][c].honeyHits = 2;
+    }
+  }
+  if (n >= 7) { // Chained gems & Artifacts
+    for (let i = 0; i < 4 + (n-7); i++) {
+      let r = randInt(0, ROWS - 1); let c = randInt(0, COLS - 1);
+      grid[r][c].chained = true;
+    }
+    for (let i = 0; i < (objective.type === 'collect_artifacts' ? objective.target : 1); i++) {
+      let c = randInt(0, COLS - 1);
+      grid[0][c].obstacle = ENV_TYPE.ARTIFACT;
+    }
+  }
+  if (n >= 9) { // Locked Crystals, Portals, Chests, Timed Plates
+    // Locked Crystal (1 per level)
+    let lcR = randInt(2, ROWS - 3);
+    let lcC = randInt(2, COLS - 3);
+    envObjects.push({ type: ENV_TYPE.LOCKED_CRYSTAL, r: lcR, c: lcC, keysRequired: 3, keysCollected: 0, unlocked: false, active: false });
+    // Twin Portals (1 pair per level)
+    let p1R = randInt(0, ROWS - 1); const p1C = randInt(0, COLS - 1);
+    let p2R, p2C;
+    do { p2R = randInt(0, ROWS - 1); p2C = randInt(0, COLS - 1); }
+    while (Math.abs(p1R - p2R) < 3 && Math.abs(p1C - p2C) < 3); // Ensure distance
+    envObjects.push({ type: ENV_TYPE.TWIN_PORTAL, r: p1R, c: p1C, pairR: p2R, pairC: p2C });
+    envObjects.push({ type: ENV_TYPE.TWIN_PORTAL, r: p2R, c: p2C, pairR: p1R, pairC: p1C });
+    // Sealed Chest (1-2 per level)
+    let chestR = randInt(0, ROWS - 1); const chestC = randInt(0, COLS - 1);
+    envObjects.push({ type: ENV_TYPE.SEALED_CHEST, r: chestR, c: chestC, keyType: randChoice(['green', 'blue', 'red']), opened: false });
+    // Timed Pressure Plate (1 per level)
+    let plateR = randInt(0, ROWS - 1); const plateC = randInt(0, COLS - 1);
+    envObjects.push({ type: ENV_TYPE.TIMED_PLATE, r: plateR, c: plateC, effect: randChoice(['bridge', 'gate', 'score_zone']), active: false, movesLeft: 0 });
+  }
+}
+
+function startGame() {
+  loadMeta(); _runCoins=0; _gameoverTimer=1.5;
+  GAME_SCORE=0; level=1;
+  Popups.length=0; Particles.length=0;
+  floatingTexts.length = 0;
+  initLevel();
+  applyUpgrades();
+}
+
+function nextLevel() { level++; initLevel(); setState('playing'); }
+
+// ══════════════════════════════════════════════════════════════════
+// UPDATE STATES
+// ══════════════════════════════════════════════════════════════════
+function updatePlaying(dt) {
+
+  if (hitstopFrames > 0) return;
+
+  // Handle pointer input for gem selection and swap
+  if (Pointer.justDown) {
+    const {r,c} = pixelToCell(Pointer.x, Pointer.y);
+    if (!inGrid(r,c)) { selR=-1;selC=-1; return; }
+
+    let clickedGem = grid[r][c];
+
+    // Handle booster activation
+    if (clickedGem.special && clickedGem.special.startsWith('sparkle_')) {
+      activateBooster(r,c);
+      return;
+    }
+
+    if (selR===-1) {
+      if (clickedGem.obstacle === ENV_TYPE.ICE_BLOCK || clickedGem.obstacle === ENV_TYPE.HONEY_BLOCK || clickedGem.chained) {
+        sfx.play(110,0.06,'sawtooth',0.08); // Cannot select obstructed gem
+        return;
+      }
+      selR=r; selC=c;
+      grid[r][c].scale=1.15;
+      sfx.play(660,0.05,'sine',0.07);
+    } else {
+      // Try swap if adjacent
+      let dr=Math.abs(r-selR),dc=Math.abs(c-selC);
+      if ((dr===1&&dc===0)||(dr===0&&dc===1)) {
+        attemptSwap(selR,selC,r,c);
+      } else {
+        grid[selR][selC].scale=1.0;
+        selR=r; selC=c; grid[r][c].scale=1.15;
+        sfx.play(550,0.05,'sine',0.07);
+      }
+    }
+  }
+  // Drag direction detection
+  if (selR>=0 && Pointer.down && !Pointer.justDown) {
+    let adx=Math.abs(Pointer.dragX), ady=Math.abs(Pointer.dragY);
+    if (adx>CELL*0.45||ady>CELL*0.45) {
+      let dr=adx>=ady ? 0 : (Pointer.dragY>0?1:-1);
+      let dc=adx>=ady ? (Pointer.dragX>0?1:-1) : 0;
+      let nr=selR+dr, nc=selC+dc;
+      if (inGrid(nr,nc)) attemptSwap(selR,selC,nr,nc);
+    }
+  }
+  updateTimedPlates(dt);
+}
+
+function updateTimedPlates(dt) {
+  for (let i = currentTimedPlates.length - 1; i >= 0; i--) {
+    let plate = currentTimedPlates[i];
+    // This isn't tied to dt, but rather to moves.
+    // For visual update, we can decrement a visual timer here.
+    // For now, it's handled on move completion.
+  }
+}
+
+function attemptSwap(r1,c1,r2,c2) {
+  if (selR>=0) { grid[selR][selC].scale=1.0; selR=-1;selC=-1; }
+  if (movesLeft<=0) return;
+
+  let gem1 = grid[r1][c1];
+  let gem2 = grid[r2][c2];
+
+  if (gem1.chained || gem2.chained) {
+    sfx.play(110,0.06,'sawtooth',0.08);
+    return;
+  }
+  if (gem1.obstacle === ENV_TYPE.ICE_BLOCK || gem1.obstacle === ENV_TYPE.HONEY_BLOCK ||
+      gem2.obstacle === ENV_TYPE.ICE_BLOCK || gem2.obstacle === ENV_TYPE.HONEY_BLOCK) {
+    sfx.play(110,0.06,'sawtooth',0.08);
+    return;
+  }
+
+  // Simulate swap and check for matches
+  let tmp={...grid[r1][c1]};
+  grid[r1][c1]={...grid[r2][c2]}; grid[r2][c2]=tmp;
+  let matches=findAllMatches();
+  // Undo immediately — animation handles the visual swap
+  grid[r2][c2]={...grid[r1][c1]}; grid[r1][c1]=tmp;
+
+  let valid=matches.length>0;
+  let isUndo = !valid;
+  swapState={r1,c1,r2,c2,t:0,maxT:0.15,isUndo};
+  if (valid) {
+    movesLeft--;
+    sfx.play(440,0.06,'sine',0.08);
+  } else {
+    sfx.play(220,0.08,'sawtooth',0.06);
+  }
+  setState('swapping');
+}
+
+function updateSwapping(dt) {
+  swapState.t+=dt;
+  if (swapState.t>=swapState.maxT) {
+    // Commit real swap
+    const {r1,c1,r2,c2,isUndo}=swapState;
+    if (!isUndo) {
+      let tmp={...grid[r1][c1]};
+      grid[r1][c1]={...grid[r2][c2]}; grid[r2][c2]=tmp;
+      cascadeDepth=0;
+      setState('resolving');
+      startResolve(r1, c1); // Pass last swapped for special gem creation
+    } else {
+      setState('playing');
+    }
+    swapState=null;
+  }
+}
+
+function startResolve(lastSwappedR, lastSwappedC) {
+  let matches = findAllMatches();
+  if (matches.length===0) {
+    if (cascadeDepth > 0) { // End of cascade, check for new moves
+      if (!hasPossibleMoves()) {
+        shuffleBoard();
+        return;
+      }
+    }
+    checkObjective();
+    if(gameState!=='gameover'&&gameState!=='victory') setState('playing');
+    return;
+  }
+  resolveQueue=matches;
+  resolveTimer=0.12;
+  triggerHitstop(cascadeDepth === 0 ? 3 : 2);
+
+  // Create special gems for large matches
+  let specialType = getSpecialForMatch(matches, lastSwappedR, lastSwappedC);
+  if (specialType) {
+    let pivot = {r: lastSwappedR, c: lastSwappedC}; // default to last swapped
+    if (!inGrid(pivot.r, pivot.c) || !matches.some(m => m.r === pivot.r && m.c === pivot.c)) {
+        // If lastSwapped is not part of the match, find a center
+        pivot.r = matches[0].r;
+        pivot.c = matches[0].c;
+    }
+    
+    if (specialType === 'prism_blast_and_bomb') {
+        grid[pivot.r][pivot.c].special = 'prism_blast';
+        let adjCell = findAdjacentEmpty(pivot.r, pivot.c) || {r: pivot.r, c: pivot.c+1}; // Find empty or default
+        if (inGrid(adjCell.r, adjCell.c)) grid[adjCell.r][adjCell.c].special = 'radiant_bomb';
+    } else {
+        grid[pivot.r][pivot.c].special = specialType;
+    }
+    grid[pivot.r][pivot.c].type = grid[pivot.r][pivot.c].type; // keep type for color
+    GAME_SCORE += BOOSTER_CREATION_SCORE_BONUS;
+    const {x,y} = cellToPixel(pivot.r,pivot.c);
+    spawnPopup(x,y,`+${BOOSTER_CREATION_SCORE_BONUS} Bonus!`,PALETTE.accent,16);
+    sfx.play(770,0.1,'triangle',0.1);
+  }
+  setState('resolving');
+}
+
+function findAdjacentEmpty(r,c) {
+    let neighbors = [[r-1,c],[r+1,c],[r,c-1],[r,c+1]];
+    for (const [nr,nc] of neighbors) {
+        if (inGrid(nr,nc) && grid[nr][nc].type < 0) return {r:nr, c:nc};
+    }
+    return null;
+}
+
+function updateResolving(dt) {
+
+  if (hitstopFrames > 0) return;
+  resolveTimer-=dt;
+  if (resolveTimer>0) return;
+
+  // Count gem types before clearing (objectives count cleared gems, not post-clear empties)
+  let clearedByType = {};
+  resolveQueue.forEach(({r,c})=>{let t=grid[r][c].type;if(t>=0)clearedByType[t]=(clearedByType[t]||0)+1;});
+
+  // Clear matched cells + trigger specials
+  let totalPoints = 0;
+  let clearedGemCount = 0;
+  resolveQueue.forEach(({r,c})=>{
+    let gem=grid[r][c];
+    if (gem.type < 0) return; // Already cleared by another special
+
+    let baseScore = BASE_GEM_SCORE;
+    let score = baseScore;
+
+    // Apply combo multiplier for the initial match
+    if (cascadeDepth === 0) {
+      let matchLength = resolveQueue.length; // Approximate, real length is per line/col
+      if (matchLength >= 6) score *= COMBO_MULTIPLIERS[6];
+      else if (matchLength >= 5) score *= COMBO_MULTIPLIERS[5];
+      else if (matchLength >= 4) score *= COMBO_MULTIPLIERS[4];
+    } else {
+      score += CASCADE_BONUS_PER_GEM;
+    }
+
+    totalPoints += score;
+    clearedGemCount++;
+
+    const {x,y}=cellToPixel(r,c);
+    spawnParticles(x,y,8,{color:GEM_COLORS[gem.type]||'#fff',speed:70,life:0.5,gravity:60});
+    triggerSpecial(gem.special,r,c);
+
+    // Handle obstacles
+    if (gem.obstacle === ENV_TYPE.ICE_BLOCK) {
+      gem.iceHits--;
+      if (gem.iceHits <= 0) {
+        gem.obstacle = null;
+        sfx.play(800,0.1,'square',0.1); // Ice shatter
+      } else {
+        // Ice block still remains, cannot clear gem
+        grid[r][c].type = grid[r][c].type; // Keep gem type
+      }
+    } else if (gem.obstacle === ENV_TYPE.HONEY_BLOCK) {
+      gem.honeyHits--;
+      if (gem.honeyHits <= 0) {
+        gem.obstacle = null;
+        sfx.play(600,0.1,'square',0.1); // Honey clear
+      } else {
+        grid[r][c].type = grid[r][c].type; // Keep gem type
+      }
+    } else if (gem.chained) {
+      gem.chained = false;
+      sfx.play(900,0.1,'triangle',0.1); // Chain break
+    } else {
+      grid[r][c]={type:-1,special:null,obstacle:null,drawY:0,animY:0,scale:1.0}; // empty
+    }
+
+    // Handle environmental objects
+    envObjects.forEach(env => {
+      if (env.type === ENV_TYPE.LOCKED_CRYSTAL && env.r === r && env.c === c && env.unlocked) {
+        activateLockedCrystal(env);
+      }
+    });
+
+    // Handle special gem types (Sparkle Keys, Rune Keys, Artifacts)
+    if (gem.type === GEM_TYPES) { // Sparkle Key
+      sparkleKeysCollected++;
+      sfx.play(1200,0.1,'sine',0.1);
+    } else if (gem.special === 'green_rune_key') {
+      runeKeysCollected.green++;
+      sfx.play(1000,0.1,'sine',0.1);
+    } else if (gem.special === 'blue_rune_key') {
+      runeKeysCollected.blue++;
+      sfx.play(1000,0.1,'sine',0.1);
+    } else if (gem.special === 'red_rune_key') {
+      runeKeysCollected.red++;
+      sfx.play(1000,0.1,'sine',0.1);
+    } else if (gem.obstacle === ENV_TYPE.ARTIFACT) {
+      if (currentLevelObjective.type === 'collect_artifacts') {
+        currentLevelObjective.current++;
+      } else if (currentLevelObjective.type === 'complex') {
+        currentLevelObjective.currentCollectArtifact++;
+      }
+      grid[r][c]={type:-1,special:null,obstacle:null,drawY:0,animY:0,scale:1.0}; // artifact clears
+      sfx.play(1500,0.1,'triangle',0.1);
+    }
+  });
+
+  totalPoints = Math.floor(totalPoints * _scoreMultiplier);
+  GAME_SCORE+=totalPoints;
+
+  // Update objectives
+  if (currentLevelObjective.type === 'score') {
+    currentLevelObjective.current = GAME_SCORE;
+  } else if (currentLevelObjective.type === 'collect_gems') {
+    currentLevelObjective.current += clearedByType[currentLevelObjective.gemType] || 0;
+  } else if (currentLevelObjective.type === 'score_and_collect') {
+    currentLevelObjective.currentScore = GAME_SCORE;
+    currentLevelObjective.currentCollect += clearedByType[currentLevelObjective.gemType] || 0;
+  } else if (currentLevelObjective.type === 'complex') {
+    currentLevelObjective.currentScore = GAME_SCORE;
+    currentLevelObjective.currentCollectGem += clearedByType[currentLevelObjective.collectGemType] || 0;
+  }
+
+  spawnPopup(GRID_X+GRID_W/2, GRID_Y + ROWS*CELL/2,
+    cascadeDepth>0?`COMBO ×${cascadeDepth+1}! +${totalPoints}`:'+'+totalPoints,
+    PALETTE.combo[Math.min(cascadeDepth,PALETTE.combo.length-1)], 14);
+  sfx.play(330+cascadeDepth*110, 0.12, 'sine', 0.10);
+  cascadeDepth++;
+
+  startFall();
+}
+
+function triggerSpecial(special,r,c, targetType = -1) {
+  if (!special) return;
+  
+  if (special==='sparkle_row') {
+    triggerShake(0.5, 8);
+    for(let cc=0;cc<COLS;cc++) if(grid[r][cc].type>=0) clearGemAt(r,cc);
+    sfx.play(600,0.1,'square',0.1);
+  } else if (special==='sparkle_col') {
+    triggerShake(0.5, 8);
+    for(let rr=0;rr<ROWS;rr++) if(grid[rr][c].type>=0) clearGemAt(rr,c);
+    sfx.play(600,0.1,'square',0.1);
+  } else if (special==='radiant_bomb') {
+    triggerShake(1.5, 15);
+    for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++) {
+      let nr=r+dr, nc=c+dc;
+      if(inGrid(nr,nc)) clearGemAt(nr,nc);
+    }
+    sfx.play(400,0.2,'sawtooth',0.15);
+  } else if (special==='prism_blast') {
+    triggerShake(2.0, 20);
+    let typeToClear = targetType !== -1 ? targetType : grid[r][c].type;
+    if (typeToClear === -1) return;
+    for(let rr=0;rr<ROWS;rr++) for(let cc=0;cc<COLS;cc++) {
+      if(grid[rr][cc].type===typeToClear) clearGemAt(rr,cc);
+    }
+    sfx.play(800,0.3,'triangle',0.2);
+  }
+}
+
+function activateBooster(r,c, targetGemR, targetGemC) {
+  let booster = grid[r][c];
+  if (!booster || !booster.special) return;
+
+  if (booster.special === 'prism_blast' && targetGemR !== undefined && targetGemC !== undefined) {
+    let targetType = grid[targetGemR][targetGemC].type;
+    triggerSpecial('prism_blast', r, c, targetType);
+    clearGemAt(r,c); // Clear the booster itself
+    movesLeft--;
+    startFall();
+  } else { // All other boosters activate on click/swap
+    triggerSpecial(booster.special, r, c);
+    clearGemAt(r,c); // Clear the booster itself
+    movesLeft--;
+    startFall();
+  }
+}
+
+function clearGemAt(r,c) {
+  if (!inGrid(r,c) || grid[r][c].type < 0) return;
+  let gem = grid[r][c];
+
+  if (gem.obstacle === ENV_TYPE.ICE_BLOCK) {
+    gem.iceHits--;
+    if (gem.iceHits <= 0) gem.obstacle = null;
+    sfx.play(800,0.1,'square',0.1);
+    return;
+  }
+  if (gem.obstacle === ENV_TYPE.HONEY_BLOCK) {
+    gem.honeyHits--;
+    if (gem.honeyHits <= 0) gem.obstacle = null;
+    sfx.play(600,0.1,'square',0.1);
+    return;
+  }
+  if (gem.chained) {
+    gem.chained = false;
+    sfx.play(900,0.1,'triangle',0.1);
+    return;
+  }
+
+  const {x,y} = cellToPixel(r,c);
+  spawnParticles(x,y,8,{color:GEM_COLORS[gem.type]||'#fff',speed:70,life:0.5,gravity:60});
+  GAME_SCORE += BASE_GEM_SCORE;
+  objective.current += (objective.type === 'collect_gems' && gem.type === objective.gemType ? 1 : 0);
+  objective.currentCollect += (objective.type === 'score_and_collect' && gem.type === objective.gemType ? 1 : 0);
+  objective.currentCollectGem += (objective.type === 'complex' && gem.type === objective.collectGemType ? 1 : 0);
+
+  // Check for environmental object interactions
+  envObjects.forEach(env => {
+    if (env.r === r && env.c === c) {
+      if (env.type === ENV_TYPE.LOCKED_CRYSTAL && env.unlocked) {
+        activateLockedCrystal(env);
+      } else if (env.type === ENV_TYPE.SEALED_CHEST && runeKeysCollected[env.keyType] > 0 && !env.opened) {
+        openSealedChest(env);
+      } else if (env.type === ENV_TYPE.TIMED_PLATE) {
+        activateTimedPlate(env);
+      }
+    }
+  });
+
+  grid[r][c]={type:-1,special:null,obstacle:null,drawY:0,animY:0,scale:1.0};
+}
+
+function activateLockedCrystal(crystal) {
+  if (!crystal.unlocked) return;
+  triggerShake(2.0, 20);
+  sfx.play(400,0.1,'sine',0.1).play(2000,0.1,'sine',0.1); // crystal_shatter
+  const {x,y} = cellToPixel(crystal.r,crystal.c);
+  spawnParticles(x,y,50,{color:'#FFD700',speed:100,life:0.8,gravity:80});
+  GAME_SCORE += 150 * 25; // 25 gems roughly
+  spawnPopup(x,y,`+${150*25} Crystal Bonus!`, '#FFD700', 18);
+
+  for(let dr=-2;dr<=2;dr++) for(let dc=-2;dc<=2;dc++) {
+    let nr=crystal.r+dr,nc=crystal.c+dc;
+    if(inGrid(nr,nc)) clearGemAt(nr,nc);
+  }
+  crystal.active = true;
+  crystal.opened = true; // Mark as cleared
+
+  let emptyCell = findAdjacentEmpty(crystal.r, crystal.c);
+  if (emptyCell) {
+    let boosterType = randChoice(['sparkle_row', 'sparkle_col', 'radiant_bomb', 'prism_blast']);
+    grid[emptyCell.r][emptyCell.c] = makeGem(randInt(0, GEM_TYPES-1), boosterType);
+  }
+}
+
+function openSealedChest(chest) {
+  if (chest.opened) return;
+  if (runeKeysCollected[chest.keyType] > 0) {
+    runeKeysCollected[chest.keyType]--;
+    chest.opened = true;
+    sfx.play(500,0.1,'sine',0.1); // chest_open
+    const {x,y} = cellToPixel(chest.r,chest.c);
+    spawnParticles(x,y,30,{color:'#FFD700',speed:80,life:0.6,gravity:70});
+
+    if (chest.keyType === 'green') {
+      GAME_SCORE += 1000;
+      spawnPopup(x,y,`+1000 Score!`, '#00FF00', 18);
+    } else if (chest.keyType === 'blue') {
+      movesLeft += 3;
+      spawnPopup(x,y,`+3 Moves!`, '#00BFFF', 18);
+    } else if (chest.keyType === 'red') {
+      let boosterType = randChoice(['sparkle_row', 'sparkle_col', 'radiant_bomb', 'prism_blast']);
+      let emptyCell = findAdjacentEmpty(chest.r, chest.c);
+      if (emptyCell) {
+        grid[emptyCell.r][emptyCell.c] = makeGem(randInt(0, GEM_TYPES-1), boosterType);
+      }
+      spawnPopup(x,y,`+1 Booster!`, '#FF4500', 18);
+    }
+  }
+}
+
+function activateTimedPlate(plate) {
+  sfx.play(200,0.1,'square',0.1); // clunk grave
+  plate.active = true;
+  plate.movesLeft = 3;
+  currentTimedPlates.push(plate);
+}
+
+function startFall() {
+  fallState = { timer: 0, maxT: 0.18, ready: false };
+
+  for (let c=0;c<COLS;c++) {
+    let writeR=ROWS-1;
+    for (let r=ROWS-1;r>=0;r--) {
+      if (grid[r][c].type>=0) {
+        if (r!==writeR) {
+          grid[writeR][c]=grid[r][c];
+          grid[r][c]={type:-1,special:null,obstacle:null,drawY:(writeR-r)*CELL,animY:(writeR-r)*CELL,scale:1.0};
+          grid[writeR][c].animY=(writeR-r)*CELL;
+        }
+        writeR--;
+      }
+    }
+    // Fill empties from top
+    for (let r=writeR;r>=0;r--) {
+      let newGem = makeGem(-1);
+      // Spawn Sparkle Keys or Rune Keys
+      if (level >= 9 && Math.random() < 0.1 && sparkleKeysCollected < 3) { // Sparkle Keys
+        newGem = makeGem(GEM_TYPES, 'sparkle_key');
+      } else if (level >= 9 && Math.random() < 0.05) { // Rune Keys
+        newGem = makeGem(randInt(0, GEM_TYPES-1), randChoice(['green_rune_key', 'blue_rune_key', 'red_rune_key']));
+      } else {
+        newGem = makeGem(Math.floor(Math.random()*GEM_TYPES));
+      }
+
+      grid[r][c]=newGem;
+      grid[r][c].animY=-(writeR-r+1)*CELL;
+    }
+  }
+  setState('falling');
+}
+
+function updateFalling(dt) {
+  if (hitstopFrames > 0) return;
+  fallState.timer+=dt;
+  let progress=Math.min(fallState.timer/fallState.maxT,1);
+  // Animate drawY toward 0
+  let allSettled=true;
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) {
+    if(grid[r][c].animY!==0){
+      grid[r][c].animY=lerp(grid[r][c].animY,0,progress*3.5*dt/fallState.maxT);
+      if(Math.abs(grid[r][c].animY)<1)grid[r][c].animY=0;
+      else allSettled=false;
+    }
+  }
+  if (progress>=1 && allSettled) {
+    // Check for more matches (cascade)
+    startResolve();
+  }
+}
+
+function hasPossibleMoves() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      let gem = grid[r][c];
+      if (gem.type < 0 || gem.chained || gem.obstacle) continue;
+
+      // Check all 4 adjacent swaps
+      let neighbors = [[r-1,c],[r+1,c],[r,c-1],[r,c+1]];
+      for (const [nr,nc] of neighbors) {
+        if (inGrid(nr,nc)) {
+          let neighborGem = grid[nr][nc];
+          if (neighborGem.type < 0 || neighborGem.chained || neighborGem.obstacle) continue;
+
+          // Simulate swap
+          let tmp = grid[r][c];
+          grid[r][c] = grid[nr][nc];
+          grid[nr][nc] = tmp;
+
+          let matches = findAllMatches();
+
+          // Undo swap
+          grid[nr][nc] = grid[r][c];
+          grid[r][c] = tmp;
+
+          if (matches.length > 0) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function shuffleBoard() {
+  sfx.play(300, 0.5, 'square', 0.1);
+  spawnPopup(W/2, H/2, 'Cosmic Shuffle!', '#8E44AD', 24);
+  triggerShake(1.0, 30);
+
+  let allGems = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (grid[r][c].type >= 0) {
+        allGems.push(grid[r][c]);
+        grid[r][c] = makeGem(-1); // Empty the grid
+      }
+    }
+  }
+
+  // Shuffle allGems
+  for (let i = allGems.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+    [allGems[i], allGems[j]] = [allGems[j], allGems[i]];
+  }
+
+  // Place shuffled gems back
+  let gemIdx = 0;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (gemIdx < allGems.length) {
+        grid[r][c] = allGems[gemIdx];
+        grid[r][c].animY = 0; // Reset animation
+        grid[r][c].drawY = 0;
+        grid[r][c].scale = 1.0;
+        gemIdx++;
+      }
+    }
+  }
+  // Ensure no immediate matches after shuffle
+  for(let pass=0; pass<3; pass++) {
+      for(let r=0; r<ROWS; r++) {
+          for(let c=0; c<COLS; c++) {
+              while(causesMatch(r,c)) {
+                  grid[r][c].type = Math.floor(Math.random()*GEM_TYPES);
+              }
+          }
+      }
+  }
+  setState('falling'); // Start fall to settle new positions
+}
+
+function checkObjective() {
+  let met = false;
+
+  if (currentLevelObjective.type === 'score') {
+    met = GAME_SCORE >= currentLevelObjective.target;
+  } else if (currentLevelObjective.type === 'collect_gems') {
+    met = currentLevelObjective.current >= currentLevelObjective.target;
+  } else if (currentLevelObjective.type === 'score_and_collect') {
+    met = GAME_SCORE >= currentLevelObjective.scoreTarget && currentLevelObjective.currentCollect >= currentLevelObjective.collectTarget;
+  } else if (currentLevelObjective.type === 'collect_artifacts') {
+    met = currentLevelObjective.current >= currentLevelObjective.target;
+  } else if (currentLevelObjective.type === 'complex') {
+    met = GAME_SCORE >= currentLevelObjective.scoreTarget &&
+          currentLevelObjective.currentCollectGem >= currentLevelObjective.collectGemTarget &&
+          currentLevelObjective.currentCollectArtifact >= currentLevelObjective.collectArtifactTarget;
+  }
+
+  if (met) { setState('victory'); sfx.play(880,0.4,'sine',0.12); return; }
+  if (movesLeft<=0) {
+    saveHiScore(GAME_SCORE);
+    _runCoins=Math.floor(GAME_SCORE/100); _gameoverTimer=1.5;
+    setState('gameover');
+  }
+}
+
+let shakeIntensity = 0;
+let shakeDuration = 0;
+function triggerShake(intensity, frames) {
+    shakeIntensity = intensity;
+    shakeDuration = frames;
+}
+
+function applyShake(ctx) {
+    if (shakeDuration > 0) {
+        let offsetX = (Math.random() * 2 - 1) * shakeIntensity;
+        let offsetY = (Math.random() * 2 - 1) * shakeIntensity;
+        ctx.translate(offsetX, offsetY);
+        shakeIntensity *= 0.9;
+        shakeDuration--;
+    }
+}
+
+function triggerHitstop(frames) {
+    hitstopFrames = frames;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════════════════
+function renderMenu() {
+  ctx.fillStyle=PALETTE.bg; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle=PALETTE.accent; ctx.font='bold 28px system-ui,sans-serif'; ctx.fillText(GAME_TITLE, W/2, H*0.30);
+  ctx.fillStyle='#aaa'; ctx.font='12px system-ui,sans-serif'; ctx.fillText('Swap adjacent gems to match 3+', W/2, H*0.44);
+  if(_meta.coins>0){ctx.fillStyle='#ffdd00';ctx.font='bold 13px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,H*0.52);}
+  ctx.fillStyle='#fff'; ctx.font='bold 16px system-ui,sans-serif'; ctx.fillText('TAP / CLICK to play', W/2, H*0.60);
+  ctx.fillStyle='#888'; ctx.font='13px system-ui,sans-serif'; ctx.fillText(`BEST: ${_hiScore}`, W/2, H*0.70);
+  ctx.textAlign='left';
+}
+
+function renderVictoryOverlay() { ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(0,0,W,H); drawText('LEVEL CLEAR!',W/2,H*0.35,'#ff0',28,'center'); drawText(`SCORE: ${GAME_SCORE}`,W/2,H*0.47,'#fff',18,'center'); drawText('TAP to continue',W/2,H*0.60,'#aaa',13,'center'); }
+function renderGameoverOverlay() { ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fillRect(0,0,W,H); ctx.textAlign='center'; ctx.fillStyle='#f44'; ctx.font='bold 26px system-ui,sans-serif'; ctx.fillText('OUT OF MOVES',W/2,H*0.35); ctx.fillStyle='#fff'; ctx.font='bold 18px system-ui,sans-serif'; ctx.fillText(`SCORE: ${GAME_SCORE}`,W/2,H*0.45); ctx.fillStyle='#ff0'; ctx.font='bold 16px system-ui,sans-serif'; ctx.fillText(`BEST: ${_hiScore}`,W/2,H*0.53); if(_runCoins>0){ctx.fillStyle='#ffdd00';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText(`🪙 ${_runCoins} coins earned`,W/2,H*0.61);} ctx.fillStyle='#aaa'; ctx.font='13px system-ui,sans-serif'; ctx.fillText('Waiting for shop...',W/2,H*0.70); ctx.textAlign='left'; }
+
+function renderPlaying() {
+
+  ctx.fillStyle=PALETTE.bg; ctx.fillRect(0,0,W,H);
+  // Animated background
+  ctx.save();
+  applyShake(ctx);
+
+  // ── Grid background ───────────────────────────────────────────
+  ctx.fillStyle=PALETTE.board;
+  ctx.beginPath(); ctx.roundRect(GRID_X-4,GRID_Y-4,GRID_W+8,GRID_H+8,8); ctx.fill();
+
+  // ── Grid lines ────────────────────────────────────────────────
+  ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
+  for(let r=0;r<=ROWS;r++){ctx.beginPath();ctx.moveTo(GRID_X,GRID_Y+r*CELL);ctx.lineTo(GRID_X+GRID_W,GRID_Y+r*CELL);ctx.stroke();}
+  for(let c=0;c<=COLS;c++){ctx.beginPath();ctx.moveTo(GRID_X+c*CELL,GRID_Y);ctx.lineTo(GRID_X+c*CELL,GRID_Y+GRID_H);ctx.stroke();}
+
+  // ── Environmental Objects (under gems) ────────────────────────
+  envObjects.forEach(env => {
+    const {x,y} = cellToPixel(env.r, env.c);
+    if (env.type === ENV_TYPE.TIMED_PLATE) {
+      ctx.fillStyle = env.active ? 'rgba(255,165,0,0.4)' : 'rgba(100,100,100,0.2)';
+      ctx.fillRect(x - CELL/2, y - CELL/2, CELL, CELL);
+      if (env.active) {
+        ctx.fillStyle = '#ff4500';
+        ctx.font = `bold ${CELL/3}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(env.movesLeft.toString(), x, y);
+      }
+    } else if (env.type === ENV_TYPE.TWIN_PORTAL) {
+      ctx.fillStyle = 'rgba(52,152,219,0.3)'; // Blue sapphire
+      ctx.beginPath(); ctx.arc(x,y,CELL*0.4,0,Math.PI*2); ctx.fill();
+    }
+  });
+
+  // ── Gems ─────────────────────────────────────────────────────
+  ctx.save(); ctx.beginPath(); ctx.rect(GRID_X,GRID_Y,GRID_W,GRID_H); ctx.clip();
+  for(let r=0;r<ROWS;r++) {
+    for(let c=0;c<COLS;c++) {
+      let gem = grid[r][c];
+      if(gem.type<0 && !gem.obstacle && !gem.special) continue; // Only draw empty if it has an obstacle or special (like artifact)
+      const {x,y}=cellToPixel(r,c);
+      let ay=gem.animY||0;
+      let selected=r===selR&&c===selC;
+      let sc=gem.scale||1.0;
+      let R=(CELL/2-4)*sc;
+
+      ctx.save(); ctx.translate(x,y+ay);
+      // Draw obstacle first if present
+      if (gem.obstacle === ENV_TYPE.ICE_BLOCK) {
+        ctx.fillStyle = `rgba(173,216,230,${0.6 + gem.iceHits * 0.2})`;
+        ctx.fillRect(-CELL/2, -CELL/2, CELL, CELL);
+      } else if (gem.obstacle === ENV_TYPE.HONEY_BLOCK) {
+        ctx.fillStyle = `rgba(255,165,0,${0.6 + gem.honeyHits * 0.2})`;
+        ctx.fillRect(-CELL/2, -CELL/2, CELL, CELL);
+      } else if (gem.obstacle === ENV_TYPE.ARTIFACT) {
+        ctx.fillStyle = '#FFD700';
+        ctx.font = `bold ${R*1.2}px monospace`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('🏆',0,1);
+      }
+
+      // Draw gem
+      if (gem.type >= 0) {
+        if (selected) { ctx.shadowBlur=16; ctx.shadowColor='#fff'; }
+        ctx.fillStyle=GEM_COLORS[gem.type];
+        ctx.beginPath(); ctx.arc(0,0,R,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle='rgba(255,255,255,0.25)';
+        ctx.beginPath(); ctx.arc(-R*0.25,-R*0.28,R*0.4,0,Math.PI*2); ctx.fill();
+        ctx.shadowBlur=0;
+        ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.font=`bold ${Math.round(R)}px monospace`; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(GEM_LABELS[gem.type]||'●',0,1);
+      }
+
+      // Draw special marker
+      if(gem.special){
+        ctx.strokeStyle=BOOSTER_TYPES.find(b=>b.id===gem.special)?.color||'#fff';
+        ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(0,0,R+2,0,Math.PI*2); ctx.stroke();
+        ctx.fillStyle=BOOSTER_TYPES.find(b=>b.id===gem.special)?.color||'#fff';
+        ctx.font=`bold ${R*0.8}px monospace`;
+        ctx.fillText(BOOSTER_TYPES.find(b=>b.id===gem.special)?.icon||'⚡️',0,1);
+      }
+      // Chained gem
+      if (gem.chained) {
+        ctx.strokeStyle = '#8B4513'; // SaddleBrown
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0,0,R+1,0,Math.PI*2);
+        ctx.stroke();
+        ctx.fillStyle = '#8B4513';
+        ctx.font = `bold ${R*0.8}px monospace`;
+        ctx.fillText('🔗',0,1);
+      }
+      // Selection ring
+      if(selected){ctx.strokeStyle='#fff';ctx.lineWidth=2.5;ctx.globalAlpha=0.8;ctx.beginPath();ctx.arc(0,0,R+4,0,Math.PI*2);ctx.stroke();}
+      ctx.restore();
+    }
+  }
+
+  // Environmental Objects (on top of gems) ──────────────────────────
+  envObjects.forEach(env => {
+    const {x,y} = cellToPixel(env.r, env.c);
+    if (env.type === ENV_TYPE.LOCKED_CRYSTAL) {
+      ctx.fillStyle = env.unlocked ? '#FFD700' : '#C0C0C0'; // Gold or Silver
+      ctx.font = `bold ${CELL*0.8}px monospace`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('💎', x, y - CELL*0.1);
+      ctx.fillStyle = '#8B4513'; // Cage color
+      ctx.font = `bold ${CELL*0.5}px monospace`;
+      ctx.fillText(env.unlocked ? '🔓' : `🔒${env.keysCollected}/${env.keysRequired}`, x, y + CELL*0.3);
+    } else if (env.type === ENV_TYPE.SEALED_CHEST) {
+      ctx.fillStyle = '#8B4513'; // Wood color
+      ctx.fillRect(x - CELL*0.4, y - CELL*0.3, CELL*0.8, CELL*0.6);
+      ctx.fillStyle = env.opened ? '#FFD700' : (env.keyType === 'green' ? '#00FF00' : (env.keyType === 'blue' ? '#00BFFF' : '#FF4500'));
+      ctx.font = `bold ${CELL*0.4}px monospace`;
+      ctx.fillText(env.opened ? '📦' : '🔐', x, y + CELL*0.1);
+    }
+  });
+
+  ctx.restore(); // end clip and shake
+  ctx.restore();
+
+  // ── HUD ───────────────────────────────────────────────────────
+  drawText(`SCORE: ${GAME_SCORE}`, 10, 22, PALETTE.ui, 13);
+  drawText(`LV ${level}`, W/2, 22, '#aaa', 12, 'center');
+  drawText(`BEST: ${_hiScore}`, W-10, 22, '#888', 11, 'right');
+  // Moves left
+  drawText(`MOVES: ${movesLeft}`, 10, GRID_Y+GRID_H+24, movesLeft<=5?'#f44':PALETTE.ui, 14);
+  // Objective
+  let objText = '';
+  if (currentLevelObjective.type === 'score') {
+    objText = `GOAL: ${GAME_SCORE}/${currentLevelObjective.target}`;
+  } else if (currentLevelObjective.type === 'collect_gems') {
+    objText = `COLLECT ${GEM_LABELS[currentLevelObjective.gemType]}: ${currentLevelObjective.current}/${currentLevelObjective.target}`;
+  } else if (currentLevelObjective.type === 'score_and_collect') {
+    objText = `SCORE: ${GAME_SCORE}/${currentLevelObjective.scoreTarget} | COLLECT ${GEM_LABELS[currentLevelObjective.gemType]}: ${currentLevelObjective.currentCollect}/${currentLevelObjective.collectTarget}`;
+  } else if (currentLevelObjective.type === 'collect_artifacts') {
+    objText = `ARTIFACTS: ${currentLevelObjective.current}/${currentLevelObjective.target}`;
+  } else if (currentLevelObjective.type === 'complex') {
+    objText = `SCORE: ${GAME_SCORE}/${currentLevelObjective.scoreTarget} | ${GEM_LABELS[currentLevelObjective.collectGemType]}: ${currentLevelObjective.currentCollectGem}/${currentLevelObjective.collectGemTarget} | 🏆: ${currentLevelObjective.currentCollectArtifact}/${currentLevelObjective.collectArtifactTarget}`;
+  }
+  drawText(objText, W-10, GRID_Y+GRID_H+24, PALETTE.accent, 12, 'right');
+
+  // Swap animation hint
+  if (swapState) {
+    const {r1,c1,r2,c2,t,maxT,isUndo}=swapState;
+    let prog=Math.min(t/maxT,1);
+    const {x:x1,y:y1}=cellToPixel(r1,c1);
+    const {x:x2,y:y2}=cellToPixel(r2,c2);
+    let gem1=grid[r1][c1],gem2=grid[r2][c2];
+    if(gem1.type>=0) {
+      let cx2=lerp(x1,x2,isUndo?1-prog:prog),cy2=lerp(y1,y2,isUndo?1-prog:prog);
+      ctx.fillStyle=GEM_COLORS[gem1.type]; ctx.beginPath(); ctx.arc(cx2,cy2,CELL/2-5,0,Math.PI*2); ctx.fill();
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// START
+// ══════════════════════════════════════════════════════════════════
+initLevel();
+requestAnimationFrame(t=>{lastTime=t;requestAnimationFrame(loop);});
+
+let current = null;
+
+  // Dev console bridge (global scope)
+  window.__devPatch = function(code) { return eval(code); };
+</script>
+
+<style id="dev-console-style">
+#dev-console{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,.96);border-top:2px solid #00ff88;padding:10px 14px;z-index:99999;font-family:monospace;color:#00ff88;box-shadow:0 -4px 20px rgba(0,255,136,.15)}
+#dev-console.open{display:flex;flex-direction:column;gap:5px}
+#dev-console-title{font-size:11px;color:#555;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center}
+#dev-console-title span:first-child{color:#00ff88;font-size:12px;font-weight:bold}
+#dev-console-ctx-bar{display:flex;gap:6px;align-items:center}
+#dev-console-row{display:flex;gap:8px;align-items:flex-start}
+#dev-console-input{flex:1;background:#0a0a0a;border:1px solid #00ff88;color:#00ff88;font-family:'Courier New',monospace;font-size:13px;padding:8px 10px;border-radius:4px;resize:vertical;min-height:38px;max-height:180px;line-height:1.4}
+#dev-console-input::placeholder{color:#1a4a2a}
+#dev-console-input:focus{outline:none;border-color:#00ffcc;box-shadow:0 0 8px rgba(0,255,204,.2)}
+#dev-console-btns{display:flex;flex-direction:column;gap:5px;min-width:90px}
+#dev-console-btn{background:linear-gradient(135deg,#00cc66,#00ff88);color:#000;border:none;font-family:monospace;font-size:12px;font-weight:900;padding:9px 14px;border-radius:4px;cursor:pointer;letter-spacing:.5px;transition:all .15s}
+#dev-console-btn:hover{background:linear-gradient(135deg,#00ff88,#00ffcc);transform:translateY(-1px)}
+#dev-console-btn:disabled{background:#222;color:#444;cursor:wait;transform:none}
+#dev-console-undo{background:#1a1a1a;color:#888;border:1px solid #333;font-family:monospace;font-size:11px;padding:5px 10px;border-radius:4px;cursor:pointer;transition:all .15s}
+#dev-console-undo:hover:not(:disabled){background:#2a2a2a;color:#fff;border-color:#555}
+#dev-console-undo:disabled{opacity:.3;cursor:default}
+#dev-console-ctx-btn{background:#0a1a0a;color:#555;border:1px solid #1a3a1a;font-size:10px;padding:3px 8px;border-radius:3px;cursor:pointer;font-family:monospace;transition:all .15s}
+#dev-console-ctx-btn:hover{color:#00ff88;border-color:#00ff88;background:#0a2a0a}
+#dev-console-ctx-btn.active{color:#00ff88;border-color:#00ff88;background:#051505}
+#dev-console-status{font-size:11px;min-height:16px;padding:2px 0;transition:color .2s;line-height:1.5;max-height:60px;overflow-y:auto}
+#dev-console-status.ok{color:#00ff88}
+#dev-console-status.err{color:#ff4444}
+#dev-console-status.pending{color:#ffaa00}
+#dev-console-status.warn{color:#ffcc44}
+#dev-console-ctx{display:none;background:#050f05;border:1px solid #0a2a0a;border-radius:4px;padding:8px 10px;font-size:10px;color:#668866;max-height:120px;overflow-y:auto;line-height:1.7;margin-top:2px}
+#dev-console-ctx.open{display:block}
+#dev-console-log{font-size:10px;color:#333;max-height:55px;overflow-y:auto;padding-top:3px;border-top:1px solid #111;display:none;line-height:1.6}
+#dev-console-log.visible{display:block}
+#dev-console-close{background:none;border:none;color:#333;font-size:16px;cursor:pointer;padding:0 3px;transition:color .15s}
+#dev-console-close:hover{color:#ff4444}
+#dev-console-hint{font-size:9px;color:#222;text-align:right;margin-top:1px}
+#dev-console-code-wrap{display:none;margin-top:4px}
+#dev-console-code-wrap.visible{display:block}
+#dev-console-code-toggle{background:none;border:none;color:#1a4a2a;font-size:10px;font-family:monospace;cursor:pointer;padding:2px 0;letter-spacing:.5px;transition:color .15s}
+#dev-console-code-toggle:hover{color:#00cc66}
+#dev-console-code-pre{background:#050f05;border:1px solid #0a2a0a;border-radius:3px;padding:8px 10px;font-size:11px;color:#44aa44;font-family:'Courier New',monospace;white-space:pre-wrap;word-break:break-all;max-height:140px;overflow-y:auto;margin-top:3px;line-height:1.5}
+</style>
+
+<div id="dev-console">
+  <div id="dev-console-title">
+    <span>&#9881; DEV CONSOLE</span>
+    <div id="dev-console-ctx-bar">
+      <button id="dev-console-ctx-btn" title="Afficher le contexte du jeu en temps réel">&#128269; ctx</button>
+      <span style="color:#222;font-size:10px">[ ² / &#96; ]</span>
+      <button id="dev-console-close" title="Fermer">&#10005;</button>
+    </div>
+  </div>
+  <div id="dev-console-ctx"></div>
+  <div id="dev-console-row">
+    <textarea id="dev-console-input" placeholder="Décris la modification souhaitée... Ex: rends le joueur invincible, ajoute un type ennemi dragon avec 500 HP, double la vitesse de tir, ajoute une compétence de téléportation, modifie la génération de niveaux..."></textarea>
+    <div id="dev-console-btns">
+      <button id="dev-console-btn">&#9654; Appliquer</button>
+      <button id="dev-console-undo" disabled title="Annuler le dernier patch">&#8617; Annuler</button>
+    </div>
+  </div>
+  <div id="dev-console-status"></div>
+  <div id="dev-console-code-wrap">
+    <button id="dev-console-code-toggle">&#9654; voir le code généré</button>
+    <pre id="dev-console-code-pre"></pre>
+  </div>
+  <div id="dev-console-log"></div>
+  <div id="dev-console-hint">Shift+Entrée = nouvelle ligne &nbsp;|&nbsp; Entrée = envoyer &nbsp;|&nbsp; ↑↓ = historique</div>
+</div>
+
+<script id="dev-console-script">
+/* DEV_CONSOLE_INJECTED */
+(function(){
+'use strict';
+var FILENAME=window.location.pathname.split('/').pop();
+var panel=document.getElementById('dev-console');
+var input=document.getElementById('dev-console-input');
+var btn=document.getElementById('dev-console-btn');
+var undoBtn=document.getElementById('dev-console-undo');
+var statusEl=document.getElementById('dev-console-status');
+var closeBtn=document.getElementById('dev-console-close');
+var ctxBtn=document.getElementById('dev-console-ctx-btn');
+var ctxPanel=document.getElementById('dev-console-ctx');
+var logPanel=document.getElementById('dev-console-log');
+var codeWrap=document.getElementById('dev-console-code-wrap');
+var codeToggle=document.getElementById('dev-console-code-toggle');
+var codePre=document.getElementById('dev-console-code-pre');
+if(!panel||!input||!btn||!statusEl)return;
+
+// ── État interne ──
+var _snapshots=[];
+var _history=[];
+var _histIdx=-1;
+var _actionLog=[];
+var MAX_UNDO=15;
+var MAX_LOG=30;
+var _lastCode='';
+
+// ── Toggle code généré ──
+if(codeToggle&&codeWrap&&codePre){
+  codeToggle.addEventListener('click',function(){
+    var isOpen=codePre.style.display==='block';
+    codePre.style.display=isOpen?'none':'block';
+    codeToggle.textContent=(isOpen?'▶ voir':'▼ masquer')+' le code généré';
+  });
+  codePre.style.display='none'; // fermé par défaut
+}
+
+function showGeneratedCode(code){
+  if(!codeWrap||!codePre||!codeToggle)return;
+  _lastCode=code||'';
+  codePre.textContent=_lastCode;
+  codeWrap.classList.add('visible');
+  codePre.style.display='none'; // fermé par défaut, l'utilisateur ouvre s'il veut
+  codeToggle.textContent='▶ voir le code généré ('+_lastCode.split('\n').length+' lignes)';
+}
+
+function hideGeneratedCode(){
+  if(!codeWrap)return;
+  codeWrap.classList.remove('visible');
+  _lastCode='';
+}
+
+// ── Utilitaires UI ──
+closeBtn.addEventListener('click',function(){panel.classList.remove('open');input.blur();});
+
+function setStatus(msg,cls){
+  statusEl.textContent=msg;
+  statusEl.className=cls||'';
+}
+
+function addLog(prompt,ok,note){
+  var t=new Date().toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  var short=prompt.length>55?prompt.slice(0,55)+'…':prompt;
+  _actionLog.unshift({t:t,short:short,ok:ok,note:note||''});
+  if(_actionLog.length>MAX_LOG)_actionLog.pop();
+  renderLog();
+}
+
+function renderLog(){
+  if(!_actionLog.length){logPanel.classList.remove('visible');return;}
+  logPanel.classList.add('visible');
+  logPanel.innerHTML=_actionLog.map(function(e){
+    return '<span style="color:#333">'+e.t+'</span> '+
+      '<span style="color:'+(e.ok?'#1a6a1a':'#6a1a1a')+'">&#8226;</span> '+
+      '<span style="color:'+(e.ok?'#447744':'#774444')+'">'+e.short+'</span>'+
+      (e.note?'<span style="color:#333"> → '+e.note+'</span>':'');
+  }).join('<br>');
+}
+
+// ── Snapshot pour undo ──
+function takeSnapshot(){
+  try{
+    var s={_ts:Date.now()};
+    // Numériques globaux
+    ['score','highScore','gold','lives','level','floor','stage','currentFloor',
+     'currentDungeonFloor','currentLevel','wave','waveNumber','coins','gems',
+     'playerGold','energy','mana','ammo'].forEach(function(n){
+      if(typeof window[n]==='number')s[n]=window[n];
+    });
+    // gameState
+    if(typeof gameState!=='undefined')s.gameState=gameState;
+    // Joueur (plusieurs conventions)
+    ['hero','player','ship','character'].forEach(function(pn){
+      if(typeof window[pn]!=='undefined'&&window[pn]&&typeof window[pn]==='object'){
+        var p=window[pn];
+        s['_p_'+pn]={hp:p.hp,maxHp:p.maxHp,speed:p.speed,attack:p.attack||p.damage,
+          defense:p.defense,mp:p.mp,maxMp:p.maxMp,level:p.level,xp:p.xp,
+          x:p.x,y:p.y,invincibilityTimer:p.invincibilityTimer||0,
+          classId:p.classId,vx:p.vx||0,vy:p.vy||0};
+      }
+    });
+    // Longueurs des tableaux
+    ['enemies','towers','loot','minions','projectiles','bullets','interactables',
+     'powerups','particles'].forEach(function(n){
+      if(typeof window[n]!=='undefined'&&Array.isArray(window[n]))s['_len_'+n]=window[n].length;
+    });
+    // playerStats si existe
+    if(typeof playerStats!=='undefined'&&playerStats)
+      s._playerStats=JSON.parse(JSON.stringify(playerStats));
+    if(typeof activeBuffs!=='undefined'&&Array.isArray(activeBuffs))
+      s._activeBuffs=JSON.parse(JSON.stringify(activeBuffs));
+    return s;
+  }catch(e){return null;}
+}
+
+function applySnapshot(s){
+  if(!s)return false;
+  var ok=false;
+  try{
+    ['score','highScore','gold','lives','level','floor','stage','currentFloor',
+     'currentDungeonFloor','currentLevel','wave','waveNumber','coins','gems',
+     'playerGold','energy','mana','ammo'].forEach(function(n){
+      if(s[n]!==undefined&&typeof window[n]==='number'){window[n]=s[n];ok=true;}
+    });
+    if(s.gameState!==undefined&&typeof gameState!=='undefined'){gameState=s.gameState;ok=true;}
+    ['hero','player','ship','character'].forEach(function(pn){
+      var pk='_p_'+pn;
+      if(s[pk]&&typeof window[pn]!=='undefined'&&window[pn]){
+        var p=window[pn],sd=s[pk];
+        ['hp','maxHp','speed','attack','defense','mp','maxMp','level','xp',
+         'invincibilityTimer','classId','vx','vy'].forEach(function(f){
+          if(sd[f]!==undefined)p[f]=sd[f];
+        });
+        ok=true;
+      }
+    });
+    if(s._playerStats&&typeof playerStats!=='undefined'&&playerStats){
+      Object.assign(playerStats,s._playerStats);ok=true;
+    }
+    if(s._activeBuffs&&typeof activeBuffs!=='undefined'&&Array.isArray(activeBuffs)){
+      activeBuffs.length=0;s._activeBuffs.forEach(function(b){activeBuffs.push(b);});ok=true;
+    }
+  }catch(e){}
+  return ok;
+}
+
+function pushSnapshot(snap){
+  if(!snap)return;
+  _snapshots.push(snap);
+  if(_snapshots.length>MAX_UNDO)_snapshots.shift();
+  undoBtn.disabled=false;
+}
+
+function updateUndoBtn(){undoBtn.disabled=_snapshots.length===0;}
+
+undoBtn.addEventListener('click',function(){
+  if(!_snapshots.length)return;
+  var snap=_snapshots.pop();
+  updateUndoBtn();
+  var ok=applySnapshot(snap);
+  var dt=Math.round((Date.now()-snap._ts)/1000);
+  if(ok){setStatus('↩ Annulé (il y a '+dt+'s)','ok');}
+  else{setStatus('⚠ Annulation partielle — les changements complexes (nouvelles fonctions, types) ne peuvent pas être annulés automatiquement','warn');}
+});
+
+// ── Context browser ──
+ctxBtn.addEventListener('click',function(){
+  if(ctxPanel.classList.contains('open')){
+    ctxPanel.classList.remove('open');
+    ctxBtn.classList.remove('active');
+    ctxPanel.innerHTML='';
+    return;
+  }
+  ctxBtn.classList.add('active');
+  var ctx=collectContext();
+  var lines=['<b style="color:#226622">═══ CONTEXTE EN TEMPS RÉEL ═══</b>'];
+  Object.keys(ctx).forEach(function(k){
+    var v=ctx[k];
+    var vs=typeof v==='object'?JSON.stringify(v).slice(0,90):String(v);
+    lines.push('<span style="color:#00cc55">'+k+'</span><span style="color:#224422">:</span> <span style="color:#88aa88">'+vs+'</span>');
+  });
+  if(lines.length===1)lines.push('<span style="color:#1a3a1a">Aucune variable standard détectée (jeu custom)</span>');
+  ctxPanel.innerHTML=lines.join('<br>');
+  ctxPanel.classList.add('open');
+});
+
+// ── Collecte du contexte runtime ──
+function collectContext(){
+  var ctx={};
+  try{
+    var stateNames=['gameState','state','currentState','phase','mode','screen'];
+    stateNames.forEach(function(n){if(typeof window[n]!=='undefined')ctx[n]=window[n];});
+    var scoreNames=['score','highScore','bestScore','gold','lives','level','floor','stage',
+                    'currentFloor','currentDungeonFloor','currentLevel','wave','waveNumber',
+                    'coins','gems','playerGold','energy','mana','ammo','kills'];
+    scoreNames.forEach(function(n){if(typeof window[n]!=='undefined')ctx[n]=window[n];});
+    ['hero','player','ship','character','pawn','tank'].forEach(function(pn){
+      if(typeof window[pn]!=='undefined'&&window[pn]&&typeof window[pn]==='object'){
+        var p=window[pn];
+        ctx[pn]={hp:p.hp,maxHp:p.maxHp,x:Math.round(p.x||0),y:Math.round(p.y||0),
+          speed:p.speed,level:p.level,attack:p.attack||p.damage||p.atk,
+          defense:p.defense||p.def,mp:p.mp,maxMp:p.maxMp,classId:p.classId,
+          invincible:!!(p.invincibilityTimer>0)};
+      }
+    });
+    var arrNames=['enemies','towers','projectiles','bullets','particles','loot','interactables',
+                  'minions','platforms','coins','items','obstacles','pieces','waves','powerups',
+                  'skills','traps','buildings','npcs','allies'];
+    arrNames.forEach(function(n){
+      if(typeof window[n]!=='undefined'&&Array.isArray(window[n]))ctx[n+'_count']=window[n].length;
+    });
+    if(typeof window['boss']!=='undefined')ctx.bossAlive=window['boss']!==null;
+    if(typeof window['bossGate']!=='undefined')ctx.bossGateOpen=!!(window['bossGate']&&window['bossGate'].open);
+    if(typeof ENEMY_TYPES!=='undefined')ctx.enemyTypes=Object.keys(ENEMY_TYPES);
+    if(typeof TOWER_TYPES!=='undefined')ctx.towerTypes=Object.keys(TOWER_TYPES);
+    if(typeof ITEM_TYPES!=='undefined')ctx.itemTypes=Object.keys(ITEM_TYPES);
+    if(typeof WEAPON_TYPES!=='undefined')ctx.weaponTypes=Object.keys(WEAPON_TYPES);
+    if(typeof UPGRADE_TYPES!=='undefined')ctx.upgradeTypes=Object.keys(UPGRADE_TYPES);
+    if(typeof HERO_CLASSES!=='undefined')ctx.heroClasses=HERO_CLASSES.map(function(c){return c.id+':'+c.name;});
+    if(typeof CUSTOM_SKILLS!=='undefined')ctx.customSkills=Object.keys(CUSTOM_SKILLS);
+    if(typeof CUSTOM_ATTACKS!=='undefined')ctx.customAttacks=Object.keys(CUSTOM_ATTACKS);
+    var fnNames=['createEnemy','spawnBoss','generateDungeon','checkLevelUp','handleEnemyDefeat',
+                 'spawnParticles','spawnFloatingText','triggerShake','createProjectile',
+                 'placeTower','addTower','spawnEnemy','createTower','restartGame','resetGame',
+                 'spawnWave','addPowerup','unlockSkill','applyKnockback','onBossDefeat',
+                 'openShop','buyItem','saveGame','loadGame','generateLevel','nextWave',
+                 'addUpgrade','applyUpgrade','createItem','dropLoot'];
+    var avail=fnNames.filter(function(n){return typeof window[n]==='function';});
+    if(avail.length)ctx.functions=avail;
+    if(typeof playerInventory!=='undefined')ctx.inventory=playerInventory;
+    if(typeof activeBuffs!=='undefined'&&Array.isArray(activeBuffs))ctx.buffs=activeBuffs.length;
+    if(typeof TILE_SIZE!=='undefined')ctx.TILE_SIZE=TILE_SIZE;
+    if(typeof MAP_W!=='undefined')ctx.MAP_W=MAP_W;
+  }catch(e){}
+  return ctx;
+}
+
+// ── Validation syntaxique client ──
+function validateSyntax(code){
+  var o=0,c=0,po=0,pc=0,bo=0,bc=0;
+  for(var i=0;i<code.length;i++){
+    var ch=code[i];
+    if(ch==='{')o++;else if(ch==='}')c++;
+    else if(ch==='(')po++;else if(ch===')')pc++;
+    else if(ch==='[')bo++;else if(ch===']')bc++;
+  }
+  if(o!==c)return 'Accolades: '+o+' { pour '+c+' }';
+  if(po!==pc)return 'Parenthèses: '+po+' ( pour '+pc+' )';
+  if(bo!==bc)return 'Crochets: '+bo+' [ pour '+bc+' ]';
+  return null;
+}
+
+// ── Exécution du code patché ──
+function execCode(code,explanation){
+  var synErr=validateSyntax(code);
+  if(synErr){
+    setStatus('⚠ Syntaxe invalide côté client: '+synErr+' — Le code ne sera pas exécuté.','err');
+    return false;
+  }
+  try{
+    if(typeof window.__devPatch==='function'){
+      window.__devPatch(code);
+    }else{
+      // Fallback: new Function (n'accède pas aux vars locales du jeu)
+      (new Function(code))();
+    }
+    var msg=explanation||'Patch appliqué !';
+    setStatus('✅ '+msg,'ok');
+    input.value='';
+    return true;
+  }catch(e){
+    var msg=e.message||String(e);
+    if(msg.indexOf('not defined')!==-1){
+      var vn=(msg.split(' ')[0]||'').replace(/[^a-zA-Z0-9_]/g,'');
+      msg='Variable "'+vn+'" introuvable dans ce jeu. Utilisez le bouton ctx pour voir ce qui est disponible.';
+    }else if(msg.indexOf('is not a function')!==-1){
+      msg='Fonction non disponible dans ce jeu: '+msg+'. Vérifiez ctx → functions.';
+    }else if(msg.indexOf('Cannot read')!==-1||msg.indexOf('null')!==-1){
+      msg='Accès à null/undefined: '+msg+' — Ajoutez une vérification if(variable) avant.';
+    }else if(msg.indexOf('Assignment to constant')!==-1){
+      msg="Impossible de modifier une constante (const). Passez par l'objet: ex TYPE.xxx au lieu de TYPE=...";
+    }else if(msg.indexOf('Unexpected token')!==-1){
+      msg='Erreur de syntaxe JS: '+msg;
+    }
+    setStatus('❌ '+msg,'err');
+    return false;
+  }
+}
+
+// ── Application d'un patch ──
+async function applyPatch(){
+  var prompt=input.value.trim();
+  if(!prompt)return;
+  if(_history[0]!==prompt){_history.unshift(prompt);if(_history.length>50)_history.pop();}
+  _histIdx=-1;
+  btn.disabled=true;
+  hideGeneratedCode();
+  setStatus('⏳ Génération en cours...','pending');
+  var snap=takeSnapshot();
+  try{
+    var resp=await fetch('/api/game-patch',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({filename:FILENAME,prompt:prompt,context:collectContext()})
+    });
+    if(!resp.ok){
+      var errText=await resp.text();
+      setStatus('❌ Erreur serveur '+resp.status+': '+errText.slice(0,80),'err');
+      addLog(prompt,false,'HTTP '+resp.status);
+      return;
+    }
+    var data=await resp.json();
+    if(data.error){
+      setStatus('❌ '+data.error,'err');
+      addLog(prompt,false,data.error.slice(0,40));
+    }else if(data.code){
+      // Afficher le code avant l'exec (utile si l'exec plante)
+      showGeneratedCode(data.code);
+      var ok=execCode(data.code,data.explanation);
+      if(ok){
+        pushSnapshot(snap);
+        addLog(prompt,true,data.explanation?data.explanation.slice(0,80):'');
+      }else{
+        // En cas d'erreur, garder le code visible automatiquement pour debug
+        if(codePre)codePre.style.display='block';
+        if(codeToggle)codeToggle.textContent='▼ masquer le code généré (erreur — vérifier la syntaxe)';
+        addLog(prompt,false,'Erreur exec');
+      }
+    }else{
+      setStatus('⚠ Réponse vide du serveur','warn');
+      addLog(prompt,false,'réponse vide');
+    }
+  }catch(e){
+    setStatus('❌ Réseau: '+e.message,'err');
+    addLog(prompt,false,'réseau');
+  }finally{btn.disabled=false;}
+}
+
+// ── Événements ──
+btn.addEventListener('click',applyPatch);
+input.addEventListener('keydown',function(e){
+  if(e.code!=='Backquote'&&e.code!=='IntlBackslash')e.stopPropagation();
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();applyPatch();return;}
+  if(e.key==='ArrowUp'&&!e.shiftKey&&_history.length){
+    e.preventDefault();_histIdx=Math.min(_histIdx+1,_history.length-1);input.value=_history[_histIdx];
+  }
+  if(e.key==='ArrowDown'&&!e.shiftKey){
+    e.preventDefault();_histIdx=Math.max(_histIdx-1,-1);input.value=_histIdx>=0?_history[_histIdx]:'';
+  }
+});
+document.addEventListener('keydown',function(e){
+  if(e.code==='Backquote'||e.code==='IntlBackslash'){
+    e.preventDefault();
+    if(panel.classList.contains('open')){
+      panel.classList.remove('open');input.blur();
+    }else{
+      panel.classList.add('open');input.focus();
+    }
+  }
+});
+})();
+</script>
+</body></html>

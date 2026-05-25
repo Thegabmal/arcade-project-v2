@@ -16,6 +16,7 @@ dist/
 build/
 # Claude Code internal files
 .claude/
+CLAUDE.md
 # Runtime state files
 .quota_rpd.json
 genre_scores.json

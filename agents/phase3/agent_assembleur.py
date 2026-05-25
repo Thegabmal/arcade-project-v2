@@ -8,7 +8,7 @@ Pure algorithm (no LLM call) — deterministic and reliable.
 from genre_profile import GeneratedModules, ModuleArchitecture, ConceptionContext
 from logger import phase3_log
 
-# Marqueurs de module pour extraction/remplacement ciblé
+# Module markers for targeted extraction and replacement
 MODULE_START = "// ═══ MODULE: {nom} ═══"
 MODULE_END = "// ═══ END MODULE: {nom} ═══"
 
@@ -44,8 +44,8 @@ def run(
     generated: GeneratedModules,
     context: ConceptionContext,
 ) -> str:
-    """Assemble les modules en un fichier HTML complet."""
-    phase3_log.agent_start("Assembleur", f"Assemblage de {len(generated.modules)} modules")
+    """Assemble modules into a complete standalone HTML file."""
+    phase3_log.agent_start("Assembleur", f"Assembling {len(generated.modules)} modules")
 
     arch = generated.architecture
     gp = context.genre_profile
@@ -57,11 +57,11 @@ def run(
     palette = gp.palette_recommandee or "#1a1a2e"
     bg_color = _extract_first_color(palette) or "#1a1a2e"
 
-    # Construire le JS assemblé dans l'ordre d'exécution
+    # Build assembled JS in execution order
     js_parts = []
     ordre = arch.ordre_execution or arch.module_names()
 
-    # Modules dans l'ordre
+    # Modules in declared execution order
     for nom in ordre:
         if nom in generated.modules:
             code = _extract_js_from_module(generated.modules[nom], est_3d)
@@ -70,7 +70,7 @@ def run(
             js_parts.append(f"{MODULE_END.format(nom=nom)}")
             js_parts.append("")
 
-    # Modules hors ordre (si oubliés)
+    # Modules not in the execution order list (missed by architect)
     for nom, code in generated.modules.items():
         if nom not in ordre:
             code = _extract_js_from_module(code, est_3d)
@@ -81,10 +81,10 @@ def run(
 
     js_code = "\n".join(js_parts)
 
-    # Déclarer les variables globales
+    # Declare global variables
     globals_decl = _build_globals_declaration(arch)
 
-    # Code de démarrage — sanitize LLM output: core.* calls crash when game uses standalone functions
+    # Startup code — sanitize LLM output: core.* calls crash when game uses standalone functions
     startup = arch.startup_code or "init(); requestAnimationFrame(gameLoop);"
     if "core.init" in startup or "core.start" in startup:
         startup = "init(); requestAnimationFrame(gameLoop);"
@@ -99,12 +99,12 @@ def run(
         canvas_h = tech.get("rendu", {}).get("canvas_size", {}).get("height", 600)
         html = _build_2d_html(titre, bg_color, canvas_w, canvas_h, js_code, globals_decl, startup)
 
-    phase3_log.agent_done("Assembleur", f"HTML assemblé : {len(html)} chars")
+    phase3_log.agent_done("Assembleur", f"HTML assembled: {len(html)} chars")
     return html
 
 
 def _build_globals_declaration(arch: ModuleArchitecture) -> str:
-    """Génère les déclarations de variables globales."""
+    """Build the global variable declarations block."""
     lines = ["// ═══ VARIABLES GLOBALES ═══"]
     for var in arch.variables_globales:
         init_val = arch.variables_init.get(var, "null")
@@ -277,12 +277,12 @@ def _build_3d_html(
 
 def _inject_trycatch_animate_3d(js_code: str) -> str:
     """
-    Wrappe le body de la fonction animate/gameLoop Three.js dans un try/catch.
-    Affiche l'erreur dans le HUD au lieu de freezer silencieusement.
-    Si la fonction n'est pas trouvée, retourne le code inchangé.
+    Wraps the body of the Three.js animate/gameLoop function in a try/catch.
+    Displays the error in the HUD instead of freezing silently.
+    Returns code unchanged if the function is not found.
     """
     import re
-    # Cherche : function animate() { ... } ou function gameLoop() { ... }
+    # Match: function animate() { ... } or function gameLoop() { ... }
     pattern = r'(function\s+(?:animate|gameLoop)\s*\([^)]*\)\s*\{)'
     match = re.search(pattern, js_code)
     if not match:
@@ -291,8 +291,8 @@ def _inject_trycatch_animate_3d(js_code: str) -> str:
     trycatch_open = (
         "\n  try {"
     )
-    # Trouver la fermeture de la fonction pour insérer } catch
-    # Approche simple : trouver le requestAnimationFrame final et insérer après
+    # Find the function closing point to insert } catch
+    # Simple approach: find the last requestAnimationFrame call and insert after it
     raf_pattern = r'requestAnimationFrame\s*\(\s*(?:animate|gameLoop)\s*\)'
     raf_matches = list(re.finditer(raf_pattern, js_code[insert_pos:]))
     if not raf_matches:
@@ -312,12 +312,12 @@ def _inject_trycatch_animate_3d(js_code: str) -> str:
 
 def _check_startup_functions(html: str, startup: str) -> None:
     """
-    Vérifie que les fonctions appelées dans startup_code existent dans le HTML assemblé.
-    Log un warning pour chaque fonction manquante.
+    Verifies that every function called in startup_code exists in the assembled HTML.
+    Logs a warning for each missing function.
     """
     import re
     calls = re.findall(r'\b([a-zA-Z_]\w*)\s*\(', startup)
-    # Filtre les mots-clés JS et les patterns connus non-fonctions
+    # Skip JS keywords and known non-function patterns
     skip = {'if', 'for', 'while', 'function', 'return', 'requestAnimationFrame', 'setTimeout', 'setInterval'}
     for fn in calls:
         if fn in skip:
@@ -325,24 +325,24 @@ def _check_startup_functions(html: str, startup: str) -> None:
         pattern_fn = rf'\bfunction\s+{re.escape(fn)}\s*\('
         pattern_arrow = rf'\b{re.escape(fn)}\s*=\s*(?:function|\()'
         if not re.search(pattern_fn, html) and not re.search(pattern_arrow, html):
-            phase3_log.warning(f"  ⚠ startup_code appelle '{fn}()' mais cette fonction n'existe pas dans les modules")
+            phase3_log.warning(f"  ⚠ startup_code calls '{fn}()' but this function is not defined in any module")
 
 
 def _coherence_check_3d(html: str) -> None:
     """
-    Vérifie la cohérence du HTML 3D assemblé.
-    Log des warnings si des éléments Three.js critiques sont manquants.
-    Ne lève pas d'exception — le jeu est quand même retourné.
+    Checks the assembled 3D HTML for coherence.
+    Logs warnings for any missing critical Three.js elements.
+    Does not raise — the game is still returned even if checks fail.
     """
     import re
     checks = [
-        ("THREE.WebGLRenderer",     "renderer non créé — écran noir garanti"),
-        ("THREE.Scene",             "scene non créée"),
-        ("THREE.PerspectiveCamera", "caméra perspective absente"),
-        ("THREE.Clock",             "clock absente — delta time impossible"),
-        ("renderer.render",         "render() non appelé — rien ne s'affiche"),
-        ("requestAnimationFrame",   "boucle de jeu absente"),
-        ("DOMContentLoaded",        "DOMContentLoaded absent — init peut être trop tôt"),
+        ("THREE.WebGLRenderer",     "renderer not created — guaranteed black screen"),
+        ("THREE.Scene",             "scene not created"),
+        ("THREE.PerspectiveCamera", "perspective camera missing"),
+        ("THREE.Clock",             "clock missing — delta time unavailable"),
+        ("renderer.render",         "render() never called — nothing will display"),
+        ("requestAnimationFrame",   "game loop missing"),
+        ("DOMContentLoaded",        "DOMContentLoaded missing — init may fire too early"),
     ]
     issues = []
     for keyword, msg in checks:
@@ -350,27 +350,27 @@ def _coherence_check_3d(html: str) -> None:
             issues.append(msg)
 
     if issues:
-        phase3_log.warning(f"  ⚠ Cohérence 3D : {len(issues)} problème(s) détectés")
+        phase3_log.warning(f"  ⚠ 3D coherence: {len(issues)} issue(s) detected")
         for issue in issues:
             phase3_log.warning(f"    - {issue}")
     else:
-        phase3_log.info("  ✓ Cohérence 3D : tous les éléments Three.js critiques présents")
+        phase3_log.info("  ✓ 3D coherence: all critical Three.js elements present")
 
 
 def _extract_first_color(palette: str) -> str:
-    """Extrait la première couleur hexadécimale d'une palette."""
+    """Extract the first hex color from a palette string."""
     import re
     match = re.search(r'#[0-9a-fA-F]{6}', palette)
     return match.group(0) if match else "#1a1a2e"
 
 
 # ─────────────────────────────────────────────
-# Utilitaires d'extraction / remplacement
-# (utilisés par agent_patcher en mode modulaire)
+# Extraction / replacement utilities
+# (used by agent_patcher in modular mode)
 # ─────────────────────────────────────────────
 
 def extract_module(html: str, nom: str) -> str | None:
-    """Extrait le code JS d'un module depuis le HTML assemblé."""
+    """Extract the JS code of a named module from the assembled HTML."""
     import re
     start_marker = re.escape(MODULE_START.format(nom=nom))
     end_marker = re.escape(MODULE_END.format(nom=nom))
@@ -380,7 +380,7 @@ def extract_module(html: str, nom: str) -> str | None:
 
 
 def replace_module(html: str, nom: str, new_code: str) -> str:
-    """Remplace le code d'un module dans le HTML assemblé."""
+    """Replace the code of a named module in the assembled HTML."""
     import re
     start_marker = re.escape(MODULE_START.format(nom=nom))
     end_marker = re.escape(MODULE_END.format(nom=nom))
@@ -388,14 +388,14 @@ def replace_module(html: str, nom: str, new_code: str) -> str:
     replacement = rf"\g<1>{new_code}\g<2>"
     new_html = re.sub(pattern, replacement, html, flags=re.DOTALL)
     if new_html == html:
-        # Module non trouvé — injecter avant END STARTUP
+        # Module not found — inject before END STARTUP
         injection = f"\n{MODULE_START.format(nom=nom)}\n{new_code}\n{MODULE_END.format(nom=nom)}\n"
         new_html = html.replace("// ═══ STARTUP ═══", injection + "// ═══ STARTUP ═══")
     return new_html
 
 
 def list_modules(html: str) -> list:
-    """Liste les noms des modules présents dans le HTML."""
+    """List the names of all modules present in the assembled HTML."""
     import re
     pattern = r"// ═══ MODULE: (.+?) ═══"
     return re.findall(pattern, html)

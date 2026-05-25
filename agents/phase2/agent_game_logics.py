@@ -33,7 +33,7 @@ def run(genre_profile: GenreProfile, gdd: dict) -> str:
         f'Core loop : {genre_profile.boucle_core}'
     )
 
-    # Construire les sections individuelles
+    # Build individual sections
     sections = _build_sections_list(
         (genre_profile.genre_principal or "").lower(),
         (genre_profile.sous_genre or "").lower(),
@@ -42,10 +42,10 @@ def run(genre_profile: GenreProfile, gdd: dict) -> str:
         titre,
     )
 
-    # Appels parallèles — 1 prompt focalisé par section
+    # Sequential calls — 1 focused prompt per section
     results = _call_sections_parallel(sections)
 
-    # Assembler dans l'ordre
+    # Assemble in order
     parts = []
     for title, result in results:
         if result and result.strip():
@@ -485,7 +485,7 @@ def _build_genre_sections(genre: str, sous_genre: str, gp: GenreProfile) -> str:
     return "\n\n".join(f"=== {t} ===\n{p}" for t, p in sections)
     """Construit les sections de demande adaptées au genre."""
 
-    # Détecter la famille de genre
+    # Detect genre family
     is_shooter = any(g in genre for g in ["shooter", "shoot", "spatial", "space", "bullet", "shmup"])
     is_platformer = any(g in genre for g in ["platform", "plateform", "jump", "run"])
     is_rpg = any(g in genre for g in ["rpg", "role", "adventure", "aventure", "dungeon"])

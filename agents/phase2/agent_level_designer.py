@@ -74,7 +74,7 @@ def run(genre_profile: GenreProfile, gdd: dict, tech_specs: dict) -> dict:
     formules      = gdd.get("formules_cles", {})
     ennemis_stats = contenu.get("ennemis_stats", ennemis)
 
-    # Section de contenu spécifique au genre
+    # Genre-specific content section
     genre_section = _genre_content_section(genre, gdd)
 
     prompt = f"""Conçois le contenu détaillé et la progression complète de ce jeu.
@@ -274,7 +274,7 @@ Réponds en JSON :
   }}
 }}"""
 
-    # Formatter le contenu genre-spécifique dans le prompt
+    # Format genre-specific content into the prompt
     prompt = prompt.replace(
         '{genre_specific_content}',
         json.dumps(_build_zone_content(genre, gdd), ensure_ascii=False)

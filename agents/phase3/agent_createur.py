@@ -2533,8 +2533,8 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans explication) :
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATES PAR GENRE — squelettes structurels garantissant une base fonctionnelle
-# Le LLM remplit les sections marquées [CUSTOM_...], ne touche pas au reste
+# GENRE TEMPLATES — structural scaffolds guaranteeing a functional base
+# The LLM fills sections marked [CUSTOM_...] and does not touch the rest
 # ─────────────────────────────────────────────────────────────────────────────
 
 _TEMPLATE_SHOOTER = """\

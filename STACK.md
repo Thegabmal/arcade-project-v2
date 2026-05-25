@@ -1,7 +1,8 @@
 # Arcade Project v2 — Full Stack Reference
 
-> This file is the authoritative reference for every technology in the project.
-> When asked "explain the stack" or "how does X work here", refer to this file first.
+> Authoritative reference for every technology in this project.
+> Use this to prepare for technical interviews — each section covers what the technology is,
+> what role it plays here specifically, where it appears in the code, and how it connects to everything else.
 
 ---
 
@@ -31,7 +32,7 @@
 **What it is:** The main programming language of the entire backend.
 
 **What it does in this project:**
-Every agent, every pipeline phase, the web server, the validation logic, the RAG system — all written in Python. It is the glue that connects all other technologies together. Python 3.14 is used (with `match/case`, walrus operator, `|` union types).
+Every agent, every pipeline phase, the web server, the validation logic, the RAG system — all written in Python. It is the glue that connects all other technologies together. Python 3.10+ is used (with `match/case`, walrus operator, `|` union types).
 
 **Where it appears:**
 - Every `.py` file in the project
@@ -51,8 +52,8 @@ Python calls Gemini via `google-genai`, launches Playwright via `playwright.asyn
 Gemini generates everything that requires creative or analytical intelligence: genre profiling, game design documents, full HTML5/JavaScript game code, quality evaluations, and code patches. It is called 20-40 times per game generation.
 
 Two tiers are used:
-- **Free tier** (`gemini-2.5-flash`): multi-key rotation across up to 20 API keys (`GEMINI_API_KEY`, `GEMINI_API_KEY_1`...`GEMINI_API_KEY_20`), rate-limited to 4 RPM / 50 RPD per key
-- **Paid tier** (`gemini-2.5-flash` via `GEMINI_API_PAID_KEY`): used for the critical generation and patching agents (no rate limit concerns)
+- **Free tier** (`gemini-2.5-flash`): multi-key rotation across up to 20 API keys (`GEMINI_API_KEY`, `GEMINI_API_KEY_1`...`GEMINI_API_KEY_20`), rate-limited to 4 RPM / 19 RPD per key
+- **Paid tier** (`gemini-2.5-flash` via `GEMINI_PAID_KEY`): used for the critical generation and patching agents (no rate limit concerns)
 
 **Where it appears:**
 - `config.py` — all Gemini wrappers:
@@ -99,8 +100,8 @@ Flask serves the 3-page web UI (generation page, game viewer, history), exposes 
   - `POST /api/generate` → launches `coordinateur.run()` in a background thread, returns `{session_id}`
   - `GET /api/stream/<session_id>` → SSE stream (see section 5)
   - `GET /api/history` → JSON list of all saved games
-  - `POST /api/game-patch` → live JS modification of a running game via Gemini
   - `GET /api/preview/<session_id>` → returns the HTML being generated mid-Phase 3
+  - `GET /debug/<filename>` → per-agent score breakdown and full pipeline log
 
 **How it connects to the rest:**
 Flask receives the user prompt, passes it to `coordinateur.run()` in a daemon thread, and exposes the event queue as an SSE stream. After generation, it serves the HTML game file directly from `jeux_sauvegardes/`.
@@ -381,4 +382,12 @@ BROWSER ←───────────────────────
 
 ---
 
-*Last updated: 2026-05-19*
+---
+
+## 17. Node.js in context
+
+Already covered in section 11. Key interview point: Node.js is used **only as a static analysis tool** — it never runs any game code in production. The pipeline calls `node --check file.js` which parses JavaScript syntax without executing it. This gives exact line numbers and error messages faster than any Python-based JS parser, and is more reliable than Playwright for catching parse errors before runtime.
+
+---
+
+*Last updated: 2026-05-25*

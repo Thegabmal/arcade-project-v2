@@ -104,7 +104,7 @@ def run(genre_profile: GenreProfile) -> dict:
     bonus_str       = "\n".join([f"  - {m}" for m in genre_profile.mecaniques_bonus])
     eviter_str      = "\n".join([f"  - {m}" for m in genre_profile.mecaniques_a_eviter])
 
-    # Section profondeur spécifique au genre
+    # Genre-specific depth hint
     depth_hint = _genre_depth_hint(genre)
 
     prompt = f"""Crée un Game Design Document PROFOND pour ce jeu HTML5.
@@ -364,7 +364,7 @@ def _genre_depth_hint(genre: str) -> str:
 ▶ Formule score : bonus_temps * difficulte_niveau * combo_perfect_moves
 ▶ Niveaux générés ou hand-crafted — préciser lequel et pourquoi"""
 
-    # Générique
+    # Generic fallback
     return """GENRE : ACTION / ARCADE
 ▶ 3+ types d'adversaires distincts (visuellement ET comportementalement)
 ▶ Progression claire toutes les 2-3 minutes (nouveau type, power-up, montée stats)
@@ -376,5 +376,5 @@ def _genre_depth_hint(genre: str) -> str:
 @with_fallback({"titre": "Arcade Game", "concept": "Un jeu arcade", "systemes_principaux": [],
                 "formules_cles": {}, "meta_loop": {}, "contenu_detaille": {}})
 def _call(prompt: str) -> dict:
-    # D4 : thinking activé pour le game designer (clé payante) — créativité et cohérence maximales
+    # D4: thinking enabled for game designer (paid key) — maximum creativity and coherence
     return call_gemini_json(prompt, temperature=0.7, system_instruction=SYSTEM, max_tokens=32000, disable_thinking=False)

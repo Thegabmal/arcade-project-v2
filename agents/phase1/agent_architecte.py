@@ -98,12 +98,12 @@ def _parse_architecture(raw: dict, technologie: str) -> ModuleArchitecture:
     if not modules or not isinstance(modules, list):
         return _fallback_architecture(technologie)
 
-    # Validation et nettoyage des modules
-    modules_valides = []
+    # Validate and sanitize modules
+    valid_modules = []
     for m in modules:
         if not isinstance(m, dict) or not m.get("nom"):
             continue
-        modules_valides.append({
+        valid_modules.append({
             "nom": m.get("nom", ""),
             "description": m.get("description", ""),
             "taille_max": min(int(m.get("taille_max", 7000)), 8000),
@@ -112,22 +112,22 @@ def _parse_architecture(raw: dict, technologie: str) -> ModuleArchitecture:
             "variables_ecrites": m.get("variables_ecrites", []),
         })
 
-    if not modules_valides:
+    if not valid_modules:
         return _fallback_architecture(technologie)
 
     arch = ModuleArchitecture(
-        modules=modules_valides,
+        modules=valid_modules,
         variables_globales=raw.get("variables_globales", []),
         variables_init=raw.get("variables_init", {}),
-        ordre_execution=raw.get("ordre_execution", [m["nom"] for m in modules_valides]),
+        ordre_execution=raw.get("ordre_execution", [m["nom"] for m in valid_modules]),
         startup_code=raw.get("startup_code", "init(); requestAnimationFrame(gameLoop);"),
         technologie=technologie,
     )
 
-    # S'assurer que l'ordre d'exécution couvre tous les modules
-    noms = {m["nom"] for m in modules_valides}
-    manquants = noms - set(arch.ordre_execution)
-    arch.ordre_execution.extend(list(manquants))
+    # Ensure execution order covers all modules
+    module_names = {m["nom"] for m in valid_modules}
+    missing = module_names - set(arch.ordre_execution)
+    arch.ordre_execution.extend(list(missing))
 
     return arch
 

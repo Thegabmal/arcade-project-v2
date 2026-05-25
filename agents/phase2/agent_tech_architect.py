@@ -38,7 +38,7 @@ You respond ONLY in valid JSON."""
 def run(genre_profile: GenreProfile, gdd: dict) -> dict:
     phase2_log.agent_start("Tech Architect", f"Architecture pour {genre_profile.genre_principal}")
 
-    # Détecter si le jeu doit être en 3D
+    # Detect if the game should use 3D rendering
     _sg = (genre_profile.sous_genre or "").lower()
     _sv = (genre_profile.style_visuel or "").lower()
     _pu = (genre_profile.prompt_utilisateur_original or "").lower()
@@ -145,7 +145,7 @@ Réponds en JSON :
 }}"""
 
     result = _call(prompt)
-    # Forcer la technologie si 3D détecté
+    # Force 3D technology if detected
     if est_3d:
         result["technologie_rendu"] = "threejs"
     elif "technologie_rendu" not in result:

@@ -26,3 +26,9 @@ auto_learnings.json
 session_log*.txt
 batch_fix_saved_games.py
 Untitled
+# Generated output (not source code)
+needs_review/
+_rag_check.txt
+calibration_results.json
+snippet_bank.json
+flask.err

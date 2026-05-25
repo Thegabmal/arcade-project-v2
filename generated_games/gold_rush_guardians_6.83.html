@@ -1,0 +1,1869 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8"><title>Gold Rush Guardians</title><style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;}
+canvas{display:block;}
+</style></head><body>
+<canvas id="gameCanvas"></canvas>
+<script>
+// ══════════════════════════════════════════════════════════════════
+// ENGINE — DO NOT MODIFY
+// Dev console bridge — AI patches execute in game scope via eval
+window.__devPatch = function(code) { return eval(code); };
+// ══════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const GAME_W = 800, GAME_H = 600;
+let W = GAME_W, H = GAME_H;
+function resizeCanvas() {
+  const s=Math.min(window.innerWidth/W,window.innerHeight/H);
+  canvas.style.width=Math.round(W*s)+'px'; canvas.style.height=Math.round(H*s)+'px';
+  canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR); ctx.scale(DPR,DPR);
+}
+resizeCanvas(); window.addEventListener('resize',()=>{resizeCanvas();ctx.scale(DPR,DPR);});
+
+let gameState='menu'; // menu | placing | playing | waveclear | gameover | victory
+function setState(s){gameState=s;}
+
+const Keys={down:{},pressed:{}};
+window.addEventListener('keydown',e=>{if(!Keys.down[e.code])Keys.pressed[e.code]=true;Keys.down[e.code]=true;if(e.code==='Escape')e.preventDefault();});
+window.addEventListener('keyup',e=>{Keys.down[e.code]=false;});
+
+const Pointer={x:0,y:0,justDown:false,justUp:false,down:false};
+canvas.addEventListener('mousedown',e=>{const r=canvas.getBoundingClientRect();Pointer.x=(e.clientX-r.left)*(W/r.width);Pointer.y=(e.clientY-r.top)*(H/r.height);Pointer.down=true;Pointer.justDown=true;});
+canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect();Pointer.x=(e.clientX-r.left)*(W/r.width);Pointer.y=(e.clientY-r.top)*(H/r.height);});
+canvas.addEventListener('mouseup',()=>{Pointer.down=false;Pointer.justUp=true;});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();Pointer.x=(e.touches[0].clientX-r.left)*(W/r.width);Pointer.y=(e.touches[0].clientY-r.top)*(H/r.height);Pointer.down=true;Pointer.justDown=true;},{passive:false});
+canvas.addEventListener('touchend',e=>{e.preventDefault();Pointer.down=false;Pointer.justUp=true;},{passive:false});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+
+function keyPressed(c){return !!Keys.pressed[c];}
+function flushInput(){Keys.pressed={};Pointer.justDown=false;Pointer.justUp=false;}
+
+function createPool(factory,size){const inactive=Array.from({length:size},factory),active=[];return{active,get(fn){const o=inactive.length>0?inactive.pop():factory();o.alive=true;if(fn)fn(o);active.push(o);return o;},update(fn){for(let i=active.length-1;i>=0;i--)if(!fn(active[i])){active[i].alive=false;inactive.push(active.splice(i,1)[0]);}},clear(){while(active.length){active[0].alive=false;inactive.push(active.shift());}}};}
+
+const Particles=createPool(()=>({alive:false,x:0,y:0,vx:0,vy:0,life:0,maxLife:0,size:3,color:'#fff',gravity:0}),300);
+function spawnParticles(x,y,count,opts){opts=opts||{};for(let i=0;i<count;i++){const a=opts.angle!==undefined?opts.angle+(Math.random()-0.5)*(opts.spread||Math.PI*2):Math.random()*Math.PI*2;const sp=opts.speed||(40+Math.random()*60);Particles.get(p=>{p.x=x;p.y=y;p.vx=Math.cos(a)*sp;p.vy=Math.sin(a)*sp;p.life=p.maxLife=opts.life||(0.3+Math.random()*0.4);p.size=opts.size||(2+Math.random()*3);p.color=opts.color||'#fff';p.gravity=opts.gravity!==undefined?opts.gravity:0;});}}
+function updateParticles(dt){Particles.update(p=>{p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=p.gravity*dt;return p.life>0;});}
+function drawParticles(){Particles.active.forEach(p=>{ctx.globalAlpha=p.life/p.maxLife;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size*0.5,0,Math.PI*2);ctx.fill();});ctx.globalAlpha=1;}
+
+const Popups=[];
+function spawnPopup(x,y,text,color,size){Popups.push({x,y,text,color:color||'#fff',size:size||13,vy:-40,life:1.0});}
+function updatePopups(dt){for(let i=Popups.length-1;i>=0;i--){Popups[i].y+=Popups[i].vy*dt;Popups[i].life-=dt;if(Popups[i].life<=0)Popups.splice(i,1);}}
+function drawPopups(){Popups.forEach(p=>{ctx.globalAlpha=Math.min(p.life,1);ctx.fillStyle=p.color;ctx.font=`bold ${p.size}px monospace`;ctx.textAlign='center';ctx.fillText(p.text,p.x,p.y);});ctx.globalAlpha=1;ctx.textAlign='left';}
+
+const sfx={_ctx:null,init(){try{if(!this._ctx)this._ctx=new(window.AudioContext||window.webkitAudioContext)();if(this._ctx.state==='suspended')this._ctx.resume();}catch(e){}},play(f,d,t,v){try{this.init();if(!this._ctx)return;const o=this._ctx.createOscillator(),g=this._ctx.createGain();o.type=t||'square';o.frequency.value=f||440;g.gain.setValueAtTime(v||0.08,this._ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,this._ctx.currentTime+(d||0.1));o.connect(g);g.connect(this._ctx.destination);o.start();o.stop(this._ctx.currentTime+(d||0.1));}catch(e){}}};
+
+function lerp(a,b,t){return a+(b-a)*t;}
+function clamp(v,mn,mx){return v<mn?mn:v>mx?mx:v;}
+function dist(ax,ay,bx,by){return Math.sqrt((ax-bx)**2+(ay-by)**2);}
+function randInt(a,b){return a+Math.floor(Math.random()*(b-a+1));}
+function randFloat(a,b){return a+Math.random()*(b-a);}
+function randChoice(arr){return arr[Math.floor(Math.random()*arr.length)];}
+function drawText(t,x,y,c,s,a){ctx.fillStyle=c||'#fff';ctx.font=`bold ${s||13}px monospace`;ctx.textAlign=a||'left';ctx.fillText(t,x,y);}
+function drawBar(x,y,w,h,v,m,fg,bg){ctx.fillStyle=bg||'#333';ctx.fillRect(x,y,w,h);ctx.fillStyle=fg||'#0f0';ctx.fillRect(x,y,Math.round(w*clamp(v/m,0,1)),h);}
+let _hiScore=parseInt(localStorage.getItem('hs_td')||'0');
+function saveHiScore(s){if(s>_hiScore){_hiScore=s;localStorage.setItem('hs_td',s);}}
+
+const FIXED_DT=1/60,MAX_DT=0.1;let lastTime=0,accumulator=0;
+function loop(ts){const rd=Math.min((ts-lastTime)/1000,MAX_DT);lastTime=ts;accumulator+=rd;while(accumulator>=FIXED_DT){update(FIXED_DT);accumulator-=FIXED_DT;}renderFrame();requestAnimationFrame(loop);}
+function update(dt){updateParticles(dt);updatePopups(dt);switch(gameState){case'menu':if(Pointer.justDown){startGame();setState('playing');}break;case'playing':updatePlaying(dt);break;case'waveclear':updateWaveClear(dt);break;case'gameover':updateGameover(dt);break;case'victory':if(Pointer.justDown){startGame();setState('playing');}break;case'shop':updateShop(dt);break;}flushInput();}
+function renderFrame(){switch(gameState){case'menu':renderMenu();break;case'playing':case'waveclear':renderPlaying();break;case'gameover':renderPlaying();renderGameoverOverlay();break;case'victory':renderPlaying();renderVictoryOverlay();break;case'shop':renderShop();break;}drawParticles();drawPopups();}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME CONSTANTS
+// SCOPE CONTRACT: Everything here is MODULE-LEVEL (global).
+//   • const  → immutable config     (TOWER_TYPES, ENEMY_DEFS, PATH_WAYPOINTS, ...)
+//   • let    → mutable runtime state (gold, lives, wave, towers, enemies, ...)
+//   • NEVER  → redeclare canvas/ctx/W/H/gameState/Keys/Mouse (ENGINE owns these)
+//   • Mutable state goes HERE with let, then gets reset inside startGame().
+// ══════════════════════════════════════════════════════════════════
+let GAME_TITLE = 'Gold Rush Guardians';
+
+let PALETTE = {
+  bg:        '#1a2a0a',
+  path:      '#8B6914',
+  pathEdge:  '#6B4E0A',
+  buildable: '#2a4a1a',
+  blocked:   '#0d1f08',
+  ui:        '#ffffff',
+  accent:    '#ffdd00',
+  gold:      '#ffbb00',
+  enemy:     '#ff4444',
+  hp:        '#ff2222',
+  shopBg:    '#0a1a0a',
+  shopCard:  '#152515',
+  shopSel:   '#1a3a1a'
+};
+
+// ── Grid ─────────────────────────────────────────────────────────
+let TILE = 40;              // tile size in pixels
+let GRID_COLS = 18;
+let GRID_ROWS = 12;
+let GRID_X = 0;
+let GRID_Y = 0;
+// HUD bar at bottom
+let HUD_H = H - GRID_ROWS * TILE; // remaining height for HUD
+
+// Cell types: 0=buildable, 1=path, 2=blocked/decor
+let mapGrid = [];  // mapGrid[r][c] = { type, tower:null }
+
+// ── Enemy path (waypoints in grid coords) ────────────────────────
+let PATH_WAYPOINTS_GRID = [
+  [0,5],[3,5],[3,2],[7,2],[7,8],[11,8],[11,4],[15,4],[17,4]
+];
+let PATH = []; // converted to pixel coords at init
+
+// ══════════════════════════════════════════════════════════════════
+// TOWER TYPES
+// ══════════════════════════════════════════════════════════════════
+let TOWER_TYPES = {
+  ARCHER_POST: {
+    label: 'Archer Post',
+    color: '#8B4513', // Brown for wood
+    base: { cost: 75, range: 120, fireRate: 0.8, damage: 10, upgradeCost: 100 }, // fireRate: 0.8s per shot
+    tier1: { range: 140, fireRate: 0.6, damage: 15, upgradeCost: 150 },
+    tier2: { range: 160, fireRate: 0.4, damage: 20, upgradeCost: 0 } // Max tier
+  },
+  ARCANE_SPIRE: {
+    label: 'Arcane Spire',
+    color: '#4B0082', // Indigo for magic
+    base: { cost: 120, range: 100, fireRate: 1.5, damage: 30, armorPierce: 0.2, upgradeCost: 180 }, // armorPierce: Ignores 20% of enemy armor
+    tier1: { range: 115, fireRate: 1.2, damage: 45, armorPierce: 0.3, upgradeCost: 250 },
+    tier2: { range: 130, fireRate: 0.9, damage: 60, armorPierce: 0.4, upgradeCost: 0 }
+  },
+  BLAST_CANNON: {
+    label: 'Blast Cannon',
+    color: '#696969', // Dim Gray for metal
+    base: { cost: 150, range: 90, fireRate: 2.0, damage: 40, splashRadius: 30, upgradeCost: 200 }, // splashRadius: pixels
+    tier1: { range: 100, fireRate: 1.8, damage: 60, splashRadius: 40, upgradeCost: 300 },
+    tier2: { range: 110, fireRate: 1.5, damage: 80, splashRadius: 50, upgradeCost: 0 }
+  },
+  AURA_BEACON: {
+    label: 'Aura Beacon',
+    color: '#FFD700', // Gold for support
+    base: { cost: 100, range: 100, fireRate: 0, damage: 0, buffRange: 80, buffDamage: 0.10, buffFireRate: 0.10, upgradeCost: 150 }, // buffDamage: +10% damage, buffFireRate: -10% fire rate (faster)
+    tier1: { range: 100, fireRate: 0, damage: 0, buffRange: 90, buffDamage: 0.15, buffFireRate: 0.15, upgradeCost: 220 },
+    tier2: { range: 100, fireRate: 0, damage: 0, buffRange: 100, buffDamage: 0.20, buffFireRate: 0.20, upgradeCost: 0 }
+  }
+};
+let TOWER_KEYS = Object.keys(TOWER_TYPES);
+
+// ══════════════════════════════════════════════════════════════════
+// ENEMY TYPES
+// ══════════════════════════════════════════════════════════════════
+let ENEMY_TYPES = {
+  // MINEUR CUIRASSÉ: Slow & Tanky
+  MINEUR_CUIRASSE: {
+    label: 'Mineur Cuirassé',
+    hp: 350, speed: 25, size: 16, color: '#36454F', reward: 35, armor: 0.5, isBoss: false,
+    attackRange: 32, attackCooldown: 1.8, attackDamage: 35, stunDuration: 1.0, melee: true,
+    spawnWave: 3
+  },
+  SPRINTER_GOBLIN: {
+    label: 'Sprinter Gobelin',
+    hp: 80, speed: 60, size: 10, color: '#9ACD32', reward: 15, armor: 0, isBoss: false,
+    attackRange: 24, attackCooldown: 0.8, attackDamage: 15, stunDuration: 0.5, melee: true,
+    spawnWave: 1
+  },
+  ARBALETRIER_SKELL: {
+    label: 'Arbalétrier Skell',
+    hp: 120, speed: 35, size: 12, color: '#F5F5DC', reward: 20, armor: 0, isBoss: false,
+    attackRange: 100, attackCooldown: 1.5, attackDamage: 20, stunDuration: 0.8, projectileSpeed: 200, melee: false,
+    spawnWave: 5
+  },
+  INVOCATEUR_TENEBREUX: {
+    label: 'Invocateur',
+    hp: 180, speed: 30, size: 14, color: '#9b30ff', reward: 50, armor: 0, isBoss: false,
+    attackRange: 0, attackCooldown: 10.0, attackDamage: 0, stunDuration: 1.2, melee: false, summoner: true,
+    spawnWave: 8
+  },
+  PETIT_DIABLOTIN: {
+    label: 'Diablotin',
+    hp: 50, speed: 50, size: 8, color: '#39FF14', reward: 5, armor: 0, isBoss: false,
+    attackRange: 16, attackCooldown: 1.0, attackDamage: 10, stunDuration: 0.3, melee: true,
+    spawnWave: 0,
+  },
+  GOLEM_DE_FOSSE: {
+    label: 'Golem de Fosse',
+    hp: 2000, speed: 18, size: 14, color: '#555555', reward: 1000, armor: 0.7, isBoss: true, sizeFactor: 1.9,
+    spawnWave: 10,
+  }
+};
+
+// ══════════════════════════════════════════════════════════════════
+// WAVE DEFINITIONS
+// Each wave: array of { type, count, interval } spawn groups
+// ══════════════════════════════════════════════════════════════════
+let WAVE_STRUCTURE = [
+  // Wave 1: Introduction to basic enemies
+  { waveNumber: 1, enemies: [{ type: 'SPRINTER_GOBLIN', count: 10 }], interval: 1.0, delay: 3.0 },
+  // Wave 2: More basic enemies, slightly faster
+  { waveNumber: 2, enemies: [{ type: 'SPRINTER_GOBLIN', count: 15 }], interval: 0.8, delay: 3.0 },
+  // Wave 3: Introduction to armored enemies
+  { waveNumber: 3, enemies: [{ type: 'SPRINTER_GOBLIN', count: 10 }, { type: 'MINEUR_CUIRASSE', count: 3 }], interval: 1.2, delay: 4.0 },
+  // Wave 4: Mixed wave, more armored
+  { waveNumber: 4, enemies: [{ type: 'SPRINTER_GOBLIN', count: 15 }, { type: 'MINEUR_CUIRASSE', count: 5 }], interval: 1.0, delay: 4.0 },
+  // Wave 5: Introduction to ranged enemies
+  { waveNumber: 5, enemies: [{ type: 'SPRINTER_GOBLIN', count: 10 }, { type: 'MINEUR_CUIRASSE', count: 5 }, { type: 'ARBALETRIER_SKELL', count: 4 }], interval: 1.5, delay: 5.0 },
+  // Wave 6: Faster ranged
+  { waveNumber: 6, enemies: [{ type: 'SPRINTER_GOBLIN', count: 10 }, { type: 'ARBALETRIER_SKELL', count: 8 }], interval: 0.9, delay: 4.0 },
+  // Wave 7: Mixed, challenging speed and armor
+  { waveNumber: 7, enemies: [{ type: 'MINEUR_CUIRASSE', count: 7 }, { type: 'ARBALETRIER_SKELL', count: 10 }], interval: 1.1, delay: 4.0 },
+  // Wave 8: Introduction to summoner
+  { waveNumber: 8, enemies: [{ type: 'SPRINTER_GOBLIN', count: 10 }, { type: 'INVOCATEUR_TENEBREUX', count: 2 }], interval: 1.5, delay: 5.0 },
+  // Wave 9: Higher density of all types
+  { waveNumber: 9, enemies: [{ type: 'SPRINTER_GOBLIN', count: 20 }, { type: 'MINEUR_CUIRASSE', count: 8 }, { type: 'ARBALETRIER_SKELL', count: 12 }, { type: 'INVOCATEUR_TENEBREUX', count: 2 }], interval: 0.8, delay: 5.0 },
+  // Wave 10: Final Boss Wave
+  { waveNumber: 10, enemies: [{ type: 'MINEUR_CUIRASSE', count: 10 }, { type: 'ARBALETRIER_SKELL', count: 10 }, { type: 'INVOCATEUR_TENEBREUX', count: 3 }], interval: 1.2, delay: 6.0, bossWave: true }
+];
+
+// ── Game state ────────────────────────────────────────────────────
+let gold      = 300;
+let lives     = 20;
+let waveIndex = 0;
+let score     = 0;
+let selectedTowerType = 'ARCHER_POST';
+let hoveredCell = {r:-1,c:-1};
+let selectedTower = null; // Currently selected tower for upgrade/sell UI
+
+// ── Wave spawner state ────────────────────────────────────────────
+let spawner = { active:false, groups:[], groupIdx:0, spawnCount:0, spawnTimer:0 };
+
+// ── Pools ─────────────────────────────────────────────────────────
+let enemyPool = createPool(()=>({
+  alive:false, x:0, y:0, hp:0, maxHp:0, speed:0, baseSpeed:0, size:14, color:'#f44', reward:10, type:'SPRINTER_GOBLIN',
+  pathIdx:0, pathProgress:0, slowTimer:0, slowFactor:0, armor:0, flashTimer:0, angle:0, evasion:0,
+  attackTimer:0, state:'PATROL', targetId:null, projectileSpeed:0, isBoss:false, sizeFactor:1
+}), 150);
+
+let projPool  = createPool(()=>({
+  alive:false, x:0, y:0, vx:0, vy:0, targetId:null, damage:0, splashRadius:0, armorPierce:0,
+  slowFactor:0, color:'#fff', type:'ARCHER_POST', life:3, isEnemyProjectile:false
+}), 200);
+
+let towers    = []; // array of placed tower objects
+
+// ── Environmental Interactions ────────────────────────────────────
+let GEOMORPHIC_FEATURES = {
+  ANCIENT_GOLD_GEYSER: {
+    x: 0, y: 0, radius: 100,
+    damagePerSecond: 20, slowFactor: 0.3, slowDuration: 2, goldBonus: 0.10,
+    activeCycle: 1, idleCycle: 4, currentCycleTime: 0, isJetting: false
+  },
+  OVERLOAD_CRYSTAL: {
+    x: 0, y: 0, radius: 300,
+    activationCost: 50, buffDamage: 0.50, buffFireRate: 0.20, buffDuration: 10,
+    cooldown: 30, currentCooldown: 0, isActive: false
+  },
+  RUNIC_FORGE: {
+    x: 0, y: 0, radius: 150,
+    armorReduction: 0.15, fireDamagePerSecond: 5, curseDuration: 15,
+    goldBonus: 200, expBonus: 10,
+    isCursed: false, cursedBoss: null, curseTimer: 0
+  }
+};
+let ancientGoldGeyser = null;
+let overloadCrystal = null;
+let runicForge = null;
+
+// ══════════════════════════════════════════════════════════════════
+// MAP & PATH INIT — DO NOT MODIFY the path conversion
+// ══════════════════════════════════════════════════════════════════
+function buildMap() {
+  mapGrid = [];
+  for (let r=0;r<GRID_ROWS;r++) {
+    mapGrid[r]=[];
+    for (let c=0;c<GRID_COLS;c++) {
+      mapGrid[r][c]={type:0,tower:null}; // 0=buildable by default
+    }
+  }
+
+  // Mark path cells as non-buildable
+  for (let i=0;i<PATH_WAYPOINTS_GRID.length-1;i++) {
+    const [c1,r1]=PATH_WAYPOINTS_GRID[i];
+    const [c2,r2]=PATH_WAYPOINTS_GRID[i+1];
+    let dc=Math.sign(c2-c1), dr=Math.sign(r2-r1);
+    let cc=c1, rr=r1;
+    while(cc!==c2||rr!==r2) {
+      if(rr>=0&&rr<GRID_ROWS&&cc>=0&&cc<GRID_COLS) mapGrid[rr][cc].type=1;
+      cc+=dc; rr+=dr;
+    }
+    if(r2>=0&&r2<GRID_ROWS&&c2>=0&&c2<GRID_COLS) mapGrid[r2][c2].type=1;
+  }
+
+  // Convert waypoints to pixel centers
+  PATH = PATH_WAYPOINTS_GRID.map(([c,r])=>({
+    x: GRID_X + c*TILE + TILE/2,
+    y: GRID_Y + r*TILE + TILE/2
+  }));
+
+  // Place environmental features (example positions)
+  // For Geyser, place it on a path tile
+  let geyserPathPoint = PATH[Math.floor(PATH.length / 3)];
+  ancientGoldGeyser = { ...GEOMORPHIC_FEATURES.ANCIENT_GOLD_GEYSER, x: geyserPathPoint.x, y: geyserPathPoint.y };
+
+  // For Crystal, place it near some buildable tiles
+  let crystalTile = { r: 4, c: 14 }; // Example buildable tile
+  let crystalCenter = tileCenter(crystalTile.r, crystalTile.c);
+  overloadCrystal = { ...GEOMORPHIC_FEATURES.OVERLOAD_CRYSTAL, x: crystalCenter.x, y: crystalCenter.y };
+
+  // For Forge, place it near the end of the path for bosses
+  let forgePathPoint = PATH[PATH.length - 2];
+  runicForge = { ...GEOMORPHIC_FEATURES.RUNIC_FORGE, x: forgePathPoint.x, y: forgePathPoint.y };
+}
+
+function tileCenter(r,c){return{x:GRID_X+c*TILE+TILE/2,y:GRID_Y+r*TILE+TILE/2};}
+function pixelToTile(px,py){return{r:Math.floor((py-GRID_Y)/TILE),c:Math.floor((px-GRID_X)/TILE)};}
+function inMap(r,c){return r>=0&&r<GRID_ROWS&&c>=0&&c<GRID_COLS;}
+function canBuild(r,c){return inMap(r,c)&&mapGrid[r][c].type===0&&!mapGrid[r][c].tower;}
+
+// ══════════════════════════════════════════════════════════════════
+// META PROGRESSION
+// ══════════════════════════════════════════════════════════════════
+let _META_KEY='meta_tower_defense';
+const UPGRADES=[
+  {id:'gold',    label:'Gold Bonus',   desc:'+25g start /lv', maxLv:3, cost:[60,120,200]},
+  {id:'damage',  label:'Damage Up',    desc:'+20% dmg /lv',   maxLv:3, cost:[80,150,250]},
+  {id:'firerate',label:'Fire Rate',    desc:'+15% rate /lv',  maxLv:3, cost:[80,150,250]},
+  {id:'life',    label:'Extra Lives',  desc:'+3 lives /lv',   maxLv:3, cost:[70,130,220]}
+];
+let _damageMultiplier=1.0; let _goldBonus=0;
+let _meta={coins:0,upgrades:{}}; let _shopIdx=0;
+function anyAction(){return Pointer.justDown||Object.keys(Keys.pressed).length>0;}
+function loadMeta(){try{const s=localStorage.getItem(_META_KEY);_meta=s?JSON.parse(s):{coins:0,upgrades:{}};}catch(e){_meta={coins:0,upgrades:{}};}}
+function saveMeta(){try{localStorage.setItem(_META_KEY,JSON.stringify(_meta));}catch(e){}}
+function getUpgradeLevel(id){return(_meta.upgrades[id]||0);}
+function buyUpgrade(id){const u=UPGRADES.find(x=>x.id===id);if(!u)return false;let lv=getUpgradeLevel(id);if(lv>=u.maxLv)return false;const cost=u.cost[lv];if(_meta.coins<cost)return false;_meta.coins-=cost;_meta.upgrades[id]=(lv+1);saveMeta();return true;}
+function applyUpgrades(){_damageMultiplier=1+getUpgradeLevel('damage')*0.2;_goldBonus=getUpgradeLevel('gold')*25;gold=300+_goldBonus;lives=20+getUpgradeLevel('life')*3;}
+function _shopHit(px,py,x,y,w,h){return px>=x&&px<=x+w&&py>=y&&py<=y+h;}
+function updateGameover(dt){_gameoverTimer-=dt;if(_gameoverTimer<=0||anyAction()){_meta.coins+=_runCoins;saveMeta();_shopIdx=0;setState('shop');}}
+function updateShop(dt){if(!Pointer.justDown)return;const n=UPGRADES.length,cardW=Math.round(W*0.19),cardH=Math.round(H*0.32),gap=Math.round(W*0.02);const sy=Math.round(H*0.22),totalW=n*cardW+(n-1)*gap,sx=(W-totalW)/2;for(let i=0;i<n;i++){if(_shopHit(Pointer.x,Pointer.y,sx+i*(cardW+gap),sy,cardW,cardH)){_shopIdx=i;if(buyUpgrade(UPGRADES[i].id)){sfx.play(660,0.12,'sine',0.1);applyUpgrades();}else sfx.play(110,0.06,'sawtooth',0.08);return;}}let btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+32;if(_shopHit(Pointer.x,Pointer.y,btnX,btnY,btnW,btnH)){sfx.play(440,0.08,'square',0.1);startGame();setState('playing');}}
+function renderShop(){ctx.fillStyle=PALETTE.shopBg;ctx.fillRect(0,0,W,H);ctx.textAlign='center';ctx.fillStyle='#fff';ctx.font='bold 22px system-ui,sans-serif';ctx.fillText('UPGRADE SHOP',W/2,Math.round(H*0.12));ctx.fillStyle='#ffdd00';ctx.font='bold 15px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,Math.round(H*0.19));const n=UPGRADES.length,cardW=Math.round(W*0.19),cardH=Math.round(H*0.32),gap=Math.round(W*0.02);const sy=Math.round(H*0.22),totalW=n*cardW+(n-1)*gap,sx=(W-totalW)/2;for(let i=0;i<n;i++){const u=UPGRADES[i],lv=getUpgradeLevel(u.id),cx=sx+i*(cardW+gap);ctx.fillStyle=_shopIdx===i?PALETTE.shopSel:PALETTE.shopCard;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(cx,sy,cardW,cardH,8);else ctx.rect(cx,sy,cardW,cardH);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 11px system-ui,sans-serif';ctx.fillText(u.label,cx+cardW/2,sy+22);ctx.fillStyle='#aaa';ctx.font='10px system-ui,sans-serif';ctx.fillText(u.desc,cx+cardW/2,sy+38);ctx.fillStyle='#ffdd00';for(let d=0;d<u.maxLv;d++){ctx.fillStyle=d<lv?'#ffdd00':'#444';ctx.beginPath();ctx.arc(cx+cardW/2+(d-u.maxLv/2+0.5)*14,sy+cardH-36,5,0,Math.PI*2);ctx.fill();}if(lv<u.maxLv){ctx.fillStyle='#ffdd00';ctx.font='bold 12px system-ui,sans-serif';ctx.fillText(`${u.cost[lv]}🪙`,cx+cardW/2,sy+cardH-14);}else{ctx.fillStyle='#0f0';ctx.font='bold 11px system-ui,sans-serif';ctx.fillText('MAX',cx+cardW/2,sy+cardH-14);}}const btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+32;ctx.fillStyle='#2a6a2a';ctx.beginPath();if(ctx.roundRect)ctx.roundRect(btnX,btnY,btnW,btnH,8);else ctx.rect(btnX,btnY,btnW,btnH);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 16px system-ui,sans-serif';ctx.fillText('PLAY',W/2,btnY+27);ctx.textAlign='left';}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME INIT
+// ══════════════════════════════════════════════════════════════════
+loadMeta();
+function startGame() {
+  loadMeta(); _runCoins=0; _gameoverTimer=1.5;
+  buildMap();
+  towers.length=0; enemyPool.clear(); projPool.clear(); Popups.length=0;
+  gold=300; lives=20; waveIndex=0; score=0;
+  spawner.active=false; spawner.groups=[]; spawner.groupIdx=0; spawner.spawnCount=0; spawner.spawnTimer=0;
+  selectedTowerType='ARCHER_POST';
+  selectedTower = null;
+
+  // Reset environmental features
+  ancientGoldGeyser.currentCycleTime = 0;
+  ancientGoldGeyser.isJetting = false;
+  overloadCrystal.currentCooldown = 0;
+  overloadCrystal.isActive = false;
+  runicForge.isCursed = false;
+  runicForge.cursedBoss = null;
+  runicForge.curseTimer = 0;
+
+  applyUpgrades();
+  startWave(0);
+}
+
+function startWave(idx) {
+  if (idx>=WAVE_STRUCTURE.length) { setState('victory'); return; }
+  waveIndex=idx;
+  spawner.groups=[...WAVE_STRUCTURE[idx].enemies.map(g=>({...g}))];
+  spawner.groupIdx=0; spawner.spawnCount=0; spawner.spawnTimer=WAVE_STRUCTURE[idx].delay;
+  spawner.active=true;
+}
+
+function spawnEnemy(type, x_override = null, y_override = null) {
+  let def=ENEMY_TYPES[type]||ENEMY_TYPES.SPRINTER_GOBLIN;
+  enemyPool.get(e=>{
+    e.type=type; e.color=def.color; e.size=(def.size||14) * (def.sizeFactor || 1);
+    e.hp=e.maxHp=def.hp + Math.floor(waveIndex*def.hp*0.15);
+    e.speed=e.baseSpeed=def.speed; e.reward=def.reward; e.armor=def.armor||0;
+    e.evasion=def.evasion||0;
+    e.pathIdx=0; e.pathProgress=0;
+    e.x=x_override !== null ? x_override : PATH[0].x;
+    e.y=y_override !== null ? y_override : PATH[0].y;
+    e.slowTimer=0; e.slowFactor=0; e.flashTimer=0; e.angle=0;
+    e.attackTimer=0; e.state='PATROL'; e.targetId=null;
+    e.projectileSpeed=def.projectileSpeed||0;
+    e.isBoss=def.isBoss;
+    e.sizeFactor = def.sizeFactor || 1;
+    e.summonCooldown = def.attackCooldown; // for summoners
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TOWER TARGETING — DO NOT MODIFY
+// ══════════════════════════════════════════════════════════════════
+function getTarget(tower) {
+  let best=null, bestProg=-1;
+  enemyPool.active.forEach(e=>{
+    if(!e.alive) return;
+    let d=dist(tower.x,tower.y,e.x,e.y);
+    if(d<=tower.range && e.pathProgress>bestProg) { best=e; bestProg=e.pathProgress; }
+  });
+  return best;
+}
+
+function towerFire(tower, dt) {
+  const def = TOWER_TYPES[tower.type]; if (!def) return;
+
+  tower.fireTimer=Math.max(0,tower.fireTimer-dt);
+  if(tower.fireTimer>0) return;
+  let actualDamage = (def[`tier${tower.level}`] || def.base).damage * _damageMultiplier;
+  let actualFireRate = (def[`tier${tower.level}`] || def.base).fireRate;
+
+  // Apply Aura Beacon buffs
+  towers.forEach(otherTower => {
+    if (otherTower.type === 'AURA_BEACON' && otherTower !== tower) {
+      let auraDef = TOWER_TYPES.AURA_BEACON[`tier${otherTower.level}`] || TOWER_TYPES.AURA_BEACON.base;
+      if (dist(tower.x, tower.y, otherTower.x, otherTower.y) <= auraDef.buffRange) {
+        actualDamage *= (1 + auraDef.buffDamage);
+        actualFireRate *= (1 - auraDef.buffFireRate);
+      }
+    }
+  });
+  // Apply Overload Crystal buff
+  if (overloadCrystal && overloadCrystal.isActive) {
+    actualDamage *= (1 + overloadCrystal.buffDamage);
+    actualFireRate *= (1 - overloadCrystal.buffFireRate);
+  }
+
+  let target=getTarget(tower);
+  if(!target) return;
+  tower.fireTimer=1/actualFireRate;
+
+  if(tower.type==='ARCHER_POST') {
+    // Instant hitscan
+    if (Math.random() < target.evasion) {
+      spawnPopup(target.x, target.y - target.size, 'MISS!', '#fff', 10);
+      sfx.play(110, 0.05, 'triangle', 0.05);
+      return;
+    }
+    let effectiveArmor = target.armor;
+    let finalDamage = actualDamage * (1 - effectiveArmor);
+    finalDamage = Math.max(1, finalDamage);
+    target.hp-=finalDamage; target.flashTimer=0.07;
+    spawnParticles(target.x,target.y,5,{color:def.color,speed:50,life:0.25,gravity:60});
+    spawnPopup(target.x, target.y - target.size, Math.floor(finalDamage), '#fff', 12);
+    sfx.play(440,0.05,'square',0.05);
+    if(target.hp<=0) killEnemy(target);
+    return;
+  }
+  
+  // Projectile-based towers
+  let dx=target.x-tower.x, dy=target.y-tower.y, len=Math.hypot(dx,dy)||1;
+  projPool.get(p=>{
+    p.x=tower.x; p.y=tower.y;
+    p.vx=dx/len*((def[`tier${tower.level}`] || def.base).projectileSpeed||200); p.vy=dy/len*((def[`tier${tower.level}`] || def.base).projectileSpeed||200);
+    p.damage=actualDamage; p.splashRadius=(def[`tier${tower.level}`] || def.base).splashRadius||0;
+    p.armorPierce=(def[`tier${tower.level}`] || def.base).armorPierce||0;
+    p.slowFactor=(def[`tier${tower.level}`] || def.base).slowFactor||0;
+    p.color=def.color; p.type=tower.type; p.life=3;
+    p.targetId=target; // soft reference for homing
+  });
+  sfx.play(tower.type==='BLAST_CANNON'?180:tower.type==='ARCANE_SPIRE'?660:440, 0.05, 'square', 0.05);
+}
+
+function killEnemy(e) {
+  let goldReward = e.reward;
+  let bonusText = '';
+
+  // Geyser bonus
+  if (ancientGoldGeyser.isJetting && dist(e.x, e.y, ancientGoldGeyser.x, ancientGoldGeyser.y) < ancientGoldGeyser.radius) {
+    goldReward *= (1 + ancientGoldGeyser.goldBonus);
+    bonusText += ' +10% BONUS OR';
+    sfx.play(440, 0.1, 'triangle', 0.1); // Gold bonus sound
+  }
+
+  // Runic Forge bonus for Bosses
+  if (e.isBoss && runicForge.isCursed && runicForge.cursedBoss === e) {
+    goldReward += runicForge.goldBonus;
+    bonusText += ` +${runicForge.goldBonus} OR`;
+    // Distribute EXP to towers
+    towers.forEach(t => t.exp = (t.exp || 0) + runicForge.expBonus / towers.length);
+    sfx.play(880, 0.1, 'sine', 0.1); // Reward ding
+    runicForge.isCursed = false; // Curse ends when boss dies
+    runicForge.cursedBoss = null;
+    spawnPopup(e.x, e.y - e.size - 20, "MALÉDICTION RUNIQUE : +EXP!", '#FFD700', 14);
+  }
+
+  gold+=Math.floor(goldReward); score+=e.reward*10;
+  spawnParticles(e.x,e.y,10,{color:e.color,speed:65,life:0.4,gravity:80});
+  spawnPopup(e.x,e.y-10,`+${Math.floor(goldReward)}g` + bonusText,PALETTE.gold,11);
+  if (e.isBoss) {
+    triggerShake(8, 0.2); // Boss death screen shake
+    sfx.play(110, 0.3, 'sine', 0.2); // Boss death sound
+  } else {
+    sfx.play(220, 0.08, 'square', 0.05); // Normal enemy death sound
+  }
+  e.alive=false;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// UPDATE
+// ══════════════════════════════════════════════════════════════════
+function updatePlaying(dt) {
+  if (lives <= 0 && gameState === 'playing') {
+    saveHiScore(score); _runCoins=Math.floor(score/200); _gameoverTimer=1.5; setState('gameover');
+  }
+
+  // ── Environmental Interactions ────────────────────────────────
+  // Ancient Gold Geyser
+  ancientGoldGeyser.currentCycleTime += dt;
+  if (ancientGoldGeyser.isJetting) {
+    if (ancientGoldGeyser.currentCycleTime >= ancientGoldGeyser.activeCycle) {
+      ancientGoldGeyser.isJetting = false;
+      ancientGoldGeyser.currentCycleTime = 0;
+    }
+  } else {
+    if (ancientGoldGeyser.currentCycleTime >= ancientGoldGeyser.idleCycle) {
+      ancientGoldGeyser.isJetting = true;
+      ancientGoldGeyser.currentCycleTime = 0;
+      sfx.play(800, 0.5, 'sine', 0.05); // Geyser active sound
+    }
+  }
+  if (ancientGoldGeyser.isJetting) {
+    enemyPool.active.forEach(e => {
+      if (!e.alive) return;
+      if (dist(e.x, e.y, ancientGoldGeyser.x, ancientGoldGeyser.y) < ancientGoldGeyser.radius) {
+        let finalDamage = ancientGoldGeyser.damagePerSecond * dt;
+        e.hp -= finalDamage;
+        e.flashTimer = 0.07;
+        e.slowTimer = ancientGoldGeyser.slowDuration;
+        e.slowFactor = ancientGoldGeyser.slowFactor;
+        spawnParticles(e.x, e.y, 1, { color: '#FFD700', speed: 10, life: 0.1, gravity: 0 });
+        if (e.hp <= 0) killEnemy(e);
+      }
+    });
+  }
+
+  // Overload Crystal
+  if (overloadCrystal.isActive) {
+    overloadCrystal.currentCooldown -= dt;
+    if (overloadCrystal.currentCooldown <= 0) {
+      overloadCrystal.isActive = false;
+    }
+  } else {
+    overloadCrystal.currentCooldown = Math.max(0, overloadCrystal.currentCooldown - dt);
+  }
+
+  // Runic Forge
+  if (!runicForge.isCursed) {
+    enemyPool.active.forEach(e => {
+      if (e.isBoss && dist(e.x, e.y, runicForge.x, runicForge.y) < runicForge.radius) {
+        runicForge.isCursed = true;
+        runicForge.cursedBoss = e;
+        runicForge.curseTimer = runicForge.curseDuration;
+        e.armor = Math.max(0, e.armor - runicForge.armorReduction);
+        spawnPopup(e.x, e.y - e.size - 20, 'MALÉDICTION RUNIQUE ACTIVÉE !', '#FF4500', 14);
+        sfx.play(200, 0.2, 'sine', 0.1); // Forge bell sound
+      }
+    });
+  } else if (runicForge.cursedBoss && runicForge.cursedBoss.alive) {
+    runicForge.curseTimer -= dt;
+    if (runicForge.curseTimer <= 0) {
+      // Curse ends naturally
+      runicForge.cursedBoss.armor = ENEMY_TYPES[runicForge.cursedBoss.type].armor; // Reset armor
+      runicForge.isCursed = false;
+      runicForge.cursedBoss = null;
+    } else {
+      runicForge.cursedBoss.hp -= runicForge.fireDamagePerSecond * dt;
+      runicForge.cursedBoss.flashTimer = 0.07;
+      spawnParticles(runicForge.cursedBoss.x, runicForge.cursedBoss.y, 1, { color: '#FF4500', speed: 10, life: 0.1, gravity: 0 }); // Fire particles
+      if (runicForge.cursedBoss.hp <= 0) killEnemy(runicForge.cursedBoss);
+    }
+  }
+
+
+  // ── Spawner ───────────────────────────────────────────────────
+  if (spawner.active) {
+    spawner.spawnTimer-=dt;
+    if(spawner.spawnTimer<=0&&spawner.groupIdx<spawner.groups.length) {
+      let group=spawner.groups[spawner.groupIdx];
+      if(spawner.spawnCount<group.count) {
+        if (group.type === 'INVOCATEUR_TENEBREUX') {
+          // Summoners don't attack directly, they summon
+          spawnEnemy(group.type);
+        } else {
+          spawnEnemy(group.type);
+        }
+        spawner.spawnCount++;
+        spawner.spawnTimer=group.interval??WAVE_STRUCTURE[waveIndex].interval;
+      } else {
+        spawner.groupIdx++; spawner.spawnCount=0; spawner.spawnTimer=0.5;
+      }
+    }
+    if(spawner.groupIdx>=spawner.groups.length&&enemyPool.active.length===0) {
+      spawner.active=false;
+      gold+=50; // Per wave bonus
+      spawnPopup(W/2,H/2-40,`WAVE CLEAR! +50g`,PALETTE.accent,16);
+      setState('waveclear');
+    }
+  }
+
+  // ── Enemy movement (path-following) ──────────────────────────
+  enemyPool.update(e=>{
+    if(!e.alive) return false;
+    e.flashTimer=Math.max(0,e.flashTimer-dt);
+    e.slowTimer=Math.max(0,e.slowTimer-dt);
+    let spd=e.slowTimer>0?e.speed*(1-e.slowFactor):e.speed;
+
+    let def = ENEMY_TYPES[e.type]; // Declare def here for enemy update scope
+
+    // Summoner logic
+    if (def.summoner) {
+        e.attackTimer = Math.max(0, e.attackTimer - dt);
+        if (e.state === 'PATROL') {
+            if (e.attackTimer <= 0) {
+                e.state = 'CASTING';
+                e.attackTimer = 2.0; // Casting duration
+            }
+        } else if (e.state === 'CASTING') {
+            if (e.attackTimer <= 0) {
+                // Summon 2 Petits Diablotins
+                spawnEnemy('PETIT_DIABLOTIN', e.x + 32, e.y);
+                spawnEnemy('PETIT_DIABLOTIN', e.x - 32, e.y);
+                sfx.play(550, 0.1, 'triangle', 0.1); // Summon sound
+                e.state = 'COOLDOWN';
+                e.attackTimer = 10.0; // Cooldown duration
+            }
+        } else if (e.state === 'COOLDOWN') {
+            if (e.attackTimer <= 0) {
+                e.state = 'PATROL';
+            }
+        }
+    }
+
+    // Normal enemy attack logic
+    if (def.melee && e.state === 'PATROL') {
+        let targetTower = null;
+        towers.forEach(t => {
+            if (dist(e.x, e.y, t.x, t.y) < def.attackRange) {
+                targetTower = t;
+            }
+        });
+        if (targetTower) {
+            e.state = 'ATTACK';
+            e.targetId = targetTower;
+            e.attackTimer = def.attackCooldown;
+        }
+    } else if (def.melee && e.state === 'ATTACK') {
+        if (!e.targetId || dist(e.x, e.y, e.targetId.x, e.targetId.y) > def.attackRange) {
+            e.state = 'PATROL';
+            e.targetId = null;
+        } else {
+            e.attackTimer = Math.max(0, e.attackTimer - dt);
+            if (e.attackTimer <= 0) {
+                // Deal damage to tower (simplified: no tower HP yet)
+                spawnPopup(e.targetId.x, e.targetId.y, `-${def.attackDamage}`, '#f00', 12);
+                sfx.play(100, 0.1, 'square', 0.1); // Enemy attack sound
+                e.attackTimer = def.attackCooldown;
+            }
+        }
+    }
+
+    if (def.melee || def.summoner || e.state === 'PATROL') { // Only move if not actively attacking/casting
+        // Walk toward current waypoint
+        if(e.pathIdx>=PATH.length){lives--;spawnPopup(W/2,H/2,'ENEMY ESCAPED!','#f44',16);sfx.play(110,0.2,'sawtooth',0.14);if(lives<=0){saveHiScore(score);_runCoins=Math.floor(score/200);_gameoverTimer=1.5;setState('gameover');}return false;}
+        let wp=PATH[e.pathIdx];
+        let dx=wp.x-e.x,dy=wp.y-e.y,d=Math.hypot(dx,dy);
+        if(d<spd*dt+2){e.x=wp.x;e.y=wp.y;e.pathIdx++;e.pathProgress=e.pathIdx;}
+        else{const step=spd*dt/d;e.x+=dx*step;e.y+=dy*step;e.pathProgress=e.pathIdx+(1-d/TILE);e.angle=Math.atan2(dy,dx);}
+    }
+    return e.y<H+60;
+  });
+
+  // ── Projectiles ───────────────────────────────────────────────
+  projPool.update(p=>{
+    p.life-=dt;
+    if(p.life<=0) return false;
+    // Homing (gentle)
+    if(p.targetId&&p.targetId.alive) {
+      let dx=p.targetId.x-p.x,dy=p.targetId.y-p.y,len=Math.hypot(dx,dy)||1;
+      let speed=Math.hypot(p.vx,p.vy);
+      p.vx=lerp(p.vx,dx/len*speed,dt*5);
+      p.vy=lerp(p.vy,dy/len*speed,dt*5);
+    }
+    p.x+=p.vx*dt; p.y+=p.vy*dt;
+    // Hit check
+    let hit=false;
+    enemyPool.active.forEach(e=>{
+      if(!e.alive||hit) return;
+      if(dist(p.x,p.y,e.x,e.y)<e.size+5){
+        hit=true;
+        if (Math.random() < e.evasion) {
+          spawnPopup(e.x, e.y - e.size, 'MISS!', '#fff', 10);
+          sfx.play(110, 0.05, 'triangle', 0.05);
+          return;
+        }
+
+        if(p.splashRadius>0){
+          enemyPool.active.forEach(e2=>{
+            if(!e2.alive)return;
+            if(dist(p.x,p.y,e2.x,e2.y)<p.splashRadius){
+              // Damage falloff for splash
+              let splashDist = dist(p.x, p.y, e2.x, e2.y);
+              let splashDamage = p.damage;
+              if (splashDist > 0) {
+                  splashDamage = p.damage * (1 - (splashDist / p.splashRadius) * 0.5); // 50% damage at edge
+              }
+              let effectiveArmor = e2.armor * (1 - p.armorPierce);
+              let d=Math.max(1, splashDamage * (1 - effectiveArmor));
+              e2.hp-=d; e2.flashTimer=0.07;
+              spawnPopup(e2.x, e2.y - e2.size, Math.floor(d), '#fff', 12);
+              if(e2.hp<=0)killEnemy(e2);
+            }
+          });
+          spawnParticles(p.x,p.y,14,{color:'#f80',speed:70,life:0.5,gravity:80});
+        } else {
+          let effectiveArmor = e.armor * (1 - p.armorPierce);
+          let d=Math.max(1, p.damage * (1 - effectiveArmor));
+          e.hp-=d; e.flashTimer=0.07;
+          spawnPopup(e.x, e.y - e.size, Math.floor(d), '#fff', 12);
+          if(p.slowFactor>0){e.slowTimer=2.5;e.slowFactor=p.slowFactor;}
+          if(e.hp<=0) killEnemy(e);
+        }
+        spawnParticles(p.x,p.y,5,{color:p.color,speed:50,life:0.25,gravity:60});
+      }
+    });
+    return !hit&&p.x>-20&&p.x<W+20&&p.y>-20&&p.y<H+20;
+  });
+
+  // ── Towers fire ───────────────────────────────────────────────
+  towers.forEach(t=>{
+    if (t.type !== 'AURA_BEACON') { // Aura Beacon doesn't fire
+        towerFire(t,dt);
+    }
+  });
+
+  // ── Player input — upgrade/sell UI (must run before tower placement) ─
+  if (selectedTower && Pointer.justDown) {
+    let t = selectedTower;
+    const _def = TOWER_TYPES[t.type];
+    if (_def) {
+      let _uiX = t.x + TILE, _uiY = t.y - TILE, _uiW = 100, _uiH = 80;
+      let _currentTier = _def[`tier${t.level}`] || _def.base;
+      let _nextTier = _def[`tier${t.level + 1}`];
+      let _hit = Pointer.x>_uiX && Pointer.x<_uiX+_uiW && Pointer.y>_uiY && Pointer.y<_uiY+_uiH;
+      if (_hit) {
+        // Upgrade button
+        if (_nextTier && Pointer.x>_uiX+5 && Pointer.x<_uiX+_uiW-5 && Pointer.y>_uiY+25 && Pointer.y<_uiY+45) {
+          let _cost = _currentTier.upgradeCost;
+          if (gold >= _cost) {
+            gold -= _cost; t.level++;
+            t.range = _nextTier.range; t.fireRate = _nextTier.fireRate;
+            sfx.play(770, 0.1, 'sine', 0.1);
+            spawnParticles(t.x,t.y,30,{color:'#FFD700',speed:80,life:0.4,gravity:0});
+          } else {
+            spawnPopup(Pointer.x,Pointer.y,'Not enough gold!','#f44',12);
+            sfx.play(110,0.06,'sawtooth',0.08);
+          }
+          selectedTower = null;
+        }
+        // Sell button
+        else if (Pointer.x>_uiX+5 && Pointer.x<_uiX+_uiW-5 && Pointer.y>_uiY+50 && Pointer.y<_uiY+70) {
+          let _sell = Math.floor(_def.base.cost * 0.7);
+          gold += _sell;
+          mapGrid[t.r][t.c].tower = null;
+          towers.splice(towers.indexOf(t), 1);
+          sfx.play(330,0.1,'sawtooth',0.1);
+          spawnParticles(t.x,t.y,20,{color:'#FFD700',speed:80,life:0.4,gravity:0});
+          selectedTower = null;
+        }
+        // Click inside panel but not on a button → keep open
+      } else {
+        selectedTower = null; // click outside panel closes it
+      }
+    }
+  }
+
+  // ── Player input — tower placement ────────────────────────────
+  const {r,c}=pixelToTile(Pointer.x,Pointer.y);
+  hoveredCell={r,c};
+
+  if (!selectedTower && Pointer.justDown && Pointer.y<GRID_ROWS*TILE) {
+    if (inMap(r,c)) {
+      if (canBuild(r,c)) {
+        let def=TOWER_TYPES[selectedTowerType].base;
+        if(gold>=def.cost) {
+          gold-=def.cost;
+          const {x,y}=tileCenter(r,c);
+          const tower={x,y,r,c,type:selectedTowerType,range:def.range,fireTimer:0,level:0}; // Level 0 for base
+          towers.push(tower);
+          mapGrid[r][c].tower=tower;
+          sfx.play(660,0.08,'square',0.09);
+          spawnParticles(x,y,30,{color:'#FFD700',speed:80,life:0.4,gravity:0}); // Gold particles for placement
+        } else {
+          spawnPopup(Pointer.x,Pointer.y,'Not enough gold!','#f44',12);
+          sfx.play(110,0.06,'sawtooth',0.08); // Not enough gold sound
+        }
+      } else if (mapGrid[r][c].tower) {
+        selectedTower = mapGrid[r][c].tower;
+      } else if (dist(Pointer.x, Pointer.y, overloadCrystal.x, overloadCrystal.y) < TILE / 2) {
+        // Activate Overload Crystal
+        if (overloadCrystal.currentCooldown <= 0) {
+          if (gold >= overloadCrystal.activationCost) {
+            gold -= overloadCrystal.activationCost;
+            overloadCrystal.isActive = true;
+            overloadCrystal.currentCooldown = overloadCrystal.cooldown;
+            sfx.play(120, 0.2, 'sine', 0.1); // Crystal activation sound
+            spawnParticles(overloadCrystal.x, overloadCrystal.y, 50, { color: '#8A2BE2', speed: 100, life: 0.5 });
+          } else {
+            spawnPopup(Pointer.x, Pointer.y, '50 OR', '#f00', 12);
+            sfx.play(1000, 0.05, 'square', 0.08); // No gold for crystal
+          }
+        }
+      }
+    }
+  }
+
+  // Tower type selection shortcuts
+  if(keyPressed('Digit1')) selectedTowerType='ARCHER_POST';
+  if(keyPressed('Digit2')) selectedTowerType='ARCANE_SPIRE';
+  if(keyPressed('Digit3')) selectedTowerType='BLAST_CANNON';
+  if(keyPressed('Digit4')) selectedTowerType='AURA_BEACON';
+}
+
+let waveClearTimer=0;
+function updateWaveClear(dt) {
+  waveClearTimer+=dt;
+  if(waveClearTimer>=3.0||Pointer.justDown) {
+    waveClearTimer=0;
+    startWave(waveIndex+1);
+    setState('playing');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════════════════
+function renderMenu() {
+  // Dark background with subtle grid
+  ctx.fillStyle='#0d1a0d'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='rgba(30,80,30,0.25)'; ctx.lineWidth=1;
+  for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+  ctx.textAlign='center';
+  // Title with glow
+  ctx.shadowColor='#ffdd00'; ctx.shadowBlur=18;
+  ctx.fillStyle='#ffdd00'; ctx.font='bold 32px system-ui,sans-serif';
+  ctx.fillText(GAME_TITLE, W/2, H*0.30);
+  ctx.shadowBlur=0;
+
+  ctx.fillStyle='#7aaa7a'; ctx.font='11px system-ui,sans-serif';
+  ctx.fillText('Build towers on green tiles to stop the enemy waves',W/2,H*0.43);
+  ctx.fillText('Keys [1][2][3][4] to select tower type — click a tower to upgrade',W/2,H*0.50);
+
+  if(_meta.coins>0){
+    ctx.fillStyle='#ffcc00'; ctx.font='bold 13px system-ui,sans-serif';
+    ctx.fillText(`🪙 ${_meta.coins} coins available in shop`,W/2,H*0.58);
+  }
+
+  // Start button
+  let bw=160,bh=44,bx=W/2-bw/2,by=H*0.65;
+  ctx.fillStyle='#1a6a1a'; ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,8); ctx.fill();
+  ctx.strokeStyle='#4eff4e'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,8); ctx.stroke();
+  ctx.fillStyle='#fff'; ctx.font='bold 18px system-ui,sans-serif';
+  ctx.fillText('TAP TO START', W/2, by+28);
+
+  ctx.textAlign='left';
+}
+
+function renderGameoverOverlay(){ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(0,0,W,H);ctx.textAlign='center';ctx.fillStyle='#f44';ctx.font='bold 34px system-ui,sans-serif';ctx.fillText('DEFEAT',W/2,H*0.35);ctx.fillStyle='#fff';ctx.font='bold 18px system-ui,sans-serif';ctx.fillText(`SCORE: ${score}`,W/2,H*0.45);if(_runCoins>0){ctx.fillStyle='#ffdd00';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText(`🪙 ${_runCoins} coins earned`,W/2,H*0.54);}ctx.fillStyle='#aaa';ctx.font='13px system-ui,sans-serif';ctx.fillText('Waiting for shop...',W/2,H*0.63);ctx.textAlign='left';}
+function renderVictoryOverlay(){ctx.fillStyle='rgba(0,0,0,0.65)';ctx.fillRect(0,0,W,H);drawText('VICTORY!',W/2,H*0.35,'#ff0',34,'center');drawText(`SCORE: ${score}`,W/2,H*0.47,'#fff',18,'center');drawText('TAP to play again',W/2,H*0.60,'#aaa',13,'center');}
+
+function renderPlaying() {
+
+  ctx.fillStyle=PALETTE.bg; ctx.fillRect(0,0,W,H);
+
+  // ── Grid tiles ────────────────────────────────────────────────
+  for(let r=0;r<GRID_ROWS;r++) for(let c=0;c<GRID_COLS;c++) {
+    let cell=mapGrid[r][c];
+    let x=GRID_X+c*TILE, y=GRID_Y+r*TILE;
+    if(cell.type===1) {
+      // Path: sandy dirt
+      ctx.fillStyle=(r+c)%2===0?'#b5813a':'#aa7832';
+      ctx.fillRect(x,y,TILE,TILE);
+      // worn stones suggestion
+      ctx.fillStyle='rgba(80,50,10,0.12)';
+      ctx.fillRect(x+2,y+2,TILE-4,TILE-4);
+      ctx.strokeStyle='rgba(60,35,5,0.35)'; ctx.lineWidth=0.5; ctx.strokeRect(x,y,TILE,TILE);
+    } else {
+      // Grass: alternating shades
+      ctx.fillStyle=(r+c)%2===0?'#2d6e30':'#286330';
+      ctx.fillRect(x,y,TILE,TILE);
+      if(cell.tower){
+        // base plate for placed tower
+        ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fillRect(x+3,y+3,TILE-6,TILE-6);
+      }
+      ctx.strokeStyle='rgba(0,0,0,0.15)'; ctx.lineWidth=0.5; ctx.strokeRect(x,y,TILE,TILE);
+    }
+  }
+
+  // ── Environmental Features ────────────────────────────────────
+  // Ancient Gold Geyser
+  if (ancientGoldGeyser) {
+    ctx.fillStyle = ancientGoldGeyser.isJetting ? 'rgba(255,215,0,0.4)' : 'rgba(255,215,0,0.1)';
+    ctx.beginPath();
+    ctx.arc(ancientGoldGeyser.x, ancientGoldGeyser.y, ancientGoldGeyser.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = ancientGoldGeyser.isJetting ? 'rgba(255,215,0,0.8)' : 'rgba(255,215,0,0.4)';
+    ctx.beginPath();
+    ctx.arc(ancientGoldGeyser.x, ancientGoldGeyser.y, TILE / 4, 0, Math.PI * 2);
+    ctx.fill();
+    if (ancientGoldGeyser.isJetting) {
+      spawnParticles(ancientGoldGeyser.x + randFloat(-5, 5), ancientGoldGeyser.y + randFloat(-5, 5), 1, { color: '#FFD700', speed: 20, life: 0.2, gravity: -50, spread: Math.PI / 4, angle: -Math.PI / 2 });
+    }
+  }
+
+  // Overload Crystal
+  if (overloadCrystal) {
+    ctx.fillStyle = overloadCrystal.isActive ? 'rgba(138,43,226,0.6)' : 'rgba(75,0,130,0.4)';
+    ctx.beginPath();
+    ctx.arc(overloadCrystal.x, overloadCrystal.y, TILE / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = overloadCrystal.isActive ? 'rgba(255,255,255,0.8)' : 'rgba(138,43,226,0.8)';
+    ctx.beginPath();
+    ctx.arc(overloadCrystal.x, overloadCrystal.y, TILE / 4, 0, Math.PI * 2);
+    ctx.fill();
+    if (overloadCrystal.currentCooldown > 0 && !overloadCrystal.isActive) {
+      drawText(`CD: ${Math.ceil(overloadCrystal.currentCooldown)}s`, overloadCrystal.x, overloadCrystal.y - TILE, '#fff', 10, 'center');
+    }
+  }
+
+  // Runic Forge
+  if (runicForge) {
+    ctx.fillStyle = runicForge.isCursed ? 'rgba(255,69,0,0.6)' : 'rgba(139,69,19,0.4)';
+    ctx.beginPath();
+    ctx.rect(runicForge.x - TILE / 2, runicForge.y - TILE / 2, TILE, TILE);
+    ctx.fill();
+    ctx.fillStyle = runicForge.isCursed ? 'rgba(255,165,0,0.8)' : 'rgba(139,69,19,0.8)';
+    ctx.beginPath();
+    ctx.arc(runicForge.x, runicForge.y, TILE / 4, 0, Math.PI * 2);
+    ctx.fill();
+    if (runicForge.isCursed) {
+      spawnParticles(runicForge.x + randFloat(-5, 5), runicForge.y + randFloat(-5, 5), 1, { color: '#FF4500', speed: 10, life: 0.2, gravity: -20, spread: Math.PI / 4, angle: -Math.PI / 2 });
+    }
+  }
+
+  // ── Hover highlight ───────────────────────────────────────────
+  const {r:hr,c:hc}=hoveredCell;
+  const def = TOWER_TYPES[selectedTowerType];
+  if(inMap(hr,hc)&&canBuild(hr,hc) && def) {
+    ctx.fillStyle=gold>=def.base.cost?'rgba(255,255,255,0.15)':'rgba(255,0,0,0.12)';
+    ctx.fillRect(GRID_X+hc*TILE, GRID_Y+hr*TILE, TILE,TILE);
+    // Range preview
+    const {x:cx,y:cy}=tileCenter(hr,hc);
+    ctx.strokeStyle=gold>=def.base.cost?'rgba(255,255,255,0.25)':'rgba(255,0,0,0.2)';
+    ctx.lineWidth=1; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.arc(cx,cy,def.base.range,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // ── Path arrows (visual guide) ────────────────────────────────
+  ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=2; ctx.setLineDash([6,8]);
+  ctx.beginPath(); PATH.forEach((p,i)=>i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // ── Towers ────────────────────────────────────────────────────
+  towers.forEach(t=>{
+    const def = TOWER_TYPES[t.type]; if (!def) return;
+    let tierDef = def[`tier${t.level}`] || def.base;
+    let sel = (t === selectedTower);
+    let R = TILE/2 - 3;
+
+    // selection ring
+    if (sel) {
+      ctx.strokeStyle='#ffe066'; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.arc(t.x,t.y,R+4,0,Math.PI*2); ctx.stroke();
+    }
+
+    if (t.type === 'ARCHER_POST') {
+      // Wooden base
+      ctx.fillStyle='#5a3010';
+      ctx.beginPath(); ctx.arc(t.x,t.y,R,0,Math.PI*2); ctx.fill();
+      // Post beam
+      ctx.fillStyle='#8B5020'; ctx.fillRect(t.x-3,t.y-R,6,R+2);
+      // Bow arms
+      ctx.strokeStyle='#c8822a'; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.arc(t.x-3,t.y-6,8,-Math.PI*0.7,Math.PI*0.7); ctx.stroke();
+      // Crosshair dot
+      ctx.fillStyle='#FFD700'; ctx.beginPath(); ctx.arc(t.x,t.y-R+5,2.5,0,Math.PI*2); ctx.fill();
+
+    } else if (t.type === 'ARCANE_SPIRE') {
+      // Base ring
+      ctx.fillStyle='#220040';
+      ctx.beginPath(); ctx.arc(t.x,t.y,R,0,Math.PI*2); ctx.fill();
+      // Spire body
+      ctx.fillStyle='#7b00cc';
+      ctx.beginPath(); ctx.moveTo(t.x,t.y-R); ctx.lineTo(t.x+8,t.y+8); ctx.lineTo(t.x-8,t.y+8); ctx.closePath(); ctx.fill();
+      // Magic glow
+      ctx.shadowColor='#aa44ff'; ctx.shadowBlur=10;
+      ctx.fillStyle='#cc88ff';
+      ctx.beginPath(); ctx.arc(t.x,t.y-R+3,4,0,Math.PI*2); ctx.fill();
+      ctx.shadowBlur=0;
+
+    } else if (t.type === 'BLAST_CANNON') {
+      // Base
+      ctx.fillStyle='#333';
+      ctx.beginPath(); ctx.arc(t.x,t.y,R,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#666'; ctx.lineWidth=2; ctx.stroke();
+      // Cannon body
+      ctx.fillStyle='#888';
+      ctx.fillRect(t.x-10,t.y-7,20,14);
+      ctx.fillStyle='#aaa';
+      ctx.fillRect(t.x-10,t.y-5,6,10); // muzzle block
+      // Barrel
+      ctx.fillStyle='#777'; ctx.fillRect(t.x+4,t.y-4,18,8);
+      ctx.fillStyle='#555'; ctx.fillRect(t.x+18,t.y-3,5,6);
+
+    } else if (t.type === 'AURA_BEACON') {
+      // Aura ring
+      ctx.globalAlpha=0.18;
+      ctx.strokeStyle='#FFD700'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.arc(t.x,t.y,tierDef.buffRange,0,Math.PI*2); ctx.stroke();
+      ctx.globalAlpha=1;
+      // Base
+      ctx.fillStyle='#443300';
+      ctx.beginPath(); ctx.arc(t.x,t.y,R,0,Math.PI*2); ctx.fill();
+      // Orb glow
+      ctx.shadowColor='#FFD700'; ctx.shadowBlur=14;
+      ctx.fillStyle='#FFD700';
+      ctx.beginPath(); ctx.arc(t.x,t.y,8,0,Math.PI*2); ctx.fill();
+      ctx.shadowBlur=0;
+      // Radiating lines
+      ctx.strokeStyle='#ffee88'; ctx.lineWidth=1.5;
+      for(let a=0;a<6;a++){
+        let ang=a*Math.PI/3;
+        ctx.beginPath(); ctx.moveTo(t.x+Math.cos(ang)*10,t.y+Math.sin(ang)*10);
+        ctx.lineTo(t.x+Math.cos(ang)*(R-2),t.y+Math.sin(ang)*(R-2)); ctx.stroke();
+      }
+    }
+
+    // Level stars
+    ctx.fillStyle='#ffe066';
+    for(let i=0;i<t.level;i++){
+      ctx.beginPath(); ctx.arc(t.x-6+i*6,t.y+R-2,2.5,0,Math.PI*2); ctx.fill();
+    }
+    if(t.level===0){
+      ctx.fillStyle='rgba(255,255,255,0.35)';
+      ctx.font='8px monospace'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+      ctx.fillText(`${def.base.cost}g`,t.x,t.y+R+10);
+      ctx.textBaseline='alphabetic';
+    }
+  });
+
+  // ── Enemies ───────────────────────────────────────────────────
+  enemyPool.active.forEach(e=>{
+    if(!e.alive) return;
+    let flash=e.flashTimer>0;
+    let slow=e.slowTimer>0;
+    let col = slow ? '#55aaff' : e.color;
+    ctx.globalAlpha = flash ? 0.35 : 1.0;
+
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(e.x+2,e.y+e.size-2,e.size*0.8,e.size*0.35,0,0,Math.PI*2); ctx.fill();
+
+    if (e.isBoss) {
+      ctx.shadowColor=col; ctx.shadowBlur=20;
+    }
+
+    // Body per type
+    if (e.type==='SPRINTER_GOBLIN') {
+      // Pointy forward triangle (fast)
+      ctx.fillStyle=col;
+      ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(e.angle+Math.PI/2);
+      ctx.beginPath(); ctx.moveTo(0,-e.size); ctx.lineTo(e.size*0.7,e.size*0.7); ctx.lineTo(-e.size*0.7,e.size*0.7); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,0.3)'; ctx.lineWidth=1; ctx.stroke();
+      // Eyes
+      ctx.fillStyle='#ff0'; ctx.beginPath(); ctx.arc(-4,0,2.5,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(4,0,2.5,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+
+    } else if (e.type==='MINEUR_CUIRASSE') {
+      // Hexagon — armored
+      ctx.fillStyle='#1a2a30';
+      ctx.beginPath();
+      for(let i=0;i<6;i++){let a=i*Math.PI/3-Math.PI/6;ctx.lineTo(e.x+Math.cos(a)*e.size,e.y+Math.sin(a)*e.size);}
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle=col;
+      ctx.beginPath();
+      for(let i=0;i<6;i++){let a=i*Math.PI/3-Math.PI/6;ctx.lineTo(e.x+Math.cos(a)*(e.size-4),e.y+Math.sin(a)*(e.size-4));}
+      ctx.closePath(); ctx.fill();
+      // Armor cross
+      ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(e.x-e.size*0.5,e.y); ctx.lineTo(e.x+e.size*0.5,e.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(e.x,e.y-e.size*0.5); ctx.lineTo(e.x,e.y+e.size*0.5); ctx.stroke();
+
+    } else if (e.type==='ARBALETRIER_SKELL') {
+      // Diamond shape
+      ctx.fillStyle=col;
+      ctx.beginPath(); ctx.moveTo(e.x,e.y-e.size); ctx.lineTo(e.x+e.size*0.7,e.y); ctx.lineTo(e.x,e.y+e.size); ctx.lineTo(e.x-e.size*0.7,e.y); ctx.closePath(); ctx.fill();
+      // Crossbow outline
+      ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(e.x-e.size*0.5,e.y-2); ctx.lineTo(e.x+e.size*0.5,e.y-2); ctx.stroke();
+
+    } else if (e.type==='INVOCATEUR_TENEBREUX') {
+      // Star/rune shape
+      ctx.fillStyle=col;
+      ctx.beginPath();
+      for(let i=0;i<8;i++){
+        let a=i*Math.PI/4, r=i%2===0?e.size:e.size*0.45;
+        i===0?ctx.moveTo(e.x+Math.cos(a)*r,e.y+Math.sin(a)*r):ctx.lineTo(e.x+Math.cos(a)*r,e.y+Math.sin(a)*r);
+      }
+      ctx.closePath(); ctx.fill();
+      ctx.shadowColor='#cc00cc'; ctx.shadowBlur=10;
+      ctx.strokeStyle='#dd66ff'; ctx.lineWidth=1; ctx.stroke();
+      ctx.shadowBlur=0;
+
+    } else if (e.type==='PETIT_DIABLOTIN') {
+      ctx.fillStyle=col;
+      ctx.beginPath(); ctx.arc(e.x,e.y,e.size,0,Math.PI*2); ctx.fill();
+      // Tiny horns
+      ctx.fillStyle='#ff6600';
+      ctx.beginPath(); ctx.moveTo(e.x-4,e.y-e.size+2); ctx.lineTo(e.x-2,e.y-e.size-4); ctx.lineTo(e.x,e.y-e.size+2); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(e.x,e.y-e.size+2); ctx.lineTo(e.x+2,e.y-e.size-4); ctx.lineTo(e.x+4,e.y-e.size+2); ctx.closePath(); ctx.fill();
+
+    } else {
+      // GOLEM or unknown — large circle
+      ctx.fillStyle='#111';
+      ctx.beginPath(); ctx.arc(e.x,e.y,e.size,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=col;
+      ctx.beginPath(); ctx.arc(e.x,e.y,e.size-4,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.lineWidth=2; ctx.stroke();
+    }
+
+    ctx.shadowBlur=0; ctx.globalAlpha=1;
+
+    // HP bar (green→yellow→red)
+    let hpRatio=clamp(e.hp/e.maxHp,0,1);
+    let hpCol=hpRatio>0.6?'#3ef040':hpRatio>0.3?'#f0d040':'#f03040';
+    drawBar(e.x-e.size,e.y-e.size-7,e.size*2,3,e.hp,e.maxHp,hpCol,'#200');
+  });
+
+  // ── Projectiles ───────────────────────────────────────────────
+  projPool.active.forEach(p=>{
+    if(p.type==='BLAST_CANNON'){
+      ctx.shadowColor='#ff8800'; ctx.shadowBlur=8;
+      ctx.fillStyle='#ff6600'; ctx.beginPath(); ctx.arc(p.x,p.y,5,0,Math.PI*2); ctx.fill();
+      ctx.shadowBlur=0;
+    } else if(p.type==='ARCANE_SPIRE'){
+      ctx.shadowColor='#aa44ff'; ctx.shadowBlur=12;
+      ctx.fillStyle='#cc88ff'; ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.fill();
+      ctx.shadowBlur=0;
+    } else if(p.type==='ARCHER_POST'){
+      // Arrow — rotated line
+      let ang=Math.atan2(p.vy,p.vx);
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(ang);
+      ctx.fillStyle='#c8822a'; ctx.fillRect(-6,-1,12,2);
+      ctx.fillStyle='#ffe066'; ctx.fillRect(-8,-2,4,4);
+      ctx.restore();
+    } else {
+      ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,3,0,Math.PI*2); ctx.fill();
+    }
+  });
+
+  // ── Tower Upgrade/Sell UI ─────────────────────────────────────
+  if (selectedTower) {
+    let t = selectedTower;
+    const def = TOWER_TYPES[t.type]; if (!def) return;
+
+    let currentTier = def[`tier${t.level}`] || def.base;
+    let nextTier = def[`tier${t.level + 1}`];
+    let uiX = t.x + TILE;
+    let uiY = t.y - TILE;
+    let uiWidth = 100;
+    let uiHeight = 80;
+
+    // Background
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(uiX, uiY, uiWidth, uiHeight);
+
+    // Tower Name and Level
+    drawText(`${def.label} Lv${t.level + 1}`, uiX + uiWidth / 2, uiY + 15, '#fff', 10, 'center');
+
+    // Upgrade Button
+    if (nextTier) {
+        let upgradeCost = currentTier.upgradeCost;
+        let canUpgrade = gold >= upgradeCost;
+        ctx.fillStyle = canUpgrade ? '#1a8c1a' : '#555';
+        ctx.fillRect(uiX + 5, uiY + 25, uiWidth - 10, 20);
+        ctx.strokeStyle = canUpgrade ? '#4eff4e' : '#777'; ctx.lineWidth = 1;
+        ctx.strokeRect(uiX + 5, uiY + 25, uiWidth - 10, 20);
+        drawText(`UPGRADE (${upgradeCost}g)`, uiX + uiWidth / 2, uiY + 38, canUpgrade ? '#fff' : '#666', 9, 'center');
+    } else {
+        ctx.fillStyle = '#1a5c1a';
+        ctx.fillRect(uiX + 5, uiY + 25, uiWidth - 10, 20);
+        drawText('MAX LEVEL', uiX + uiWidth / 2, uiY + 38, '#4eff4e', 9, 'center');
+    }
+
+    // Sell Button
+    let sellValue = Math.floor(def.base.cost * 0.7);
+    ctx.fillStyle = '#8c1a1a';
+    ctx.fillRect(uiX + 5, uiY + 50, uiWidth - 10, 20);
+    ctx.strokeStyle = '#ff6666'; ctx.lineWidth = 1;
+    ctx.strokeRect(uiX + 5, uiY + 50, uiWidth - 10, 20);
+    drawText(`SELL (${sellValue}g)`, uiX + uiWidth / 2, uiY + 63, '#fff', 9, 'center');
+  }
+
+  // ── HUD ───────────────────────────────────────────────────────
+  let hudY=GRID_ROWS*TILE;
+  // HUD background with top border
+  ctx.fillStyle='#0a0e0a'; ctx.fillRect(0,hudY,W,H-hudY);
+  ctx.strokeStyle='#2a4a2a'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(0,hudY); ctx.lineTo(W,hudY); ctx.stroke();
+
+  // Stats row
+  drawText(`⚜ ${gold}`,10,hudY+17,PALETTE.gold,13);
+  drawText(`♥ ${lives}`,90,hudY+17,'#f55',13);
+  drawText(`W ${waveIndex+1}/${WAVE_STRUCTURE.length}`,W/2,hudY+17,'#88aaaa',12,'center');
+  drawText(`${score}`,W-8,hudY+17,'#aaccaa',12,'right');
+
+  // Tower selector chips
+  let tx=4;
+  TOWER_KEYS.forEach((key,i)=>{
+    const def = TOWER_TYPES[key]; if (!def) return;
+    let sel=key===selectedTowerType;
+    let canAfford=gold>=def.base.cost;
+    // card bg
+    ctx.fillStyle=sel?def.color:(canAfford?'#1c2a1c':'#151515');
+    ctx.beginPath(); ctx.roundRect(tx,hudY+23,68,32,4); ctx.fill();
+    ctx.strokeStyle=sel?'#fff':(canAfford?'#2a4a2a':'#222'); ctx.lineWidth=sel?1.5:1;
+    ctx.beginPath(); ctx.roundRect(tx,hudY+23,68,32,4); ctx.stroke();
+    // key hint
+    ctx.fillStyle=sel?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.2)';
+    ctx.font='8px monospace'; ctx.textAlign='left'; ctx.fillText(`[${i+1}]`,tx+3,hudY+33);
+    // label
+    drawText(def.label,tx+14,hudY+33,canAfford?'#fff':'#555',8);
+    // cost
+    drawText(`${def.base.cost}g`,tx+14,hudY+47,canAfford?PALETTE.gold:'#444',8);
+    tx+=72;
+  });
+
+  // Wave state banner
+  if(gameState==='waveclear') {
+    ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,hudY,W,H-hudY);
+    let secs=Math.max(0,Math.ceil(3-waveClearTimer));
+    drawText(`— WAVE CLEAR — Next in ${secs}s  [tap to skip]`,W/2,hudY+34,'#ffe066',13,'center');
+  }
+}
+
+// Global screen shake variables
+let shakeMagnitude = 0;
+let shakeDuration = 0;
+let shakeTimer = 0;
+
+function triggerShake(magnitude, duration) {
+    shakeMagnitude = magnitude;
+    shakeDuration = duration;
+    shakeTimer = 0;
+}
+
+let renderFrameOriginal = renderFrame;
+renderFrame = function() {
+    ctx.save();
+    if (shakeDuration > 0) {
+        shakeTimer += FIXED_DT;
+        let shakeX = Math.sin(shakeTimer * 50) * shakeMagnitude * (shakeDuration - shakeTimer) / shakeDuration; // Oscillate faster
+        let shakeY = Math.cos(shakeTimer * 50) * shakeMagnitude * (shakeDuration - shakeTimer) / shakeDuration;
+        ctx.translate(shakeX, shakeY);
+        shakeDuration -= FIXED_DT;
+    }
+    renderFrameOriginal();
+    ctx.restore();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// START
+// ══════════════════════════════════════════════════════════════════
+startGame();
+requestAnimationFrame(t=>{lastTime=t;requestAnimationFrame(loop);});
+
+let fireTimer = 0;
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     ARCADE DEV CONSOLE — Press ² to toggle | Real-time AI modifications
+     ═══════════════════════════════════════════════════════════════════════ -->
+<style id="dev-console-style">
+#dev-console{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(5,5,15,.97);border-top:2px solid #00ff88;z-index:99999;font-family:'Courier New',monospace;color:#00ff88;box-shadow:0 -6px 30px rgba(0,255,136,.18);padding:10px 14px 8px;gap:5px;flex-direction:column}
+#dev-console.open{display:flex}
+#dev-console-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+#dev-console-ttl{font-size:12px;font-weight:bold;letter-spacing:1px}
+#dev-console-hdr-r{display:flex;gap:6px;align-items:center}
+#dev-console-ctx-btn{background:#0a1a0a;color:#558855;border:1px solid #1a3a1a;font-size:10px;padding:3px 8px;border-radius:3px;cursor:pointer;font-family:monospace;transition:all .15s}
+#dev-console-ctx-btn:hover,#dev-console-ctx-btn.active{color:#00ff88;border-color:#00ff88;background:#051505}
+#dev-console-close{background:none;border:none;color:#333;font-size:16px;cursor:pointer;padding:0 3px;line-height:1;transition:color .15s}
+#dev-console-close:hover{color:#ff4444}
+#dev-console-quick{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:3px}
+.dc-qb{background:#0a1a0a;color:#558855;border:1px solid #1a3a1a;font-size:10px;padding:4px 9px;border-radius:3px;cursor:pointer;font-family:monospace;transition:all .12s;white-space:nowrap}
+.dc-qb:hover{color:#00ff88;border-color:#00ff88;background:#0a2a0a;transform:translateY(-1px)}
+.dc-qb:active{transform:none}
+#dev-console-ctx{display:none;background:#050f05;border:1px solid #0a2a0a;border-radius:4px;padding:8px 10px;font-size:10px;color:#668866;max-height:110px;overflow-y:auto;line-height:1.7;margin-bottom:3px}
+#dev-console-ctx.open{display:block}
+#dev-console-row{display:flex;gap:8px;align-items:flex-start}
+#dev-console-input{flex:1;background:#0a0a0a;border:1px solid #00ff88;color:#00ff88;font-family:'Courier New',monospace;font-size:13px;padding:8px 10px;border-radius:4px;resize:vertical;min-height:38px;max-height:140px;line-height:1.4}
+#dev-console-input::placeholder{color:#1a4a2a}
+#dev-console-input:focus{outline:none;border-color:#00ffcc;box-shadow:0 0 8px rgba(0,255,204,.2)}
+#dev-console-btns{display:flex;flex-direction:column;gap:5px;min-width:90px}
+#dev-console-btn{background:linear-gradient(135deg,#00cc66,#00ff88);color:#000;border:none;font-family:monospace;font-size:12px;font-weight:900;padding:9px 14px;border-radius:4px;cursor:pointer;letter-spacing:.5px;transition:all .15s}
+#dev-console-btn:hover{background:linear-gradient(135deg,#00ff88,#00ffcc);transform:translateY(-1px)}
+#dev-console-btn:disabled{background:#222;color:#444;cursor:wait;transform:none}
+#dev-console-undo{background:#1a1a1a;color:#888;border:1px solid #333;font-family:monospace;font-size:11px;padding:5px 10px;border-radius:4px;cursor:pointer;transition:all .15s}
+#dev-console-undo:hover:not(:disabled){background:#2a2a2a;color:#fff;border-color:#555}
+#dev-console-undo:disabled{opacity:.3;cursor:default}
+#dev-console-status{font-size:11px;min-height:15px;padding:2px 0;line-height:1.5;max-height:48px;overflow-y:auto}
+#dev-console-status.ok{color:#00ff88}#dev-console-status.err{color:#ff4444}#dev-console-status.pending{color:#ffaa00}#dev-console-status.warn{color:#ffcc44}
+#dev-console-cw{display:none;margin-top:2px}
+#dev-console-cw.visible{display:block}
+#dev-console-ctog{background:none;border:none;color:#1a4a2a;font-size:10px;font-family:monospace;cursor:pointer;padding:2px 0;transition:color .15s}
+#dev-console-ctog:hover{color:#00cc66}
+#dev-console-cpre{background:#050f05;border:1px solid #0a2a0a;border-radius:3px;padding:8px 10px;font-size:11px;color:#44aa44;font-family:'Courier New',monospace;white-space:pre-wrap;word-break:break-all;max-height:110px;overflow-y:auto;margin-top:3px;line-height:1.5}
+#dev-console-log{font-size:10px;color:#333;max-height:44px;overflow-y:auto;padding-top:3px;border-top:1px solid #111;display:none;line-height:1.6;margin-top:2px}
+#dev-console-log.visible{display:block}
+#dev-console-hint{font-size:9px;color:#1a3a1a;text-align:right;margin-top:1px}
+</style>
+<div id="dev-console">
+  <div id="dev-console-hdr">
+    <span id="dev-console-ttl">⚡ ARCADE DEV CONSOLE</span>
+    <div id="dev-console-hdr-r">
+      <button id="dev-console-ctx-btn" title="Show live game state">🔍 ctx</button>
+      <span style="color:#1a3a1a;font-size:10px">[ ² ]</span>
+      <button id="dev-console-close" title="Close">✕</button>
+    </div>
+  </div>
+  <div id="dev-console-quick"></div>
+  <div id="dev-console-ctx"></div>
+  <div id="dev-console-row">
+    <textarea id="dev-console-input" rows="2"></textarea>
+    <div id="dev-console-btns">
+      <button id="dev-console-btn">▶ Apply</button>
+      <button id="dev-console-undo" disabled title="Undo last patch">↩ Undo</button>
+    </div>
+  </div>
+  <div id="dev-console-status"></div>
+  <div id="dev-console-cw">
+    <button id="dev-console-ctog">▶ view generated code</button>
+    <pre id="dev-console-cpre"></pre>
+  </div>
+  <div id="dev-console-log"></div>
+  <div id="dev-console-hint">Shift+Enter = new line&nbsp;|&nbsp;Enter = send&nbsp;|&nbsp;↑↓ = history</div>
+</div>
+<script id="dev-console-script">
+(function(){
+'use strict';
+var PLACEHOLDER_TEXT='Describe your modification...\nExamples:\n• add a new tower type: lightning tower that chains to 3 enemies\n• give all existing towers double damage\n• spawn 20 boss enemies immediately\n• add a freeze tower that slows all nearby enemies\n• make all enemies visible even if off-screen\n• add a nuke ability on pressing N\n• change the path enemy color to gold\n• give infinite gold throughout the game\n• double tower attack range\n• add a mortar tower with splash damage';
+var QUICK_ACTIONS=[
+  {label:'💰 +500 Gold',desc:'Add 500 gold',code:'gold+=500;',color:'#ffdd00'},
+  {label:'👑 Inf Lives',desc:'Set lives to 999',code:'lives=999;',color:'#ff4466'},
+  {label:'⚡ Next Wave',desc:'Skip to next wave immediately',code:'enemyPool.clear();spawner.active=false;spawner.spawnTimer=0;if(typeof startWave==="function")startWave(waveIndex+1);',color:'#aaaaff'},
+  {label:'☠ Kill All',desc:'Destroy all enemies',code:'enemyPool.update(function(){return false;});',color:'#ff6600'},
+  {label:'🛡 Tower ×2 DMG',desc:'Double damage of all placed towers',code:'towers.forEach(function(t){t.damage=t.damage*2;});',color:'#00cc88'},
+  {label:'⭐ +1000 Score',desc:'Add 1000 to score',code:'score+=1000;',color:'#ffdd00'},
+];
+function collectContext(){var c={};try{
+  c.gameState=typeof gameState!=='undefined'?gameState:'?';
+  c.gold=typeof gold!=='undefined'?gold:'?';
+  c.lives=typeof lives!=='undefined'?lives:'?';
+  c.wave=typeof waveIndex!=='undefined'?waveIndex+1:'?';
+  c.score=typeof score!=='undefined'?score:'?';
+  c.towers=typeof towers!=='undefined'?towers.length:'?';
+  if(typeof enemyPool!=='undefined')c.enemies=enemyPool.active.length;
+  if(typeof spawner!=='undefined')c.spawnerActive=spawner.active;
+  if(typeof WAVES!=='undefined')c.totalWaves=WAVES.length;
+}catch(e){}return c;}
+function takeSnapshot(){try{
+  var s={_ts:Date.now()};
+  if(typeof gold!=='undefined')s.gold=gold;
+  if(typeof lives!=='undefined')s.lives=lives;
+  if(typeof score!=='undefined')s.score=score;
+  if(typeof waveIndex!=='undefined')s.waveIndex=waveIndex;
+  if(typeof gameState!=='undefined')s.gameState=gameState;
+  return s;
+}catch(e){return null;}}
+function applySnapshot(s){if(!s)return false;var ok=false;try{
+  if(s.gold!==undefined&&typeof gold!=='undefined'){gold=s.gold;ok=true;}
+  if(s.lives!==undefined&&typeof lives!=='undefined'){lives=s.lives;ok=true;}
+  if(s.score!==undefined&&typeof score!=='undefined'){score=s.score;ok=true;}
+  if(s.waveIndex!==undefined&&typeof waveIndex!=='undefined'){waveIndex=s.waveIndex;ok=true;}
+  if(s.gameState!==undefined&&typeof gameState!=='undefined'){gameState=s.gameState;ok=true;}
+}catch(e){}return ok;}
+
+var FILENAME=window.location.pathname.split('/').pop();
+var panel=document.getElementById('dev-console');
+var input=document.getElementById('dev-console-input');
+var btn=document.getElementById('dev-console-btn');
+var undoBtn=document.getElementById('dev-console-undo');
+var statusEl=document.getElementById('dev-console-status');
+var closeBtn=document.getElementById('dev-console-close');
+var ctxBtn=document.getElementById('dev-console-ctx-btn');
+var ctxPanel=document.getElementById('dev-console-ctx');
+var logPanel=document.getElementById('dev-console-log');
+var cw=document.getElementById('dev-console-cw');
+var ctog=document.getElementById('dev-console-ctog');
+var cpre=document.getElementById('dev-console-cpre');
+var quickBar=document.getElementById('dev-console-quick');
+if(!panel||!input||!btn)return;
+input.placeholder=PLACEHOLDER_TEXT;
+QUICK_ACTIONS.forEach(function(qa){
+  var b=document.createElement('button');b.className='dc-qb';b.textContent=qa.label;
+  if(qa.color)b.style.color=qa.color;b.title=qa.desc||'';
+  b.addEventListener('click',function(){var snap=takeSnapshot();execCode(qa.code,qa.label);if(snap)pushSnapshot(snap);});
+  quickBar.appendChild(b);
+});
+var _snapshots=[],_history=[],_histIdx=-1,_actionLog=[],MAX_UNDO=15,MAX_LOG=30;
+if(ctog&&cw&&cpre){ctog.addEventListener('click',function(){var o=cpre.style.display==='block';cpre.style.display=o?'none':'block';ctog.textContent=(o?'▶ view':'▼ hide')+' generated code';});cpre.style.display='none';}
+function showCode(code){if(!cw||!cpre||!ctog)return;cpre.textContent=code||'';cw.classList.add('visible');cpre.style.display='none';ctog.textContent='▶ view generated code ('+(code||'').split('\n').length+' lines)';}
+function hideCode(){if(cw)cw.classList.remove('visible');}
+closeBtn.addEventListener('click',function(){panel.classList.remove('open');input.blur();});
+function setStatus(msg,cls){statusEl.textContent=msg;statusEl.className=cls||'';}
+function addLog(prompt,ok,note){var t=new Date().toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit',second:'2-digit'});var short=prompt.length>55?prompt.slice(0,55)+'…':prompt;_actionLog.unshift({t:t,short:short,ok:ok,note:note||''});if(_actionLog.length>MAX_LOG)_actionLog.pop();renderLog();}
+function renderLog(){if(!_actionLog.length){logPanel.classList.remove('visible');return;}logPanel.classList.add('visible');logPanel.innerHTML=_actionLog.map(function(e){return'<span style="color:#333">'+e.t+'</span> <span style="color:'+(e.ok?'#1a6a1a':'#6a1a1a')+'">&#9679;</span> <span style="color:'+(e.ok?'#447744':'#774444')+'">'+e.short+'</span>'+(e.note?'<span style="color:#333"> &rarr; '+e.note+'</span>':'');}).join('<br>');}
+function pushSnapshot(snap){if(!snap)return;_snapshots.push(snap);if(_snapshots.length>MAX_UNDO)_snapshots.shift();undoBtn.disabled=false;}
+function updateUndoBtn(){undoBtn.disabled=_snapshots.length===0;}
+undoBtn.addEventListener('click',function(){if(!_snapshots.length)return;var snap=_snapshots.pop();updateUndoBtn();var ok=applySnapshot(snap);var dt=Math.round((Date.now()-snap._ts)/1000);setStatus(ok?'↩ Undone ('+dt+'s ago)':'⚠ Partial undo — complex changes cannot be auto-reverted',ok?'ok':'warn');});
+ctxBtn.addEventListener('click',function(){if(ctxPanel.classList.contains('open')){ctxPanel.classList.remove('open');ctxBtn.classList.remove('active');ctxPanel.innerHTML='';return;}ctxBtn.classList.add('active');var c=collectContext();var lines=['<b style="color:#226622">═══ LIVE STATE ═══</b>'];Object.keys(c).forEach(function(k){var v=c[k];var vs=typeof v==='object'?JSON.stringify(v).slice(0,100):String(v);lines.push('<span style="color:#00cc55">'+k+'</span>: <span style="color:#88aa88">'+vs+'</span>');});if(lines.length===1)lines.push('<span style="color:#1a3a1a">No standard variables detected</span>');ctxPanel.innerHTML=lines.join('<br>');ctxPanel.classList.add('open');});
+function validateSyntax(code){var o=0,c=0,po=0,pc=0,bo=0,bc=0;for(var i=0;i<code.length;i++){var ch=code[i];if(ch==='{')o++;else if(ch==='}')c++;else if(ch==='(')po++;else if(ch===')')pc++;else if(ch==='[')bo++;else if(ch===']')bc++;}if(o!==c)return'Braces: '+o+' { for '+c+' }';if(po!==pc)return'Parens: '+po+' ( for '+pc+' )';if(bo!==bc)return'Brackets: '+bo+' [ for '+bc+' ]';return null;}
+function execCode(code,explanation){var synErr=validateSyntax(code);if(synErr){setStatus('⚠ Invalid syntax: '+synErr,'err');return false;}try{if(typeof window.__devPatch==='function'){window.__devPatch(code);}else{(new Function(code))();}setStatus('✅ '+(explanation||'Patch applied!'),'ok');input.value='';return true;}catch(e){var msg=e.message||String(e);if(msg.indexOf('not defined')!==-1){var vn=(msg.split(' ')[0]||'').replace(/[^a-zA-Z0-9_]/g,'');msg='Variable "'+vn+'" not found. Use 🔍 ctx to see available variables.';}else if(msg.indexOf('is not a function')!==-1){msg='Function unavailable: '+msg;}else if(msg.indexOf('Cannot read')!==-1){msg='Null/undefined: '+msg;}else if(msg.indexOf('Assignment to constant')!==-1){msg='Cannot reassign const — use object property: e.g. PALETTE.bg = "#000"';}setStatus('❌ '+msg,'err');return false;}}
+async function applyPatch(){var prompt=input.value.trim();if(!prompt)return;if(_history[0]!==prompt){_history.unshift(prompt);if(_history.length>50)_history.pop();}_histIdx=-1;btn.disabled=true;hideCode();setStatus('⏳ Generating patch...','pending');var snap=takeSnapshot();try{var resp=await fetch('/api/game-patch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:FILENAME,prompt:prompt,context:collectContext()})});if(!resp.ok){var errText=await resp.text();setStatus('❌ Server '+resp.status+': '+errText.slice(0,80),'err');addLog(prompt,false,'HTTP '+resp.status);return;}var data=await resp.json();if(data.error){setStatus('❌ '+data.error,'err');addLog(prompt,false,data.error.slice(0,40));}else if(data.code){showCode(data.code);var ok=execCode(data.code,data.explanation);if(ok){pushSnapshot(snap);addLog(prompt,true,(data.explanation||'').slice(0,80));}else{if(cpre)cpre.style.display='block';if(ctog)ctog.textContent='▼ hide generated code (error)';addLog(prompt,false,'exec error');}}else{setStatus('⚠ Empty server response','warn');addLog(prompt,false,'empty');}}catch(e){setStatus('❌ Network: '+e.message,'err');addLog(prompt,false,'network');}finally{btn.disabled=false;}}
+btn.addEventListener('click',applyPatch);
+input.addEventListener('keydown',function(e){if(e.code!=='Backquote'&&e.code!=='IntlBackslash')e.stopPropagation();if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();applyPatch();return;}if(e.key==='ArrowUp'&&!e.shiftKey&&_history.length){e.preventDefault();_histIdx=Math.min(_histIdx+1,_history.length-1);input.value=_history[_histIdx];}if(e.key==='ArrowDown'&&!e.shiftKey){e.preventDefault();_histIdx=Math.max(_histIdx-1,-1);input.value=_histIdx>=0?_history[_histIdx]:'';}});
+document.addEventListener('keydown',function(e){if(e.code==='Backquote'||e.code==='IntlBackslash'){e.preventDefault();if(panel.classList.contains('open')){panel.classList.remove('open');input.blur();}else{panel.classList.add('open');input.focus();}}});
+})();
+</script>
+
+<style id="dev-console-style">
+#dev-console{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,.96);border-top:2px solid #00ff88;padding:10px 14px;z-index:99999;font-family:monospace;color:#00ff88;box-shadow:0 -4px 20px rgba(0,255,136,.15)}
+#dev-console.open{display:flex;flex-direction:column;gap:5px}
+#dev-console-title{font-size:11px;color:#555;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center}
+#dev-console-title span:first-child{color:#00ff88;font-size:12px;font-weight:bold}
+#dev-console-ctx-bar{display:flex;gap:6px;align-items:center}
+#dev-console-row{display:flex;gap:8px;align-items:flex-start}
+#dev-console-input{flex:1;background:#0a0a0a;border:1px solid #00ff88;color:#00ff88;font-family:'Courier New',monospace;font-size:13px;padding:8px 10px;border-radius:4px;resize:vertical;min-height:38px;max-height:180px;line-height:1.4}
+#dev-console-input::placeholder{color:#1a4a2a}
+#dev-console-input:focus{outline:none;border-color:#00ffcc;box-shadow:0 0 8px rgba(0,255,204,.2)}
+#dev-console-btns{display:flex;flex-direction:column;gap:5px;min-width:90px}
+#dev-console-btn{background:linear-gradient(135deg,#00cc66,#00ff88);color:#000;border:none;font-family:monospace;font-size:12px;font-weight:900;padding:9px 14px;border-radius:4px;cursor:pointer;letter-spacing:.5px;transition:all .15s}
+#dev-console-btn:hover{background:linear-gradient(135deg,#00ff88,#00ffcc);transform:translateY(-1px)}
+#dev-console-btn:disabled{background:#222;color:#444;cursor:wait;transform:none}
+#dev-console-undo{background:#1a1a1a;color:#888;border:1px solid #333;font-family:monospace;font-size:11px;padding:5px 10px;border-radius:4px;cursor:pointer;transition:all .15s}
+#dev-console-undo:hover:not(:disabled){background:#2a2a2a;color:#fff;border-color:#555}
+#dev-console-undo:disabled{opacity:.3;cursor:default}
+#dev-console-ctx-btn{background:#0a1a0a;color:#555;border:1px solid #1a3a1a;font-size:10px;padding:3px 8px;border-radius:3px;cursor:pointer;font-family:monospace;transition:all .15s}
+#dev-console-ctx-btn:hover{color:#00ff88;border-color:#00ff88;background:#0a2a0a}
+#dev-console-ctx-btn.active{color:#00ff88;border-color:#00ff88;background:#051505}
+#dev-console-status{font-size:11px;min-height:16px;padding:2px 0;transition:color .2s;line-height:1.5;max-height:60px;overflow-y:auto}
+#dev-console-status.ok{color:#00ff88}
+#dev-console-status.err{color:#ff4444}
+#dev-console-status.pending{color:#ffaa00}
+#dev-console-status.warn{color:#ffcc44}
+#dev-console-ctx{display:none;background:#050f05;border:1px solid #0a2a0a;border-radius:4px;padding:8px 10px;font-size:10px;color:#668866;max-height:120px;overflow-y:auto;line-height:1.7;margin-top:2px}
+#dev-console-ctx.open{display:block}
+#dev-console-log{font-size:10px;color:#333;max-height:55px;overflow-y:auto;padding-top:3px;border-top:1px solid #111;display:none;line-height:1.6}
+#dev-console-log.visible{display:block}
+#dev-console-close{background:none;border:none;color:#333;font-size:16px;cursor:pointer;padding:0 3px;transition:color .15s}
+#dev-console-close:hover{color:#ff4444}
+#dev-console-hint{font-size:9px;color:#222;text-align:right;margin-top:1px}
+#dev-console-code-wrap{display:none;margin-top:4px}
+#dev-console-code-wrap.visible{display:block}
+#dev-console-code-toggle{background:none;border:none;color:#1a4a2a;font-size:10px;font-family:monospace;cursor:pointer;padding:2px 0;letter-spacing:.5px;transition:color .15s}
+#dev-console-code-toggle:hover{color:#00cc66}
+#dev-console-code-pre{background:#050f05;border:1px solid #0a2a0a;border-radius:3px;padding:8px 10px;font-size:11px;color:#44aa44;font-family:'Courier New',monospace;white-space:pre-wrap;word-break:break-all;max-height:140px;overflow-y:auto;margin-top:3px;line-height:1.5}
+</style>
+
+<div id="dev-console">
+  <div id="dev-console-title">
+    <span>&#9881; DEV CONSOLE</span>
+    <div id="dev-console-ctx-bar">
+      <button id="dev-console-ctx-btn" title="Afficher le contexte du jeu en temps réel">&#128269; ctx</button>
+      <span style="color:#222;font-size:10px">[ ² / &#96; ]</span>
+      <button id="dev-console-close" title="Fermer">&#10005;</button>
+    </div>
+  </div>
+  <div id="dev-console-ctx"></div>
+  <div id="dev-console-row">
+    <textarea id="dev-console-input" placeholder="Décris la modification souhaitée... Ex: rends le joueur invincible, ajoute un type ennemi dragon avec 500 HP, double la vitesse de tir, ajoute une compétence de téléportation, modifie la génération de niveaux..."></textarea>
+    <div id="dev-console-btns">
+      <button id="dev-console-btn">&#9654; Appliquer</button>
+      <button id="dev-console-undo" disabled title="Annuler le dernier patch">&#8617; Annuler</button>
+    </div>
+  </div>
+  <div id="dev-console-status"></div>
+  <div id="dev-console-code-wrap">
+    <button id="dev-console-code-toggle">&#9654; voir le code généré</button>
+    <pre id="dev-console-code-pre"></pre>
+  </div>
+  <div id="dev-console-log"></div>
+  <div id="dev-console-hint">Shift+Entrée = nouvelle ligne &nbsp;|&nbsp; Entrée = envoyer &nbsp;|&nbsp; ↑↓ = historique</div>
+</div>
+
+<script id="dev-console-script">
+/* DEV_CONSOLE_INJECTED */
+(function(){
+'use strict';
+var FILENAME=window.location.pathname.split('/').pop();
+var panel=document.getElementById('dev-console');
+var input=document.getElementById('dev-console-input');
+var btn=document.getElementById('dev-console-btn');
+var undoBtn=document.getElementById('dev-console-undo');
+var statusEl=document.getElementById('dev-console-status');
+var closeBtn=document.getElementById('dev-console-close');
+var ctxBtn=document.getElementById('dev-console-ctx-btn');
+var ctxPanel=document.getElementById('dev-console-ctx');
+var logPanel=document.getElementById('dev-console-log');
+var codeWrap=document.getElementById('dev-console-code-wrap');
+var codeToggle=document.getElementById('dev-console-code-toggle');
+var codePre=document.getElementById('dev-console-code-pre');
+if(!panel||!input||!btn||!statusEl)return;
+
+// ── État interne ──
+var _snapshots=[];
+var _history=[];
+var _histIdx=-1;
+var _actionLog=[];
+var MAX_UNDO=15;
+var MAX_LOG=30;
+var _lastCode='';
+
+// ── Toggle code généré ──
+if(codeToggle&&codeWrap&&codePre){
+  codeToggle.addEventListener('click',function(){
+    var isOpen=codePre.style.display==='block';
+    codePre.style.display=isOpen?'none':'block';
+    codeToggle.textContent=(isOpen?'▶ voir':'▼ masquer')+' le code généré';
+  });
+  codePre.style.display='none'; // fermé par défaut
+}
+
+function showGeneratedCode(code){
+  if(!codeWrap||!codePre||!codeToggle)return;
+  _lastCode=code||'';
+  codePre.textContent=_lastCode;
+  codeWrap.classList.add('visible');
+  codePre.style.display='none'; // fermé par défaut, l'utilisateur ouvre s'il veut
+  codeToggle.textContent='▶ voir le code généré ('+_lastCode.split('\n').length+' lignes)';
+}
+
+function hideGeneratedCode(){
+  if(!codeWrap)return;
+  codeWrap.classList.remove('visible');
+  _lastCode='';
+}
+
+// ── Utilitaires UI ──
+closeBtn.addEventListener('click',function(){panel.classList.remove('open');input.blur();});
+
+function setStatus(msg,cls){
+  statusEl.textContent=msg;
+  statusEl.className=cls||'';
+}
+
+function addLog(prompt,ok,note){
+  var t=new Date().toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  var short=prompt.length>55?prompt.slice(0,55)+'…':prompt;
+  _actionLog.unshift({t:t,short:short,ok:ok,note:note||''});
+  if(_actionLog.length>MAX_LOG)_actionLog.pop();
+  renderLog();
+}
+
+function renderLog(){
+  if(!_actionLog.length){logPanel.classList.remove('visible');return;}
+  logPanel.classList.add('visible');
+  logPanel.innerHTML=_actionLog.map(function(e){
+    return '<span style="color:#333">'+e.t+'</span> '+
+      '<span style="color:'+(e.ok?'#1a6a1a':'#6a1a1a')+'">&#8226;</span> '+
+      '<span style="color:'+(e.ok?'#447744':'#774444')+'">'+e.short+'</span>'+
+      (e.note?'<span style="color:#333"> → '+e.note+'</span>':'');
+  }).join('<br>');
+}
+
+// ── Snapshot pour undo ──
+function takeSnapshot(){
+  try{
+    var s={_ts:Date.now()};
+    // Numériques globaux
+    ['score','highScore','gold','lives','level','floor','stage','currentFloor',
+     'currentDungeonFloor','currentLevel','wave','waveNumber','coins','gems',
+     'playerGold','energy','mana','ammo'].forEach(function(n){
+      if(typeof window[n]==='number')s[n]=window[n];
+    });
+    // gameState
+    if(typeof gameState!=='undefined')s.gameState=gameState;
+    // Joueur (plusieurs conventions)
+    ['hero','player','ship','character'].forEach(function(pn){
+      if(typeof window[pn]!=='undefined'&&window[pn]&&typeof window[pn]==='object'){
+        var p=window[pn];
+        s['_p_'+pn]={hp:p.hp,maxHp:p.maxHp,speed:p.speed,attack:p.attack||p.damage,
+          defense:p.defense,mp:p.mp,maxMp:p.maxMp,level:p.level,xp:p.xp,
+          x:p.x,y:p.y,invincibilityTimer:p.invincibilityTimer||0,
+          classId:p.classId,vx:p.vx||0,vy:p.vy||0};
+      }
+    });
+    // Longueurs des tableaux
+    ['enemies','towers','loot','minions','projectiles','bullets','interactables',
+     'powerups','particles'].forEach(function(n){
+      if(typeof window[n]!=='undefined'&&Array.isArray(window[n]))s['_len_'+n]=window[n].length;
+    });
+    // playerStats si existe
+    if(typeof playerStats!=='undefined'&&playerStats)
+      s._playerStats=JSON.parse(JSON.stringify(playerStats));
+    if(typeof activeBuffs!=='undefined'&&Array.isArray(activeBuffs))
+      s._activeBuffs=JSON.parse(JSON.stringify(activeBuffs));
+    return s;
+  }catch(e){return null;}
+}
+
+function applySnapshot(s){
+  if(!s)return false;
+  var ok=false;
+  try{
+    ['score','highScore','gold','lives','level','floor','stage','currentFloor',
+     'currentDungeonFloor','currentLevel','wave','waveNumber','coins','gems',
+     'playerGold','energy','mana','ammo'].forEach(function(n){
+      if(s[n]!==undefined&&typeof window[n]==='number'){window[n]=s[n];ok=true;}
+    });
+    if(s.gameState!==undefined&&typeof gameState!=='undefined'){gameState=s.gameState;ok=true;}
+    ['hero','player','ship','character'].forEach(function(pn){
+      var pk='_p_'+pn;
+      if(s[pk]&&typeof window[pn]!=='undefined'&&window[pn]){
+        var p=window[pn],sd=s[pk];
+        ['hp','maxHp','speed','attack','defense','mp','maxMp','level','xp',
+         'invincibilityTimer','classId','vx','vy'].forEach(function(f){
+          if(sd[f]!==undefined)p[f]=sd[f];
+        });
+        ok=true;
+      }
+    });
+    if(s._playerStats&&typeof playerStats!=='undefined'&&playerStats){
+      Object.assign(playerStats,s._playerStats);ok=true;
+    }
+    if(s._activeBuffs&&typeof activeBuffs!=='undefined'&&Array.isArray(activeBuffs)){
+      activeBuffs.length=0;s._activeBuffs.forEach(function(b){activeBuffs.push(b);});ok=true;
+    }
+  }catch(e){}
+  return ok;
+}
+
+function pushSnapshot(snap){
+  if(!snap)return;
+  _snapshots.push(snap);
+  if(_snapshots.length>MAX_UNDO)_snapshots.shift();
+  undoBtn.disabled=false;
+}
+
+function updateUndoBtn(){undoBtn.disabled=_snapshots.length===0;}
+
+undoBtn.addEventListener('click',function(){
+  if(!_snapshots.length)return;
+  var snap=_snapshots.pop();
+  updateUndoBtn();
+  var ok=applySnapshot(snap);
+  var dt=Math.round((Date.now()-snap._ts)/1000);
+  if(ok){setStatus('↩ Annulé (il y a '+dt+'s)','ok');}
+  else{setStatus('⚠ Annulation partielle — les changements complexes (nouvelles fonctions, types) ne peuvent pas être annulés automatiquement','warn');}
+});
+
+// ── Context browser ──
+ctxBtn.addEventListener('click',function(){
+  if(ctxPanel.classList.contains('open')){
+    ctxPanel.classList.remove('open');
+    ctxBtn.classList.remove('active');
+    ctxPanel.innerHTML='';
+    return;
+  }
+  ctxBtn.classList.add('active');
+  var ctx=collectContext();
+  var lines=['<b style="color:#226622">═══ CONTEXTE EN TEMPS RÉEL ═══</b>'];
+  Object.keys(ctx).forEach(function(k){
+    var v=ctx[k];
+    var vs=typeof v==='object'?JSON.stringify(v).slice(0,90):String(v);
+    lines.push('<span style="color:#00cc55">'+k+'</span><span style="color:#224422">:</span> <span style="color:#88aa88">'+vs+'</span>');
+  });
+  if(lines.length===1)lines.push('<span style="color:#1a3a1a">Aucune variable standard détectée (jeu custom)</span>');
+  ctxPanel.innerHTML=lines.join('<br>');
+  ctxPanel.classList.add('open');
+});
+
+// ── Collecte du contexte runtime ──
+function collectContext(){
+  var ctx={};
+  try{
+    var stateNames=['gameState','state','currentState','phase','mode','screen'];
+    stateNames.forEach(function(n){if(typeof window[n]!=='undefined')ctx[n]=window[n];});
+    var scoreNames=['score','highScore','bestScore','gold','lives','level','floor','stage',
+                    'currentFloor','currentDungeonFloor','currentLevel','wave','waveNumber',
+                    'coins','gems','playerGold','energy','mana','ammo','kills'];
+    scoreNames.forEach(function(n){if(typeof window[n]!=='undefined')ctx[n]=window[n];});
+    ['hero','player','ship','character','pawn','tank'].forEach(function(pn){
+      if(typeof window[pn]!=='undefined'&&window[pn]&&typeof window[pn]==='object'){
+        var p=window[pn];
+        ctx[pn]={hp:p.hp,maxHp:p.maxHp,x:Math.round(p.x||0),y:Math.round(p.y||0),
+          speed:p.speed,level:p.level,attack:p.attack||p.damage||p.atk,
+          defense:p.defense||p.def,mp:p.mp,maxMp:p.maxMp,classId:p.classId,
+          invincible:!!(p.invincibilityTimer>0)};
+      }
+    });
+    var arrNames=['enemies','towers','projectiles','bullets','particles','loot','interactables',
+                  'minions','platforms','coins','items','obstacles','pieces','waves','powerups',
+                  'skills','traps','buildings','npcs','allies'];
+    arrNames.forEach(function(n){
+      if(typeof window[n]!=='undefined'&&Array.isArray(window[n]))ctx[n+'_count']=window[n].length;
+    });
+    if(typeof window['boss']!=='undefined')ctx.bossAlive=window['boss']!==null;
+    if(typeof window['bossGate']!=='undefined')ctx.bossGateOpen=!!(window['bossGate']&&window['bossGate'].open);
+    if(typeof ENEMY_TYPES!=='undefined')ctx.enemyTypes=Object.keys(ENEMY_TYPES);
+    if(typeof TOWER_TYPES!=='undefined')ctx.towerTypes=Object.keys(TOWER_TYPES);
+    if(typeof ITEM_TYPES!=='undefined')ctx.itemTypes=Object.keys(ITEM_TYPES);
+    if(typeof WEAPON_TYPES!=='undefined')ctx.weaponTypes=Object.keys(WEAPON_TYPES);
+    if(typeof UPGRADE_TYPES!=='undefined')ctx.upgradeTypes=Object.keys(UPGRADE_TYPES);
+    if(typeof HERO_CLASSES!=='undefined')ctx.heroClasses=HERO_CLASSES.map(function(c){return c.id+':'+c.name;});
+    if(typeof CUSTOM_SKILLS!=='undefined')ctx.customSkills=Object.keys(CUSTOM_SKILLS);
+    if(typeof CUSTOM_ATTACKS!=='undefined')ctx.customAttacks=Object.keys(CUSTOM_ATTACKS);
+    var fnNames=['createEnemy','spawnBoss','generateDungeon','checkLevelUp','handleEnemyDefeat',
+                 'spawnParticles','spawnFloatingText','triggerShake','createProjectile',
+                 'placeTower','addTower','spawnEnemy','createTower','restartGame','resetGame',
+                 'spawnWave','addPowerup','unlockSkill','applyKnockback','onBossDefeat',
+                 'openShop','buyItem','saveGame','loadGame','generateLevel','nextWave',
+                 'addUpgrade','applyUpgrade','createItem','dropLoot'];
+    var avail=fnNames.filter(function(n){return typeof window[n]==='function';});
+    if(avail.length)ctx.functions=avail;
+    if(typeof playerInventory!=='undefined')ctx.inventory=playerInventory;
+    if(typeof activeBuffs!=='undefined'&&Array.isArray(activeBuffs))ctx.buffs=activeBuffs.length;
+    if(typeof TILE_SIZE!=='undefined')ctx.TILE_SIZE=TILE_SIZE;
+    if(typeof MAP_W!=='undefined')ctx.MAP_W=MAP_W;
+  }catch(e){}
+  return ctx;
+}
+
+// ── Validation syntaxique client ──
+function validateSyntax(code){
+  var o=0,c=0,po=0,pc=0,bo=0,bc=0;
+  for(var i=0;i<code.length;i++){
+    var ch=code[i];
+    if(ch==='{')o++;else if(ch==='}')c++;
+    else if(ch==='(')po++;else if(ch===')')pc++;
+    else if(ch==='[')bo++;else if(ch===']')bc++;
+  }
+  if(o!==c)return 'Accolades: '+o+' { pour '+c+' }';
+  if(po!==pc)return 'Parenthèses: '+po+' ( pour '+pc+' )';
+  if(bo!==bc)return 'Crochets: '+bo+' [ pour '+bc+' ]';
+  return null;
+}
+
+// ── Exécution du code patché ──
+function execCode(code,explanation){
+  var synErr=validateSyntax(code);
+  if(synErr){
+    setStatus('⚠ Syntaxe invalide côté client: '+synErr+' — Le code ne sera pas exécuté.','err');
+    return false;
+  }
+  try{
+    if(typeof window.__devPatch==='function'){
+      window.__devPatch(code);
+    }else{
+      // Fallback: new Function (n'accède pas aux vars locales du jeu)
+      (new Function(code))();
+    }
+    var msg=explanation||'Patch appliqué !';
+    setStatus('✅ '+msg,'ok');
+    input.value='';
+    return true;
+  }catch(e){
+    var msg=e.message||String(e);
+    if(msg.indexOf('not defined')!==-1){
+      var vn=(msg.split(' ')[0]||'').replace(/[^a-zA-Z0-9_]/g,'');
+      msg='Variable "'+vn+'" introuvable dans ce jeu. Utilisez le bouton ctx pour voir ce qui est disponible.';
+    }else if(msg.indexOf('is not a function')!==-1){
+      msg='Fonction non disponible dans ce jeu: '+msg+'. Vérifiez ctx → functions.';
+    }else if(msg.indexOf('Cannot read')!==-1||msg.indexOf('null')!==-1){
+      msg='Accès à null/undefined: '+msg+' — Ajoutez une vérification if(variable) avant.';
+    }else if(msg.indexOf('Assignment to constant')!==-1){
+      msg="Impossible de modifier une constante (const). Passez par l'objet: ex TYPE.xxx au lieu de TYPE=...";
+    }else if(msg.indexOf('Unexpected token')!==-1){
+      msg='Erreur de syntaxe JS: '+msg;
+    }
+    setStatus('❌ '+msg,'err');
+    return false;
+  }
+}
+
+// ── Application d'un patch ──
+async function applyPatch(){
+  var prompt=input.value.trim();
+  if(!prompt)return;
+  if(_history[0]!==prompt){_history.unshift(prompt);if(_history.length>50)_history.pop();}
+  _histIdx=-1;
+  btn.disabled=true;
+  hideGeneratedCode();
+  setStatus('⏳ Génération en cours...','pending');
+  var snap=takeSnapshot();
+  try{
+    var resp=await fetch('/api/game-patch',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({filename:FILENAME,prompt:prompt,context:collectContext()})
+    });
+    if(!resp.ok){
+      var errText=await resp.text();
+      setStatus('❌ Erreur serveur '+resp.status+': '+errText.slice(0,80),'err');
+      addLog(prompt,false,'HTTP '+resp.status);
+      return;
+    }
+    var data=await resp.json();
+    if(data.error){
+      setStatus('❌ '+data.error,'err');
+      addLog(prompt,false,data.error.slice(0,40));
+    }else if(data.code){
+      // Afficher le code avant l'exec (utile si l'exec plante)
+      showGeneratedCode(data.code);
+      var ok=execCode(data.code,data.explanation);
+      if(ok){
+        pushSnapshot(snap);
+        addLog(prompt,true,data.explanation?data.explanation.slice(0,80):'');
+      }else{
+        // En cas d'erreur, garder le code visible automatiquement pour debug
+        if(codePre)codePre.style.display='block';
+        if(codeToggle)codeToggle.textContent='▼ masquer le code généré (erreur — vérifier la syntaxe)';
+        addLog(prompt,false,'Erreur exec');
+      }
+    }else{
+      setStatus('⚠ Réponse vide du serveur','warn');
+      addLog(prompt,false,'réponse vide');
+    }
+  }catch(e){
+    setStatus('❌ Réseau: '+e.message,'err');
+    addLog(prompt,false,'réseau');
+  }finally{btn.disabled=false;}
+}
+
+// ── Événements ──
+btn.addEventListener('click',applyPatch);
+input.addEventListener('keydown',function(e){
+  if(e.code!=='Backquote'&&e.code!=='IntlBackslash')e.stopPropagation();
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();applyPatch();return;}
+  if(e.key==='ArrowUp'&&!e.shiftKey&&_history.length){
+    e.preventDefault();_histIdx=Math.min(_histIdx+1,_history.length-1);input.value=_history[_histIdx];
+  }
+  if(e.key==='ArrowDown'&&!e.shiftKey){
+    e.preventDefault();_histIdx=Math.max(_histIdx-1,-1);input.value=_histIdx>=0?_history[_histIdx]:'';
+  }
+});
+document.addEventListener('keydown',function(e){
+  if(e.code==='Backquote'||e.code==='IntlBackslash'){
+    e.preventDefault();
+    if(panel.classList.contains('open')){
+      panel.classList.remove('open');input.blur();
+    }else{
+      panel.classList.add('open');input.focus();
+    }
+  }
+});
+})();
+</script>
+</body></html>

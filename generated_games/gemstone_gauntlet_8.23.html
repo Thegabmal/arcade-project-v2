@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8"><title>Gemstone Gauntlet</title><style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;}
+canvas{display:block;}
+</style></head><body>
+<canvas id="gameCanvas"></canvas>
+<script>let score = 0;
+let coins = 0;
+let center = null;
+
+// ══════════════════════════════════════════════════════════════════
+// ENGINE — DO NOT MODIFY
+// Dev console bridge — AI patches execute in game scope via eval
+/* debug removed */
+// ══════════════════════════════════════════════════════════════════
+let canvas = document.getElementById('gameCanvas');
+let ctx = canvas.getContext('2d');
+let DPR = Math.min(window.devicePixelRatio || 1, 2);
+let W = 480, H = 640;
+function resizeCanvas() {
+  let vw=window.innerWidth,vh=window.innerHeight;
+  let scale=Math.min(vw/W,vh/H);
+  canvas.style.width=Math.round(W*scale)+'px'; canvas.style.height=Math.round(H*scale)+'px';
+  canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR); ctx.scale(DPR,DPR);
+}
+resizeCanvas(); window.addEventListener('resize',()=>{resizeCanvas();ctx.scale(DPR,DPR);});
+
+// States: menu | playing | swapping | resolving | falling | victory | gameover
+let gameState = 'menu';
+function setState(s) { gameState = s; }
+
+const Keys={down:{},pressed:{}};
+window.addEventListener('keydown',e=>{if(!Keys.down[e.code])Keys.pressed[e.code]=true;Keys.down[e.code]=true;});
+window.addEventListener('keyup',e=>{Keys.down[e.code]=false;});
+
+// Mouse and touch unified input
+const Pointer={x:0,y:0,down:false,justDown:false,justUp:false,startX:0,startY:0,dragX:0,dragY:0};
+function pointerDown(cx,cy){Pointer.x=cx;Pointer.y=cy;Pointer.startX=cx;Pointer.startY=cy;Pointer.dragX=0;Pointer.dragY=0;Pointer.down=true;Pointer.justDown=true;}
+function pointerMove(cx,cy){Pointer.x=cx;Pointer.y=cy;Pointer.dragX=cx-Pointer.startX;Pointer.dragY=cy-Pointer.startY;}
+function pointerUp(){Pointer.down=false;Pointer.justUp=true;}
+canvas.addEventListener('mousedown',e=>{const r=canvas.getBoundingClientRect();pointerDown((e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height));});
+canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect();pointerMove((e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height));});
+canvas.addEventListener('mouseup',()=>pointerUp());
+canvas.addEventListener('touchstart',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();pointerDown((e.touches[0].clientX-r.left)*(W/r.width),(e.touches[0].clientY-r.top)*(H/r.height));},{passive:false});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();pointerMove((e.touches[0].clientX-r.left)*(W/r.width),(e.touches[0].clientY-r.top)*(H/r.height));},{passive:false});
+canvas.addEventListener('touchend',e=>{e.preventDefault();pointerUp();},{passive:false});
+
+function flushInput(){Keys.pressed={};Pointer.justDown=false;Pointer.justUp=false;}
+
+// Particles
+const Particles=[];
+function spawnParticles(x,y,count,opts){
+  opts=opts||{};
+  for(let i=0;i<count;i++){
+    let a=opts.angle!==undefined?opts.angle+(Math.random()-0.5)*(opts.spread||Math.PI*2):Math.random()*Math.PI*2;
+    let sp=opts.speed||(50+Math.random()*80);
+    Particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:opts.life||(0.4+Math.random()*0.4),maxLife:opts.life||(0.4+Math.random()*0.4),size:opts.size||(3+Math.random()*4),color:opts.color||'#fff',gravity:opts.gravity!==undefined?opts.gravity:100});
+  }
+}
+function updateParticles(dt){for(let i=Particles.length-1;i>=0;i--){const p=Particles[i];p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=p.gravity*dt;if(p.life<=0)Particles.splice(i,1);}}
+function drawParticles(){Particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life/p.maxLife);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size*0.5,0,Math.PI*2);ctx.fill();});ctx.globalAlpha=1;}
+
+// Popups
+const Popups=[];
+function spawnPopup(x,y,text,color,size){Popups.push({x,y,text,color:color||'#fff',size:size||14,vy:-50,life:1.2});}
+function updatePopups(dt){for(let i=Popups.length-1;i>=0;i--){Popups[i].y+=Popups[i].vy*dt;Popups[i].life-=dt;if(Popups[i].life<=0)Popups.splice(i,1);}}
+function drawPopups(){Popups.forEach(p=>{ctx.globalAlpha=Math.min(p.life,1);ctx.fillStyle=p.color;ctx.font=`bold ${p.size}px monospace`;ctx.textAlign='center';ctx.fillText(p.text,p.x,p.y);});ctx.globalAlpha=1;ctx.textAlign='left';}
+
+const sfx={_ctx:null,init(){try{if(!this._ctx)this._ctx=new(window.AudioContext||window.webkitAudioContext)();if(this._ctx.state==='suspended')this._ctx.resume();}catch(e){}},
+play(f,d,t,v){try{this.init();if(!this._ctx)return;const o=this._ctx.createOscillator(),g=this._ctx.createGain();o.type=t||'sine';o.frequency.value=f||440;g.gain.setValueAtTime(v||0.12,this._ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,this._ctx.currentTime+(d||0.1));o.connect(g);g.connect(this._ctx.destination);o.start();o.stop(this._ctx.currentTime+(d||0.1));}catch(e){}}};
+
+function lerp(a,b,t){return a+(b-a)*t;}
+function clamp(v,mn,mx){return v<mn?mn:v>mx?mx:v;}
+function drawText(t,x,y,c,s,a){ctx.fillStyle=c||'#fff';ctx.font=`bold ${s||14}px monospace`;ctx.textAlign=a||'left';ctx.fillText(t,x,y);}
+let _hiScore=parseInt(localStorage.getItem('hs_match3')||'0');
+function saveHiScore(s){if(s>_hiScore){_hiScore=s;localStorage.setItem('hs_match3',s);}}
+
+let FIXED_DT=1/60,MAX_DT=0.1;let lastTime=0,accumulator=0;
+function loop(ts){const rd=Math.min((ts-lastTime)/1000,MAX_DT);lastTime=ts;accumulator+=rd;while(accumulator>=FIXED_DT){update(FIXED_DT);accumulator-=FIXED_DT;}renderFrame();requestAnimationFrame(loop);}
+function update(dt){updateParticles(dt);updatePopups(dt);switch(gameState){case'menu':if(Pointer.justDown){sfx.play(440,0.08,'sine',0.1);startGame();setState('playing');}break;case'playing':updatePlaying(dt);break;case'swapping':updateSwapping(dt);break;case'resolving':updateResolving(dt);break;case'falling':updateFalling(dt);break;case'victory':if(Pointer.justDown){nextLevel();}break;case'gameover':updateGameover(dt);break;case'shop':updateShop(dt);break;}flushInput();}
+function renderFrame(){switch(gameState){case'menu':renderMenu();break;case'playing':case'swapping':case'resolving':case'falling':renderPlaying();break;case'victory':renderPlaying();renderVictoryOverlay();break;case'gameover':renderPlaying();renderGameoverOverlay();break;case'shop':renderShop();break;}drawParticles();drawPopups();}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME CONSTANTS
+// ══════════════════════════════════════════════════════════════════
+let GAME_TITLE = 'Gemstone Gauntlet';
+
+// GEM/TILE types (6 types for match-3):
+let GEM_TYPES_DATA = [
+  { type: 'Ruby',      color: '#E74C3C' }, // Red
+  { type: 'Sapphire',  color: '#3498DB' }, // Blue
+  { type: 'Emerald',   color: '#2ECC71' }, // Green
+  { type: 'Topaz',     color: '#F1C40F' }, // Yellow
+  { type: 'Amethyst',  color: '#9B59B6' }, // Purple
+  { type: 'Diamond',   color: '#ECF0F1' }, // White/Clear
+];
+let GEM_COLORS = GEM_TYPES_DATA.map(g => g.color);
+let GEM_LABELS = ['♦','●','★','♣','▲','◆']; // Icons per gem type for visual distinction
+
+let PALETTE = {
+  bg:     '#0d0d1f',
+  board:  '#1a1a3a',
+  select: '#ffffff',
+  ui:     '#ffffff',
+  accent: '#ffdd00',
+  // Cascade combo colors
+  combo:  ['#fff','#ff0','#f80','#f00','#f0f','#0ff'],
+  shopBg:   '#0a1a0a',
+  shopCard: '#1a2a1a',
+  shopSel:  '#2a4a2a'
+};
+
+let ROWS = 8, COLS = 8;
+let GEM_TYPES = GEM_COLORS.length;
+
+// Grid geometry (centered in canvas)
+let CELL = Math.floor((W - 20) / COLS);
+let GRID_X = Math.floor((W - COLS * CELL) / 2);
+let GRID_Y = 120;
+let GRID_W = COLS * CELL;
+let GRID_H = ROWS * CELL;
+
+let GAME_SCORE = 0;
+let level = 1;
+let movesLeft = 30; // Initial value, overridden by level config
+let cascadeDepth = 0;
+let hitstopTimer = 0; // For hitstop effect
+
+// Score: X pts per gem, combo mult: x2/x3/x5 for 4/5/6 matches
+let BASE_GEM_SCORE = 10; // Points per single gem cleared
+let COMBO_MULTIPLIERS = {
+  3: 1, // Base multiplier for 3-gem match
+  4: 2, // x2 for 4-gem match
+  5: 3, // x3 for 5-gem match
+  6: 5, // x5 for 6-gem match (for cascades creating more than 5)
+  7: 7, // x7 for 7-gem match (for cascades creating more than 6)
+  8: 10, // x10 for 8-gem match (for cascades creating more than 7)
+};
+let CASCADE_SCORE_BONUS_PERCENTAGE = 0.2; // Each subsequent cascade adds 20% more score to the gems cleared in that cascade.
+
+// Obstacle Types
+let OBSTACLE_TYPE = {
+  ICE_1: 'ice_1',     // Requires 1 match to clear
+  ICE_2: 'ice_2',     // Requires 2 matches to clear
+  CHAINS: 'chains',   // Gem cannot be swapped, requires 1 match to break
+  BLOCKER: 'blocker', // Unbreakable, blocks gem fall, cleared by adjacent matches
+};
+
+// Booster Types
+let BOOSTER_TYPE = {
+  ROW_CLEAR: 'row_clear',       // Clears a row
+  COL_CLEAR: 'col_clear',       // Clears a column
+  BOMB: 'bomb',                 // Clears 3x3 area
+  COLOR_CLEAR: 'color_clear',   // Clears all gems of a specific type
+  SHUFFLE: 'shuffle',           // Shuffles the entire board
+};
+
+// ── Objectives (per level) ────────────────────────────────────────
+// Types: { type:'score', target:1000 }
+//        { type:'clear_type', gemType:0, target:20 }
+//        { type:'create_booster', boosterType:'bomb', target:3 }
+//        { type:'clear_obstacle', obstacleType:'ice_1', target:10 }
+//        { type:'clear_obstacle', obstacleType:'blocker', target:10 }
+let objective = { type:'score', target:1000, current:0 };
+
+// Game State related variables
+let selectedGem = null; // {r, c}
+let swapAnimation = null; // {r1, c1, r2, c2, progress, duration, isUndo}
+let resolvingMatches = []; // Array of {r,c} for gems to clear
+let fallingGems = []; // Array of {r,c} for gems currently falling
+let boardObstacles = []; // Array of {r, c, type, health}
+
+// ══════════════════════════════════════════════════════════════════
+// GRID — DO NOT MODIFY the grid management logic
+// ══════════════════════════════════════════════════════════════════
+// grid[r][c] = { type: 0-5, special: null|'hline'|'vline'|'bomb'|'rainbow', obstacle: null|'ice_1'|'ice_2'|'chains'|'blocker', obstacleHealth: 0, drawY: (animated) }
+let grid = [];
+
+function cellToPixel(r,c) {
+  return { x: GRID_X + c*CELL + CELL/2, y: GRID_Y + r*CELL + CELL/2 };
+}
+function pixelToCell(px,py) {
+  let c = Math.floor((px - GRID_X) / CELL);
+  let r = Math.floor((py - GRID_Y) / CELL);
+  return { r, c };
+}
+function inGrid(r,c) { return r>=0&&r<ROWS&&c>=0&&c<COLS; }
+
+function fillGrid() {
+  grid = [];
+  for (let r=0;r<ROWS;r++) {
+    grid[r]=[];
+    for (let c=0;c<COLS;c++) {
+      grid[r][c] = makeGem(Math.floor(Math.random()*GEM_TYPES));
+    }
+  }
+  // Avoid starting matches
+  for (let pass=0;pass<3;pass++) {
+    for (let r=0;r<ROWS;r++) {
+      for (let c=0;c<COLS;c++) {
+        while (causesMatch(r,c)) {
+          grid[r][c].type = Math.floor(Math.random()*GEM_TYPES);
+        }
+      }
+    }
+  }
+}
+
+function makeGem(type, special, obstacle) {
+  return { type: type>=0?type:Math.floor(Math.random()*GEM_TYPES), special:special||null, obstacle:obstacle||null, obstacleHealth: obstacle === OBSTACLE_TYPE.ICE_2 ? 2 : 1, drawY:0, animY:0, scale:1.0 };
+}
+
+function causesMatch(r,c) {
+  let t=grid[r][c].type;
+  if (t < 0) return false;
+  if (c>=2 && grid[r][c-1].type===t && grid[r][c-2].type===t) return true;
+  if (r>=2 && grid[r-1][c].type===t && grid[r-2][c].type===t) return true;
+  return false;
+}
+
+// ── Selection & swap state ────────────────────────────────────────
+let selR=-1,selC=-1;          // selected gem
+let swapState=null;            // {r1,c1,r2,c2,t,maxT,isUndo}
+let resolveQueue=[];           // matched sets to clear
+let fallState=null;            // fall animation progress
+let resolveTimer=0;
+
+// ══════════════════════════════════════════════════════════════════
+// MATCH DETECTION — DO NOT MODIFY
+// Returns array of {r,c} cells that are part of a match (3+).
+// ══════════════════════════════════════════════════════════════════
+function findAllMatches() {
+  let matched = new Set();
+  let key = (r,c) => r*COLS+c;
+
+  // Horizontal
+  for (let r=0;r<ROWS;r++) {
+    let c=0;
+    while (c<COLS) {
+      let end=c+1;
+      // Ensure grid[r][c] is a valid gem type before checking for matches
+      if (grid[r][c].type < 0) { c = end; continue; }
+
+      while (end<COLS && grid[r][end].type===grid[r][c].type && grid[r][end].type>=0) end++;
+      if (end-c>=3) { for(let k=c;k<end;k++) matched.add(key(r,k)); }
+      c=end;
+    }
+  }
+  // Vertical
+  for (let c=0;c<COLS;c++) {
+    let r=0;
+    while (r<ROWS) {
+      // Ensure grid[r][c] is a valid gem type before checking for matches
+      if (grid[r][c].type < 0) { r = end; continue; }
+
+      while (end<ROWS && grid[end][c].type===grid[r][c].type && grid[r][c].type>=0) end++;
+      if (end-r>=3) { for(let k=r;k<end;k++) matched.add(key(k,c)); }
+      r=end;
+    }
+  }
+  return [...matched].map(k=>({r:Math.floor(k/COLS),c:k%COLS}));
+}
+
+function countMatchLength(r,c,dr,dc) {
+  let nr=r+dr,nc=c+dc;
+  while(inGrid(nr,nc)&&grid[nr][nc].type===t){len++;nr+=dr;nc+=dc;}
+  return len;
+}
+
+// Determine special gem type from match length/shape at (r,c)
+function getSpecialForMatch(cells) {
+  // 5 in a row → rainbow; 4 → line clear; L/T shape → bomb
+  if (cells.length >= 5) return BOOSTER_TYPE.COLOR_CLEAR;
+  if (cells.length === 4) {
+    let allSameRow = cells.every(c2=>c2.r===cells[0].r);
+    return allSameRow ? BOOSTER_TYPE.ROW_CLEAR : BOOSTER_TYPE.COL_CLEAR;
+  }
+  // L/T detection (5 cells forming L or T shape)
+  // This is a simplified check. A full L/T check is complex.
+  // For now, if 5 cells are matched and not in a line, assume it's an L/T.
+  if (cells.length === 5) {
+    let minR = Math.min(...cells.map(c => c.r));
+    let maxR = Math.max(...cells.map(c => c.r));
+    let minC = Math.min(...cells.map(c => c.c));
+    let maxC = Math.max(...cells.map(c => c.c));
+    let height = maxR - minR + 1;
+    let width = maxC - minC + 1;
+
+    // A 5-gem L/T shape will occupy a 3x3 square (or 3x2, 2x3)
+    // and not be a straight line.
+    if ((height >= 2 && width >= 2) && !(height == 1 || width == 1)) {
+        return BOOSTER_TYPE.BOMB;
+    }
+  }
+  return null;
+}
+
+// ── Meta-progression runtime ──────────────────────────────────────────────────
+let _runCoins      = 0;
+let _gameoverTimer = 0;
+let _shopIdx       = 0;
+let _scoreMultiplier = 1.0;
+let _extraMoves    = 0;
+let _specialGemChance = 0; // % chance for more special gems
+let _timeBonus = 0; // extra seconds for time-based levels (not used in this match3)
+
+let UPGRADES = [
+  {id:'moves',   name:'Extra Moves',   desc:'+5 moves per run',        maxLevel:3, costs:[25,55,110],  icon:'🔀'},
+  {id:'cascade', name:'Cascade Boost', desc:'Cascade score ×1.2',      maxLevel:2, costs:[50,120],     icon:'💫'},
+  {id:'special', name:'Special Gems',  desc:'+5% special gem spawns',  maxLevel:2, costs:[40,90],      icon:'💎'},
+  {id:'time',    name:'Time Bonus',    desc:'+10s per level (N/A)',    maxLevel:2, costs:[35,80],      icon:'⏱️'}
+];
+
+let _META_KEY = 'meta_match3';
+let _meta = { coins:0, upgrades:{} };
+function loadMeta(){try{_meta=JSON.parse(localStorage.getItem(_META_KEY))||{coins:0,upgrades:{}};}catch(e){_meta={coins:0,upgrades:{}};} if(!_meta.upgrades)_meta.upgrades={};}
+function saveMeta(){try{localStorage.setItem(_META_KEY,JSON.stringify(_meta));}catch(e){}}
+function addRunCoins(n){_meta.coins+=Math.floor(n);saveMeta();}
+function getUpgradeLevel(id){return _meta.upgrades[id]||0;}
+function buyUpgrade(id){const up=UPGRADES.find(u=>u.id===id);if(!up)return false;const lvl=getUpgradeLevel(id);if(lvl>=up.maxLevel)return false;const cost=up.costs[lvl];if(_meta.coins<cost)return false;_meta.coins-=cost;_meta.upgrades[id]=lvl+1;saveMeta();return true;}
+
+function updateGameover(dt){_gameoverTimer-=dt;if(_gameoverTimer<=0||Pointer.justDown){addRunCoins(_runCoins);_shopIdx=0;setState('shop');}}
+function _shopHit(mx,my,x,y,w,h){return mx>=x&&mx<=x+w&&my>=y&&my<=y+h;}
+function updateShop(dt){
+  if(!Pointer.justDown)return;
+  let cardW=160,cardH=128,gap=16,cols=Math.min(UPGRADES.length,UPGRADES.length<=4?4:3),totalW=cols*cardW+(cols-1)*gap,sx=(W-totalW)/2,sy=Math.round(H*0.22);
+  for(let i=0;i<UPGRADES.length;i++){
+    let up=UPGRADES[i];
+    let cardX = sx + (i % cols) * (cardW + gap);
+    let cardY = sy + Math.floor(i / cols) * (cardH + gap);
+    if(_shopHit(Pointer.x,Pointer.y,cardX,cardY,cardW,cardH)){_shopIdx=i;if(buyUpgrade(UPGRADES[i].id)){sfx.play(660,0.12,'sine',0.1);applyUpgrades();}else sfx.play(110,0.06,'sawtooth',0.08);return;}
+  }
+  let btnW=160,btnH=42,btnX=(W-btnW)/2,btnY=sy+cardH+32; // This btnY needs adjustment if more than 1 row of cards
+  if(_shopHit(Pointer.x,Pointer.y,btnX,btnY,btnW,btnH)){sfx.play(440,0.08,'square',0.1);startGame();setState('playing');}
+}
+function renderShop(){
+  ctx.fillStyle=PALETTE.shopBg;ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle=PALETTE.accent||'#ffdd00';ctx.font='bold 24px system-ui,sans-serif';ctx.fillText('UPGRADE SHOP',W/2,Math.round(H*0.10));
+  ctx.fillStyle='#ffdd00';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,Math.round(H*0.18));
+  for(let i=0;i<UPGRADES.length;i++){
+
+    ctx.fillStyle=i===_shopIdx?PALETTE.shopSel:PALETTE.shopCard;ctx.strokeStyle=maxed?'#4caf50':canBuy?'#ffdd00':'#444';ctx.lineWidth=i===_shopIdx?2:1;
+    ctx.beginPath();ctx.roundRect(cardX,cardY,cardW,cardH,8);ctx.fill();ctx.stroke();
+    ctx.font='24px system-ui,sans-serif';ctx.fillStyle='#fff';ctx.fillText(up.icon,cardX+cardW/2,cardY+30);
+    ctx.font='bold 11px system-ui,sans-serif';ctx.fillText(up.name,cardX+cardW/2,cardY+50);
+    ctx.fillStyle='#aaa';ctx.font='10px system-ui,sans-serif';ctx.fillText(up.desc,cardX+cardW/2,cardY+64);
+    for(let p=0;p<up.maxLevel;p++){ctx.fillStyle=p<lvl?'#ffdd00':'#333';ctx.beginPath();ctx.arc(cardX+cardW/2-(up.maxLevel-1)*7+p*14,cardY+84,5,0,Math.PI*2);ctx.fill();}
+    ctx.font='bold 11px system-ui,sans-serif';ctx.fillStyle=maxed?'#4caf50':canBuy?'#ffdd00':'#555';ctx.fillText(maxed?'MAXED':`${up.costs[lvl]} coins`,cardX+cardW/2,cardY+108);
+  }
+  let lastCardY = sy + Math.floor((UPGRADES.length - 1) / cols) * (cardH + gap);
+  let btnX=(W-btnW)/2,btnY=lastCardY+cardH+30;
+  ctx.fillStyle='#1a4a1a';ctx.strokeStyle='#4caf50';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(btnX,btnY,btnW,btnH,8);ctx.fill();ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='bold 16px system-ui,sans-serif';ctx.fillText('▶  PLAY',W/2,btnY+26);
+  ctx.textAlign='left';
+}
+
+function applyUpgrades(){
+  _extraMoves = [0,5,10,15][getUpgradeLevel('moves')];
+  _scoreMultiplier = [1.0, 1.2, 1.5][getUpgradeLevel('cascade')]; // cascade score bonus
+  _specialGemChance = [0, 0.05, 0.10][getUpgradeLevel('special')]; // 5% or 10% extra chance
+  _timeBonus = [0, 10, 20][getUpgradeLevel('time')]; // not used in this match3, but included for completeness
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GAME INIT
+// ══════════════════════════════════════════════════════════════════
+function initLevel() {
+  loadMeta();
+  movesLeft = 30 + _extraMoves; // Base moves + upgrade
+  objective = getObjective(level);
+  objective.current = 0;
+  fillGrid();
+  placeObstacles(level);
+  selR=-1; selC=-1; resolveQueue=[]; fallState=null; cascadeDepth=0;
+  hitstopTimer = 0;
+}
+
+function getObjective(n) {
+  // Level 1 (Tutorial): Board: 8x8. Goal: Clear 50 Ruby gems. Moves: 30. Obstacles: None. Focus: Basic matching.
+  // Level 2 (Introduction to Obstacles): Board: 8x8. Goal: Clear 70 gems total. Moves: 25. Obstacles: 10 ICE_1 cells (randomly placed, non-swappable). Focus: Clearing ice.
+  // Level 3 (Special Gem Creation): Board: 8x8. Goal: Create 3 row_clear or col_clear boosters. Moves: 22. Obstacles: 5 CHAINS (on specific gems, e.g., center column). Focus: Understanding 4-gem matches.
+  // Level 4 (Combined Obstacles): Board: 8x8. Goal: Clear 100 gems total, 5 ICE_2 cells. Moves: 20. Obstacles: 5 ICE_2 (requires 2 hits), 5 CHAINS. Focus: Strategic clearing.
+  // Level 5 (Target Score): Board: 8x8. Goal: Achieve 15,000 points. Moves: 18. Obstacles: 15 ICE_1, 5 CHAINS. Focus: High-scoring matches and cascades.
+  // Level 6 (Multiple Objectives): Board: 8x8. Goal: Clear 80 Sapphire gems AND 3 bomb boosters. Moves: 20. Obstacles: 10 ICE_2. Focus: Multi-objective planning.
+  // Level 7 (New Obstacle: Blockers): Board: 8x8. Goal: Clear all 10 BLOCKER cells. Moves: 20. Obstacles: 10 BLOCKER (unbreakable, non-matching cells that block gem fall, similar to Gardenscapes' "Dirt" or "Grass" that needs to be cleared by adjacent matches). BLOCKER cells are cleared by making a match adjacent to them.
+  // Level 8 (Complex Board Layout): Board: 8x8 with a central 4x4 area of BLOCKERs. Goal: Clear 120 gems, 5 color_clear boosters. Moves: 25. Obstacles: 16 BLOCKERs, 8 ICE_2. Focus: Navigating complex layouts.
+  // Level 9 (High Score, Limited Moves): Board: 8x8. Goal: Achieve 30,000 points. Moves: 15. Obstacles: 10 ICE_2, 10 CHAINS. Focus: Efficiency and high-value plays.
+  // Level 10 (Endurance Challenge): Board: 8x8. Goal: Clear 150 gems, 5 bomb boosters, 5 color_clear boosters. Moves: 25. Obstacles: 10 ICE_2, 10 CHAINS, 5 BLOCKERs. Focus: Master all mechanics.
+
+  switch (n) {
+    case 1: return { type:'clear_type', gemType:0, target:50, current:0, moves:30, boosterType:null, objectives:null }; // Ruby
+    case 2: return { type:'score', target:7000, current:0, moves:25, boosterType:null, gemType:null, objectives:null };
+    case 3: return { type:'create_booster', boosterType:BOOSTER_TYPE.ROW_CLEAR, target:3, current:0, moves:22, gemType:null, objectives:null };
+    case 4: return { type:'clear_obstacle', obstacleType:OBSTACLE_TYPE.ICE_2, target:5, current:0, moves:20, boosterType:null, gemType:null, objectives:null };
+    case 5: return { type:'score', target:15000, current:0, moves:18, boosterType:null, gemType:null, objectives:null };
+    case 6: return { type:'multi', objectives: [
+      { type:'clear_type', gemType:1, target:80, current:0, boosterType:null }, // Sapphire
+      { type:'create_booster', boosterType:BOOSTER_TYPE.BOMB, target:3, current:0, gemType:null }
+    ], moves:20, boosterType:null, gemType:null };
+    case 7: return { type:'clear_obstacle', obstacleType:OBSTACLE_TYPE.BLOCKER, target:10, current:0, moves:20, boosterType:null, gemType:null, objectives:null };
+    case 8: return { type:'multi', objectives: [
+      { type:'score', target:12000, current:0, boosterType:null, gemType:null },
+      { type:'create_booster', boosterType:BOOSTER_TYPE.COLOR_CLEAR, target:5, current:0, gemType:null }
+    ], moves:25, boosterType:null, gemType:null };
+    case 9: return { type:'score', target:30000, current:0, moves:15, boosterType:null, gemType:null, objectives:null };
+    case 10: return { type:'multi', objectives: [
+      { type:'score', target:15000, current:0, boosterType:null, gemType:null },
+      { type:'create_booster', boosterType:BOOSTER_TYPE.BOMB, target:5, current:0, gemType:null },
+      { type:'create_booster', boosterType:BOOSTER_TYPE.COLOR_CLEAR, target:5, current:0, gemType:null }
+    ], moves:25, boosterType:null, gemType:null };
+    default: return { type:'score', target:10000 + (n-10)*5000, current:0, moves:25, boosterType:null, gemType:null, objectives:null };
+  }
+}
+
+function placeObstacles(n) {
+  boardObstacles = [];
+  let emptyCells = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      emptyCells.push({ r, c });
+    }
+  }
+function getRandomCell() {
+    if (emptyCells.length === 0) return null;
+    let idx = Math.floor(Math.random() * emptyCells.length);
+    return emptyCells.splice(idx, 1)[0];
+  }
+
+  // Clear existing obstacles and reset gem properties
+  for (let r=0; r<ROWS; r++) {
+    for (let c=0; c<COLS; c++) {
+      grid[r][c].obstacle = null;
+      grid[r][c].obstacleHealth = 0;
+    }
+  }
+
+  switch (n) {
+    case 1: // No obstacles
+      break;
+    case 2: // 10 ICE_1
+      for (let i = 0; i < 10; i++) {
+        const { r, c } = getRandomCell();
+        grid[r][c].obstacle = OBSTACLE_TYPE.ICE_1;
+        grid[r][c].obstacleHealth = 1;
+      }
+      break;
+    case 3: // 5 CHAINS (on specific gems, e.g., center column)
+      for (let i = 0; i < 5; i++) {
+        let r = Math.floor(Math.random() * ROWS);
+        let c = Math.floor(COLS / 2) + Math.floor(Math.random() * 3) - 1; // Center-ish
+        if (inGrid(r,c)) {
+          grid[r][c].obstacle = OBSTACLE_TYPE.CHAINS;
+          grid[r][c].obstacleHealth = 1;
+        }
+      }
+      break;
+    case 4: // 5 ICE_2, 5 CHAINS
+      for (let i = 0; i < 5; i++) {
+        const { r, c } = getRandomCell();
+        grid[r][c].obstacle = OBSTACLE_TYPE.ICE_2;
+        grid[r][c].obstacleHealth = 2;
+      }
+      for (let i = 0; i < 5; i++) {
+        const { r, c } = getRandomCell();
+        grid[r][c].obstacle = OBSTACLE_TYPE.CHAINS;
+        grid[r][c].obstacleHealth = 1;
+      }
+      break;
+    case 5: // 15 ICE_1, 5 CHAINS
+      for (let i = 0; i < 15; i++) {
+        const { r, c } = getRandomCell();
+        grid[r][c].obstacle = OBSTACLE_TYPE.ICE_1;
+        grid[r][c].obstacleHealth = 1;
+      }
+      for (let i = 0; i < 5; i++) {
+        const { r, c } = getRandomCell();
+        grid[r][c].obstacle = OBSTACLE_TYPE.CHAINS;
+        grid[r][c].obstacleHealth = 1;
+      }
+      break;
+    case 6: // 10 ICE_2
+      for (let i = 0; i < 10; i++) {
+        const { r, c } = getRandomCell();
+        grid[r][c].obstacle = OBSTACLE_TYPE.ICE_2;
+        grid[r][c].obstacleHealth = 2;
+      }
+      break;
+    case 7: // 10 BLOCKER
+      for (let i = 0; i < 10; i++) {
+        const { r, c } = getRandomCell();
+        grid[r][c].obstacle = OBSTACLE_TYPE.BLOCKER;
+        grid[r][c].obstacleHealth = 1; // Blockers technically have health, but cannot be 'hit' directly. Adjacent matches clear them.
+        grid[r][c].type = -2; // Mark as non-matching
+      }
+      break;
+    case 8: // Central 4x4 BLOCKERs, 8 ICE_2
+      for (let r = ROWS/2 - 2; r < ROWS/2 + 2; r++) {
+        for (let c = COLS/2 - 2; c < COLS/2 + 2; c++) {
+          grid[r][c].obstacle = OBSTACLE_TYPE.BLOCKER;
+          grid[r][c].obstacleHealth = 1;
+          grid[r][c].type = -2;
+        }
+      }
+      for (let i = 0; i < 8; i++) {
+        const { r, c } = getRandomCell();
+        if (grid[r][c].obstacle !== OBSTACLE_TYPE.BLOCKER) { // Don't overwrite blockers
+          grid[r][c].obstacle = OBSTACLE_TYPE.ICE_2;
+          grid[r][c].obstacleHealth = 2;
+        }
+      }
+      break;
+    case 9: // 10 ICE_2, 10 CHAINS
+      for (let i = 0; i < 10; i++) {
+        const { r, c } = getRandomCell();
+        grid[r][c].obstacle = OBSTACLE_TYPE.ICE_2;
+        grid[r][c].obstacleHealth = 2;
+      }
+      for (let i = 0; i < 10; i++) {
+        const { r, c } = getRandomCell();
+        grid[r][c].obstacle = OBSTACLE_TYPE.CHAINS;
+        grid[r][c].obstacleHealth = 1;
+      }
+      break;
+    case 10: // 10 ICE_2, 10 CHAINS, 5 BLOCKERs
+      for (let i = 0; i < 10; i++) {
+        const { r, c } = getRandomCell();
+        grid[r][c].obstacle = OBSTACLE_TYPE.ICE_2;
+        grid[r][c].obstacleHealth = 2;
+      }
+      for (let i = 0; i < 10; i++) {
+        const { r, c } = getRandomCell();
+        grid[r][c].obstacle = OBSTACLE_TYPE.CHAINS;
+        grid[r][c].obstacleHealth = 1;
+      }
+      for (let i = 0; i < 5; i++) {
+        const { r, c } = getRandomCell();
+        grid[r][c].obstacle = OBSTACLE_TYPE.BLOCKER;
+        grid[r][c].obstacleHealth = 1;
+        grid[r][c].type = -2;
+      }
+      break;
+    default: // Random mix for later levels
+      for (let i = 0; i < (n * 2); i++) {
+        const { r, c } = getRandomCell();
+        let obstacleType = randChoice([OBSTACLE_TYPE.ICE_1, OBSTACLE_TYPE.ICE_2, OBSTACLE_TYPE.CHAINS, OBSTACLE_TYPE.BLOCKER]);
+        grid[r][c].obstacle = obstacleType;
+        grid[r][c].obstacleHealth = (obstacleType === OBSTACLE_TYPE.ICE_2) ? 2 : 1;
+        if (obstacleType === OBSTACLE_TYPE.BLOCKER) grid[r][c].type = -2;
+      }
+      break;
+  }
+  movesLeft = objective.moves;
+}
+
+function startGame() {
+  loadMeta(); _runCoins=0; _gameoverTimer=1.5;
+  GAME_SCORE=0; level=1;
+  Popups.length=0; Particles.length=0;
+  initLevel();
+  applyUpgrades();
+}
+
+function nextLevel() { level++; initLevel(); setState('playing'); }
+
+// ══════════════════════════════════════════════════════════════════
+// UPDATE STATES
+// ══════════════════════════════════════════════════════════════════
+function updatePlaying(dt) {
+
+  if (hitstopTimer > 0) {
+    hitstopTimer -= dt;
+    return;
+  }
+
+  // Handle pointer input for gem selection and swap
+  if (Pointer.justDown) {
+    const {r,c} = pixelToCell(Pointer.x, Pointer.y);
+    if (!inGrid(r,c)) { selR=-1;selC=-1; return; }
+    if (grid[r][c].obstacle === OBSTACLE_TYPE.CHAINS) { // Chained gems cannot be swapped
+      sfx.play(100, 0.08, 'square', 0.05); // "Locked" sound
+      return;
+    }
+    if (selR===-1) {
+      selR=r; selC=c;
+      grid[r][c].scale=1.15;
+      sfx.play(660,0.05,'sine',0.07);
+    } else {
+      // Try swap if adjacent
+      let dr=Math.abs(r-selR),dc=Math.abs(c-selC);
+      if ((dr===1&&dc===0)||(dr===0&&dc===1)) {
+        attemptSwap(selR,selC,r,c);
+      } else {
+        grid[selR][selC].scale=1.0;
+        selR=r; selC=c; grid[r][c].scale=1.15;
+        sfx.play(550,0.05,'sine',0.07);
+      }
+    }
+  }
+  // Drag direction detection
+  if (selR>=0 && Pointer.down && !Pointer.justDown) {
+    let adx=Math.abs(Pointer.dragX), ady=Math.abs(Pointer.dragY);
+    if (adx>CELL*0.45||ady>CELL*0.45) {
+      let dc=adx>=ady ? (Pointer.dragX>0?1:-1) : 0;
+      let nr=selR+dr, nc=selC+dc;
+      if (inGrid(nr,nc)) {
+        if (grid[nr][nc].obstacle === OBSTACLE_TYPE.CHAINS) {
+          sfx.play(100, 0.08, 'square', 0.05); // "Locked" sound
+        } else {
+          attemptSwap(selR,selC,nr,nc);
+        }
+      }
+    }
+  }
+
+  // Check for no possible moves
+  if (movesLeft > 0 && !hasPossibleMoves()) {
+    sfx.play(220, 0.2, 'square', 0.1);
+    spawnPopup(W/2, H/2, "NO MORE MOVES!", '#ff0', 24);
+    shuffleBoard();
+  }
+}
+
+function hasPossibleMoves() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (grid[r][c].obstacle === OBSTACLE_TYPE.CHAINS) continue; // Cannot swap chained gems
+      // Try swapping right
+      if (c + 1 < COLS && grid[r][c+1].obstacle !== OBSTACLE_TYPE.CHAINS) {
+        if (checkSwapForMatch(r, c, r, c + 1)) return true;
+      }
+      // Try swapping down
+      if (r + 1 < ROWS && grid[r+1][c].obstacle !== OBSTACLE_TYPE.CHAINS) {
+        if (checkSwapForMatch(r, c, r + 1, c)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function checkSwapForMatch(r1, c1, r2, c2) {
+  let tmp = { ...grid[r1][c1] };
+  grid[r1][c1] = { ...grid[r2][c2] };
+  grid[r2][c2] = tmp;
+  let matches = findAllMatches();
+  grid[r2][c2] = { ...grid[r1][c1] }; // Undo for check
+  grid[r1][c1] = tmp;
+  return matches.length > 0;
+}
+
+function shuffleBoard() {
+  let allGems = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (!grid[r][c].obstacle) { // Only shuffle non-obstacle gems
+        allGems.push(grid[r][c]);
+        grid[r][c] = makeGem(-1); // Temporarily empty
+      }
+    }
+  }
+
+  // Shuffle the gems
+  for (let i = allGems.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+    [allGems[i], allGems[j]] = [allGems[j], allGems[i]];
+  }
+
+  // Place shuffled gems back
+  let gemIdx = 0;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (!grid[r][c].obstacle) {
+        grid[r][c] = allGems[gemIdx++];
+        grid[r][c].drawY = 0;
+        grid[r][c].animY = 0;
+        grid[r][c].scale = 1.0;
+      }
+    }
+  }
+  // Ensure no immediate matches after shuffle
+  for (let pass = 0; pass < 3; pass++) {
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (grid[r][c].type >= 0 && causesMatch(r,c)) {
+          grid[r][c].type = Math.floor(Math.random()*GEM_TYPES);
+        }
+      }
+    }
+  }
+  spawnPopup(W/2, H*0.4, "SHUFFLE!", '#0ff', 28);
+  triggerShake(5, 0.3);
+}
+
+function attemptSwap(r1,c1,r2,c2) {
+  if (selR>=0) { grid[selR][selC].scale=1.0; selR=-1;selC=-1; }
+  if (movesLeft<=0) return;
+  // Simulate swap and check for matches
+  grid[r1][c1]={...grid[r2][c2]}; grid[r2][c2]=tmp;
+  // Undo immediately — animation handles the visual swap
+  grid[r2][c2]={...grid[r1][c1]}; grid[r1][c1]=tmp;
+
+  let valid=matches.length>0;
+  swapState={r1,c1,r2,c2,t:0,maxT:0.14,isUndo:!valid};
+  if (valid) {
+    movesLeft--;
+    sfx.play(440,0.06,'sine',0.08);
+  } else {
+    sfx.play(220,0.08,'sawtooth',0.06);
+  }
+  setState('swapping');
+}
+
+function updateSwapping(dt) {
+  swapState.t+=dt;
+  if (swapState.t>=swapState.maxT) {
+    // Commit real swap
+    const {r1,c1,r2,c2,isUndo}=swapState;
+    if (!isUndo) {
+      let tmp={...grid[r1][c1]};
+      grid[r1][c1]={...grid[r2][c2]}; grid[r2][c2]=tmp;
+      cascadeDepth=0;
+      setState('resolving');
+      startResolve();
+    } else {
+      setState('playing');
+    }
+    swapState=null;
+  }
+}
+
+function startResolve() {
+  if (matches.length===0) {
+    checkObjective();
+    setState('playing');
+    return;
+  }
+  resolveQueue=matches;
+  resolveTimer=0.12;
+  // Create special gems for large matches
+  let special=getSpecialForMatch(matches);
+  if (special) {
+    let pivot = matches[Math.floor(matches.length / 2)]; // Center of the match
+    // If a special gem is created, replace one of the matched gems with it
+    // Prioritize the gem at the original swap location if it's part of the match
+    let specialGemPos = pivot;
+    if (swapState && !swapState.isUndo) {
+      if (matches.some(m => m.r === swapState.r1 && m.c === swapState.c1)) {
+        specialGemPos = {r: swapState.r1, c: swapState.c1};
+      } else if (matches.some(m => m.r === swapState.r2 && m.c === swapState.c2)) {
+        specialGemPos = {r: swapState.r2, c: swapState.c2};
+      }
+    }
+
+    grid[specialGemPos.r][specialGemPos.c].special = special;
+    grid[specialGemPos.r][specialGemPos.c].type = grid[specialGemPos.r][specialGemPos.c].type; // Keep type for color
+    // Trigger hitstop for special gem creation
+    triggerHitstop(matches.length >= 5 ? 6 : 4);
+    spawnPopup(cellToPixel(specialGemPos.r, specialGemPos.c).x, cellToPixel(specialGemPos.r, specialGemPos.c).y,
+               special.toUpperCase(), '#ff0', 20);
+  } else if (matches.length >= 5) { // No special gem but still a big match
+    triggerHitstop(3);
+  }
+  setState('resolving');
+}
+
+function updateResolving(dt) {
+
+  if (hitstopTimer > 0) {
+    hitstopTimer -= dt;
+    return;
+  }
+
+  resolveTimer-=dt;
+  if (resolveTimer>0) return;
+
+  // Clear matched cells + trigger specials
+  let currentCascadeScore = 0;
+  resolveQueue.forEach(({r,c})=>{
+    let gem=grid[r][c];
+    if (gem.type < 0) return; // Already cleared by another special
+
+    const {x,y}=cellToPixel(r,c);
+    spawnParticles(x,y,8,{color:GEM_COLORS[gem.type]||'#fff',speed:70,life:0.5,gravity:60});
+
+    // Handle obstacles
+    let clearedObstacles = [];
+    if (gem.obstacle) {
+      gem.obstacleHealth--;
+      if (gem.obstacleHealth <= 0) {
+        clearedObstacles.push({r,c,type:gem.obstacle});
+        spawnParticles(x, y, 10, { color: '#aaa', speed: 80, life: 0.6, gravity: 80 }); // Obstacle clear particles
+        gem.obstacle = null;
+      }
+    }
+
+    if (gem.special) {
+      triggerSpecial(gem.special,r,c);
+      grid[r][c]={type:-1,special:null,obstacle:null,obstacleHealth:0,drawY:0,animY:0,scale:1.0}; // empty
+      currentCascadeScore += BASE_GEM_SCORE * 1.5; // Booster activation score
+    } else {
+      grid[r][c]={type:-1,special:null,obstacle:null,obstacleHealth:0,drawY:0,animY:0,scale:1.0}; // empty
+      currentCascadeScore += BASE_GEM_SCORE;
+    }
+
+    // Update objectives for cleared obstacles
+    clearedObstacles.forEach(obs => {
+      if (objective.type === 'clear_obstacle' && objective.obstacleType === obs.type) {
+        objective.current++;
+      } else if (objective.type === 'multi') {
+        objective.objectives.forEach(obj => {
+          if (obj.type === 'clear_obstacle' && obj.obstacleType === obs.type) {
+            obj.current++;
+          }
+        });
+      }
+    });
+  });
+
+  let baseScoreForMatch = currentCascadeScore * (COMBO_MULTIPLIERS[Math.min(resolveQueue.length, 8)] || 1);
+  let cascadeBonus = (1 + cascadeDepth * CASCADE_SCORE_BONUS_PERCENTAGE);
+  let finalScore = baseScoreForMatch * cascadeBonus * _scoreMultiplier;
+
+  GAME_SCORE += Math.round(finalScore);
+  if (objective.type === 'score') {
+    objective.current = GAME_SCORE;
+  } else if (objective.type === 'clear_type') {
+    objective.current += resolveQueue.filter(c2 => grid[c2.r][c2.c].type === objective.gemType).length;
+  } else if (objective.type === 'multi') {
+    objective.objectives.forEach(obj => {
+      if (obj.type === 'score') obj.current += Math.round(finalScore);
+      else if (obj.type === 'clear_type') obj.current += resolveQueue.filter(c2 => grid[c2.r][c2.c].type === obj.gemType).length;
+    });
+  }
+
+
+  spawnPopup(GRID_X+GRID_W/2, GRID_Y + ROWS*CELL/2,
+    cascadeDepth>0?`COMBO ×${cascadeDepth+1}! +${Math.round(finalScore)}`:`+${Math.round(finalScore)}`,
+    PALETTE.combo[Math.min(cascadeDepth,PALETTE.combo.length-1)], 14 + cascadeDepth*2);
+
+  sfx.play(330+cascadeDepth*110, 0.12, 'sine', 0.10);
+  triggerShake(2 + cascadeDepth*0.5, 0.2); // Screen shake for matches
+  cascadeDepth++;
+
+  startFall();
+}
+
+function triggerSpecial(special,r,c) {
+  if (!special) return;
+  let activatedCells = [];
+  let triggerCell = {r,c};
+  const {x,y} = cellToPixel(r,c);
+  sfx.play(660, 0.15, 'square', 0.15); // Booster activation sound
+
+  if (special===BOOSTER_TYPE.ROW_CLEAR) {
+    for(let cc=0;cc<COLS;cc++) activatedCells.push({r:r,c:cc});
+    spawnParticles(x,y,20,{color:'#F39C12',speed:100,life:0.5,gravity:0,spread:Math.PI/4,angle:0});
+    spawnParticles(x,y,20,{color:'#F39C12',speed:100,life:0.5,gravity:0,spread:Math.PI/4,angle:Math.PI});
+  } else if (special===BOOSTER_TYPE.COL_CLEAR) {
+    for(let rr=0;rr<ROWS;rr++) activatedCells.push({r:rr,c:c});
+    spawnParticles(x,y,20,{color:'#2980B9',speed:100,life:0.5,gravity:0,spread:Math.PI/4,angle:Math.PI/2});
+    spawnParticles(x,y,20,{color:'#2980B9',speed:100,life:0.5,gravity:0,spread:Math.PI/4,angle:Math.PI*3/2});
+  } else if (special===BOOSTER_TYPE.BOMB) {
+    for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++) {
+      if(inGrid(nr,nc)) activatedCells.push({r:nr,c:nc});
+    }
+    spawnParticles(x,y,30,{color:'#C0392B',speed:150,life:0.6,gravity:0});
+  } else if (special===BOOSTER_TYPE.COLOR_CLEAR) {
+    // If matched, clears its own type. If tapped, player selects type.
+    // For now, assume matched, clears its own type.
+    let targetType = Math.floor(Math.random() * GEM_TYPES); // Random for simplicity
+    for(let rr=0;rr<ROWS;rr++) for(let cc=0;cc<COLS;cc++) {
+      if(grid[rr][cc].type===targetType) activatedCells.push({r:rr,c:cc});
+    }
+    spawnParticles(x,y,40,{color:'#8E44AD',speed:180,life:0.7,gravity:0});
+  }
+
+  let boosterScore = 0;
+  activatedCells.forEach(({r:ar,c:ac}) => {
+    if (gem.type < 0) return; // Already cleared
+
+    const {x:ax,y:ay} = cellToPixel(ar,ac);
+    spawnParticles(ax,ay,5,{color:GEM_COLORS[gem.type]||'#fff',speed:60,life:0.4});
+
+    // Handle obstacles cleared by booster
+    if (gem.obstacle && gem.obstacle !== OBSTACLE_TYPE.BLOCKER) { // Boosters clear ICE/CHAINS
+      gem.obstacleHealth--;
+      if (gem.obstacleHealth <= 0) {
+        spawnParticles(ax,ay,10,{color:'#aaa',speed:80,life:0.6});
+        if (objective.type === 'clear_obstacle' && objective.obstacleType === gem.obstacle) objective.current++;
+        else if (objective.type === 'multi') objective.objectives.forEach(obj => { if (obj.type === 'clear_obstacle' && obj.obstacleType === gem.obstacle) obj.current++; });
+        gem.obstacle = null;
+      }
+    } else if (gem.obstacle === OBSTACLE_TYPE.BLOCKER && special === BOOSTER_TYPE.BOMB) { // Bomb clears blockers
+      gem.obstacleHealth--;
+      if (gem.obstacleHealth <= 0) {
+        spawnParticles(ax,ay,10,{color:'#666',speed:80,life:0.6});
+        if (objective.type === 'clear_obstacle' && objective.obstacleType === gem.obstacle) objective.current++;
+        else if (objective.type === 'multi') objective.objectives.forEach(obj => { if (obj.type === 'clear_obstacle' && obj.obstacleType === gem.obstacle) obj.current++; });
+        gem.obstacle = null;
+        gem.type = -1; // Remove blocker
+      }
+    }
+    
+    // Clear the gem itself
+    if (gem.type >= 0) {
+      grid[ar][ac] = {type:-1,special:null,obstacle:null,obstacleHealth:0,drawY:0,animY:0,scale:1.0};
+      boosterScore += BASE_GEM_SCORE * 1.5;
+    }
+  });
+
+  GAME_SCORE += Math.round(boosterScore * _scoreMultiplier);
+  spawnPopup(x,y,`+${Math.round(boosterScore * _scoreMultiplier)}`, '#fff', 16);
+
+  // Update objectives for booster creation
+  if (objective.type === 'create_booster' && objective.boosterType === special) {
+    objective.current++;
+  } else if (objective.type === 'multi') {
+    objective.objectives.forEach(obj => {
+      if (obj.type === 'create_booster' && obj.boosterType === special) {
+        obj.current++;
+      }
+    });
+  }
+
+  triggerShake(special === BOOSTER_TYPE.BOMB ? 6 : 4, 0.3); // Stronger shake for bombs
+  triggerHitstop(special === BOOSTER_TYPE.BOMB ? 4 : 3); // Hitstop for booster activation
+}
+
+
+function startFall() {
+  // Mark gems that need to fall
+  fallState = { timer: 0, maxT: 0.18, ready: false };
+  // Apply gravity: gems fall into empty cells
+  for (let c=0;c<COLS;c++) {
+    let writeR=ROWS-1;
+    for (let r=ROWS-1;r>=0;r--) {
+      if (grid[r][c].type>=0 || grid[r][c].obstacle === OBSTACLE_TYPE.BLOCKER) { // Gems or blockers
+        if (r!==writeR) {
+          grid[writeR][c]=grid[r][c];
+          grid[r][c]={type:-1,special:null,obstacle:null,obstacleHealth:0,drawY:(writeR-r)*CELL,animY:(writeR-r)*CELL,scale:1.0};
+          grid[writeR][c].animY=(writeR-r)*CELL;
+        }
+        writeR--;
+      }
+    }
+    // Fill empties from top
+    for (let r=writeR;r>=0;r--) {
+      let newGemType = Math.floor(Math.random()*GEM_TYPES);
+      let newSpecial = null;
+      if (Math.random() < _specialGemChance) { // Chance to spawn special gems
+        newSpecial = randChoice([BOOSTER_TYPE.ROW_CLEAR, BOOSTER_TYPE.COL_CLEAR, BOOSTER_TYPE.BOMB]);
+      }
+      grid[r][c]=makeGem(newGemType, newSpecial);
+      grid[r][c].animY=-(writeR-r+1)*CELL;
+    }
+  }
+  setState('falling');
+}
+
+function updateFalling(dt) {
+  fallState.timer+=dt;
+  let progress=Math.min(fallState.timer/fallState.maxT,1);
+  // Animate drawY toward 0
+  let allSettled=true;
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) {
+    if(grid[r][c].animY!==0){
+      grid[r][c].animY=lerp(grid[r][c].animY,0,progress*3.5*dt/fallState.maxT);
+      if(Math.abs(grid[r][c].animY)<1)grid[r][c].animY=0;
+      else allSettled=false;
+    }
+  }
+  if (progress>=1 && allSettled) {
+    // Check for more matches (cascade)
+    startResolve();
+  }
+}
+
+function checkObjective() {
+  let met = false;
+  if (objective.type === 'multi') {
+    met = objective.objectives.every(obj => {
+      if (obj.type === 'score') return GAME_SCORE >= obj.target;
+      if (obj.type === 'clear_type') return obj.current >= obj.target;
+      if (obj.type === 'create_booster') return obj.current >= obj.target;
+      if (obj.type === 'clear_obstacle') return obj.current >= obj.target;
+      return false;
+    });
+  } else {
+    if (objective.type === 'score') met = GAME_SCORE >= objective.target;
+    else met = objective.current >= objective.target;
+  }
+
+  if (met) {
+    saveHiScore(GAME_SCORE);
+    _runCoins = Math.floor(GAME_SCORE / 100);
+    _gameoverTimer = 1.5;
+    triggerHitstop(10); // Long hitstop for victory
+    sfx.play(880,0.4,'sine',0.12);
+    setState('victory');
+    return;
+  }
+  if (movesLeft<=0 && findAllMatches().length===0 && !hasPossibleMoves()) {
+    saveHiScore(GAME_SCORE);
+    _runCoins=Math.floor(GAME_SCORE/100); _gameoverTimer=1.5;
+    setState('gameover');
+  }
+}
+
+let screenShake = { magnitude: 0, duration: 0, elapsed: 0, x: 0, y: 0 };
+function triggerShake(mag, dur) {
+  screenShake.magnitude = mag;
+  screenShake.duration = dur;
+  screenShake.elapsed = 0;
+}
+
+function updateShake(dt) {
+  if (screenShake.elapsed < screenShake.duration) {
+    screenShake.elapsed += dt;
+    let progress = screenShake.elapsed / screenShake.duration;
+    let currentMagnitude = screenShake.magnitude * (1 - progress);
+    screenShake.x = (Math.random() * 2 - 1) * currentMagnitude;
+    screenShake.y = (Math.random() * 2 - 1) * currentMagnitude;
+  } else {
+    screenShake.x = 0;
+    screenShake.y = 0;
+  }
+}
+
+function triggerHitstop(frames) {
+  hitstopTimer = frames * FIXED_DT;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════════════════
+let _bgStars = Array.from({length:60}, () => ({
+  x: Math.random()*W, y: Math.random()*H,
+  r: 0.4 + Math.random()*1.8,
+  phase: Math.random()*Math.PI*2,
+  freq: 0.7 + Math.random()*1.8
+}));
+
+function renderMenu() {
+  ctx.fillStyle=PALETTE.bg; ctx.fillRect(0,0,W,H);
+  // Animated background - glowing grid, floating particles
+  _bgStars.forEach(s => {
+    ctx.globalAlpha = 0.5 + 0.5 * Math.sin(performance.now() * 0.001 * s.freq + s.phase);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  ctx.textAlign='center';
+  ctx.fillStyle=PALETTE.accent; ctx.font='bold 28px system-ui,sans-serif'; ctx.fillText(GAME_TITLE, W/2, H*0.30);
+  ctx.fillStyle='#aaa'; ctx.font='12px system-ui,sans-serif'; ctx.fillText('Swap adjacent gems to match 3+', W/2, H*0.44);
+  if(_meta.coins>0){ctx.fillStyle='#ffdd00';ctx.font='bold 13px system-ui,sans-serif';ctx.fillText(`🪙 ${_meta.coins} coins`,W/2,H*0.52);}
+  ctx.fillStyle='#fff'; ctx.font='bold 16px system-ui,sans-serif'; ctx.fillText('TAP / CLICK to play', W/2, H*0.60);
+  ctx.fillStyle='#888'; ctx.font='13px system-ui,sans-serif'; ctx.fillText(`BEST: ${_hiScore}`, W/2, H*0.70);
+  ctx.textAlign='left';
+}
+
+function renderVictoryOverlay() { ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(0,0,W,H); drawText('LEVEL CLEAR!',W/2,H*0.35,'#ff0',28,'center'); drawText(`SCORE: ${GAME_SCORE}`,W/2,H*0.47,'#fff',18,'center'); drawText('TAP to continue',W/2,H*0.60,'#aaa',13,'center'); }
+function renderGameoverOverlay() { ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fillRect(0,0,W,H); ctx.textAlign='center'; ctx.fillStyle='#f44'; ctx.font='bold 26px system-ui,sans-serif'; ctx.fillText('OUT OF MOVES',W/2,H*0.35); ctx.fillStyle='#fff'; ctx.font='bold 18px system-ui,sans-serif'; ctx.fillText(`SCORE: ${GAME_SCORE}`,W/2,H*0.45); ctx.fillStyle='#ff0'; ctx.font='bold 16px system-ui,sans-serif'; ctx.fillText(`BEST: ${_hiScore}`,W/2,H*0.53); if(_runCoins>0){ctx.fillStyle='#ffdd00';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText(`🪙 ${_runCoins} coins earned`,W/2,H*0.61);} ctx.fillStyle='#aaa'; ctx.font='13px system-ui,sans-serif'; ctx.fillText('Waiting for shop...',W/2,H*0.70); ctx.textAlign='left'; }
+
+function renderPlaying() {
+
+  ctx.save();
+  ctx.translate(screenShake.x, screenShake.y); // Apply screen shake
+
+  ctx.fillStyle=PALETTE.bg; ctx.fillRect(0,0,W,H);
+  // Animated background — glowing grid, floating particles
+  _bgStars.forEach(s => {
+    ctx.globalAlpha = 0.5 + 0.5 * Math.sin(performance.now() * 0.001 * s.freq + s.phase);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  // ── Grid background ───────────────────────────────────────────
+  ctx.fillStyle=PALETTE.board;
+  ctx.beginPath(); ctx.roundRect(GRID_X-4,GRID_Y-4,GRID_W+8,GRID_H+8,8); ctx.fill();
+
+  // ── Grid lines ────────────────────────────────────────────────
+  ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
+  for(let r=0;r<=ROWS;r++){ctx.beginPath();ctx.moveTo(GRID_X,GRID_Y+r*CELL);ctx.lineTo(GRID_X+GRID_W,GRID_Y+r*CELL);ctx.stroke();}
+  for(let c=0;c<=COLS;c++){ctx.beginPath();ctx.moveTo(GRID_X+c*CELL,GRID_Y);ctx.lineTo(GRID_X+c*CELL,GRID_Y+GRID_H);ctx.stroke();}
+
+  // ── Gems ─────────────────────────────────────────────────────
+  ctx.save(); ctx.beginPath(); ctx.rect(GRID_X,GRID_Y,GRID_W,GRID_H); ctx.clip();
+  for(let r=0;r<ROWS;r++) {
+    for(let c=0;c<COLS;c++) {
+      let gem=grid[r][c];
+      if(gem.type<0 && gem.obstacle !== OBSTACLE_TYPE.BLOCKER) continue;
+      const {x,y}=cellToPixel(r,c);
+      let ay=gem.animY||0;
+      let selected=r===selR&&c===selC;
+      let sc=gem.scale||1.0;
+      let R=(CELL/2-4)*sc;
+
+      ctx.save(); ctx.translate(x,y+ay);
+      // Glow on selection
+      if (selected) { ctx.shadowBlur=16; ctx.shadowColor='#fff'; }
+
+      // Draw obstacles first
+      if (gem.obstacle === OBSTACLE_TYPE.ICE_1 || gem.obstacle === OBSTACLE_TYPE.ICE_2) {
+        ctx.fillStyle = gem.obstacleHealth === 2 ? 'rgba(173,216,230,0.7)' : 'rgba(173,216,230,0.4)'; // Light blue for ice
+        ctx.beginPath(); ctx.roundRect(-CELL/2+2,-CELL/2+2,CELL-4,CELL-4,4); ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+        if (gem.obstacleHealth === 2) {
+          ctx.fillStyle = 'rgba(255,255,255,0.4)';
+          ctx.beginPath(); ctx.arc(0,-R*0.5,R*0.3,0,Math.PI*2); ctx.fill(); // Ice highlight
+        }
+      } else if (gem.obstacle === OBSTACLE_TYPE.CHAINS) {
+        ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 3; // Brown for chains
+        ctx.beginPath();
+        ctx.moveTo(-R, -R); ctx.lineTo(R, R);
+        ctx.moveTo(-R, R); ctx.lineTo(R, -R);
+        ctx.stroke();
+      } else if (gem.obstacle === OBSTACLE_TYPE.BLOCKER) {
+        ctx.fillStyle = '#444'; // Dark grey for blocker
+        ctx.beginPath(); ctx.roundRect(-CELL/2+2,-CELL/2+2,CELL-4,CELL-4,4); ctx.fill();
+        ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = '#666'; ctx.font = `bold ${Math.round(R*0.8)}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('X', 0, 1); // Blocker icon
+        ctx.restore();
+        continue; // Skip drawing gem if it's a blocker
+      }
+
+      // Draw gem with shape matching icon — circle, diamond, star, etc.
+      ctx.fillStyle=GEM_COLORS[gem.type];
+      ctx.beginPath(); ctx.arc(0,0,R,0,Math.PI*2); ctx.fill();
+      // Shine
+      ctx.fillStyle='rgba(255,255,255,0.25)';
+      ctx.beginPath(); ctx.arc(-R*0.25,-R*0.28,R*0.4,0,Math.PI*2); ctx.fill();
+      // Icon
+      ctx.shadowBlur=0;
+      ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.font=`bold ${Math.round(R)}px monospace`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(GEM_LABELS[gem.type]||'●',0,1);
+      // Special marker
+      if(gem.special){
+        ctx.strokeStyle=PALETTE.accent;ctx.lineWidth=2;
+        ctx.beginPath();
+        if (gem.special === BOOSTER_TYPE.ROW_CLEAR) {
+          ctx.moveTo(-R, 0); ctx.lineTo(R, 0); ctx.stroke();
+        } else if (gem.special === BOOSTER_TYPE.COL_CLEAR) {
+          ctx.moveTo(0, -R); ctx.lineTo(0, R); ctx.stroke();
+        } else if (gem.special === BOOSTER_TYPE.BOMB) {
+          ctx.arc(0,0,R*0.8,0,Math.PI*2); ctx.stroke();
+          ctx.font=`bold ${Math.round(R*0.8)}px monospace`; ctx.fillText('💣',0,1);
+        } else if (gem.special === BOOSTER_TYPE.COLOR_CLEAR) {
+          ctx.arc(0,0,R+2,0,Math.PI*2); ctx.stroke();
+          ctx.font=`bold ${Math.round(R*0.8)}px monospace`; ctx.fillText('🌈',0,1);
+        }
+      }
+      // Selection ring
+      if(selected){ctx.strokeStyle='#fff';ctx.lineWidth=2.5;ctx.globalAlpha=0.8;ctx.beginPath();ctx.arc(0,0,R+4,0,Math.PI*2);ctx.stroke();}
+      ctx.restore();
+    }
+  }
+  ctx.restore(); // end clip
+
+  // ── HUD ───────────────────────────────────────────────────────
+  drawText(`SCORE: ${GAME_SCORE}`, 10, 22, PALETTE.ui, 13);
+  drawText(`LV ${level}`, W/2, 22, '#aaa', 12, 'center');
+  drawText(`BEST: ${_hiScore}`, W-10, 22, '#888', 11, 'right');
+  // Moves left
+  drawText(`MOVES: ${movesLeft}`, 10, GRID_Y+GRID_H+24, movesLeft<=5?'#f44':PALETTE.ui, 14);
+  // Objective
+  let objText = '';
+  if (objective.type === 'multi') {
+    objText = 'GOAL: ';
+    objective.objectives.forEach((obj, i) => {
+      if (obj.type === 'score') objText += `Score: ${obj.current}/${obj.target}`;
+      else if (obj.type === 'clear_type') objText += `${GEM_TYPES_DATA[obj.gemType].type}: ${obj.current}/${obj.target}`;
+      else if (obj.type === 'create_booster') objText += `${obj.boosterType}: ${obj.current}/${obj.target}`;
+      else if (obj.type === 'clear_obstacle') objText += `${obj.obstacleType}: ${obj.current}/${obj.target}`;
+      if (i < objective.objectives.length - 1) objText += ' | ';
+    });
+  } else {
+    if (objective.type === 'score') objText = `GOAL: ${objective.current}/${objective.target}`;
+    else if (objective.type === 'clear_type') objText = `CLEAR ${GEM_TYPES_DATA[objective.gemType].type}: ${objective.current}/${objective.target}`;
+    else if (objective.type === 'create_booster') objText = `CREATE ${objective.boosterType}: ${objective.current}/${objective.target}`;
+    else if (objective.type === 'clear_obstacle') objText = `CLEAR ${objective.obstacleType}: ${objective.current}/${objective.target}`;
+  }
+  drawText(objText, W-10, GRID_Y+GRID_H+24, PALETTE.accent, 12, 'right');
+  // Swap animation hint
+  if (swapState) {
+    const {r1,c1,r2,c2,t,maxT,isUndo}=swapState;
+    let prog=Math.min(t/maxT,1);
+    const {x:x1,y:y1}=cellToPixel(r1,c1);
+    const {x:x2,y:y2}=cellToPixel(r2,c2);
+    let gem1=grid[r1][c1],gem2=grid[r2][c2];
+    if(gem1.type>=0) {
+      let cx2=lerp(x1,x2,isUndo?1-prog:prog),cy2=lerp(y1,y2,isUndo?1-prog:prog);
+      ctx.fillStyle=GEM_COLORS[gem1.type]; ctx.beginPath(); ctx.arc(cx2,cy2,CELL/2-5,0,Math.PI*2); ctx.fill();
+    }
+  }
+
+  ctx.restore(); // End screen shake
+}
+
+// ══════════════════════════════════════════════════════════════════
+// START
+// ══════════════════════════════════════════════════════════════════
+initLevel();
+requestAnimationFrame(t=>{lastTime=t;requestAnimationFrame(loop);});
+
+  // Dev console bridge (global scope)
+  window.__devPatch = function(code) { return eval(code); };
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     ARCADE DEV CONSOLE — Press ² to toggle | Real-time AI modifications
+     ═══════════════════════════════════════════════════════════════════════ -->
+<style id="dev-console-style">
+#dev-console{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(5,5,15,.97);border-top:2px solid #00ff88;z-index:99999;font-family:'Courier New',monospace;color:#00ff88;box-shadow:0 -6px 30px rgba(0,255,136,.18);padding:10px 14px 8px;gap:5px;flex-direction:column}
+#dev-console.open{display:flex}
+#dev-console-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+#dev-console-ttl{font-size:12px;font-weight:bold;letter-spacing:1px}
+#dev-console-hdr-r{display:flex;gap:6px;align-items:center}
+#dev-console-ctx-btn{background:#0a1a0a;color:#558855;border:1px solid #1a3a1a;font-size:10px;padding:3px 8px;border-radius:3px;cursor:pointer;font-family:monospace;transition:all .15s}
+#dev-console-ctx-btn:hover,#dev-console-ctx-btn.active{color:#00ff88;border-color:#00ff88;background:#051505}
+#dev-console-close{background:none;border:none;color:#333;font-size:16px;cursor:pointer;padding:0 3px;line-height:1;transition:color .15s}
+#dev-console-close:hover{color:#ff4444}
+#dev-console-quick{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:3px}
+.dc-qb{background:#0a1a0a;color:#558855;border:1px solid #1a3a1a;font-size:10px;padding:4px 9px;border-radius:3px;cursor:pointer;font-family:monospace;transition:all .12s;white-space:nowrap}
+.dc-qb:hover{color:#00ff88;border-color:#00ff88;background:#0a2a0a;transform:translateY(-1px)}
+.dc-qb:active{transform:none}
+#dev-console-ctx{display:none;background:#050f05;border:1px solid #0a2a0a;border-radius:4px;padding:8px 10px;font-size:10px;color:#668866;max-height:110px;overflow-y:auto;line-height:1.7;margin-bottom:3px}
+#dev-console-ctx.open{display:block}
+#dev-console-row{display:flex;gap:8px;align-items:flex-start}
+#dev-console-input{flex:1;background:#0a0a0a;border:1px solid #00ff88;color:#00ff88;font-family:'Courier New',monospace;font-size:13px;padding:8px 10px;border-radius:4px;resize:vertical;min-height:38px;max-height:140px;line-height:1.4}
+#dev-console-input::placeholder{color:#1a4a2a}
+#dev-console-input:focus{outline:none;border-color:#00ffcc;box-shadow:0 0 8px rgba(0,255,204,.2)}
+#dev-console-btns{display:flex;flex-direction:column;gap:5px;min-width:90px}
+#dev-console-btn{background:linear-gradient(135deg,#00cc66,#00ff88);color:#000;border:none;font-family:monospace;font-size:12px;font-weight:900;padding:9px 14px;border-radius:4px;cursor:pointer;letter-spacing:.5px;transition:all .15s}
+#dev-console-btn:hover{background:linear-gradient(135deg,#00ff88,#00ffcc);transform:translateY(-1px)}
+#dev-console-btn:disabled{background:#222;color:#444;cursor:wait;transform:none}
+#dev-console-undo{background:#1a1a1a;color:#888;border:1px solid #333;font-family:monospace;font-size:11px;padding:5px 10px;border-radius:4px;cursor:pointer;transition:all .15s}
+#dev-console-undo:hover:not(:disabled){background:#2a2a2a;color:#fff;border-color:#555}
+#dev-console-undo:disabled{opacity:.3;cursor:default}
+#dev-console-status{font-size:11px;min-height:15px;padding:2px 0;line-height:1.5;max-height:48px;overflow-y:auto}
+#dev-console-status.ok{color:#00ff88}#dev-console-status.err{color:#ff4444}#dev-console-status.pending{color:#ffaa00}#dev-console-status.warn{color:#ffcc44}
+#dev-console-cw{display:none;margin-top:2px}
+#dev-console-cw.visible{display:block}
+#dev-console-ctog{background:none;border:none;color:#1a4a2a;font-size:10px;font-family:monospace;cursor:pointer;padding:2px 0;transition:color .15s}
+#dev-console-ctog:hover{color:#00cc66}
+#dev-console-cpre{background:#050f05;border:1px solid #0a2a0a;border-radius:3px;padding:8px 10px;font-size:11px;color:#44aa44;font-family:'Courier New',monospace;white-space:pre-wrap;word-break:break-all;max-height:110px;overflow-y:auto;margin-top:3px;line-height:1.5}
+#dev-console-log{font-size:10px;color:#333;max-height:44px;overflow-y:auto;padding-top:3px;border-top:1px solid #111;display:none;line-height:1.6;margin-top:2px}
+#dev-console-log.visible{display:block}
+#dev-console-hint{font-size:9px;color:#1a3a1a;text-align:right;margin-top:1px}
+</style>
+<div id="dev-console">
+  <div id="dev-console-hdr">
+    <span id="dev-console-ttl">⚡ ARCADE DEV CONSOLE</span>
+    <div id="dev-console-hdr-r">
+      <button id="dev-console-ctx-btn" title="Show live game state">🔍 ctx</button>
+      <span style="color:#1a3a1a;font-size:10px">[ ² ]</span>
+      <button id="dev-console-close" title="Close">✕</button>
+    </div>
+  </div>
+  <div id="dev-console-quick"></div>
+  <div id="dev-console-ctx"></div>
+  <div id="dev-console-row">
+    <textarea id="dev-console-input" rows="2"></textarea>
+    <div id="dev-console-btns">
+      <button id="dev-console-btn">▶ Apply</button>
+      <button id="dev-console-undo" disabled title="Undo last patch">↩ Undo</button>
+    </div>
+  </div>
+  <div id="dev-console-status"></div>
+  <div id="dev-console-cw">
+    <button id="dev-console-ctog">▶ view generated code</button>
+    <pre id="dev-console-cpre"></pre>
+  </div>
+  <div id="dev-console-log"></div>
+  <div id="dev-console-hint">Shift+Enter = new line&nbsp;|&nbsp;Enter = send&nbsp;|&nbsp;↑↓ = history</div>
+</div>
+<script id="dev-console-script">
+(function(){
+'use strict';
+var PLACEHOLDER_TEXT='Describe your modification...\nExamples:\n• add a bomb gem that clears a 3x3 area when matched\n• make gems fall twice as fast\n• add +5 moves whenever a 4-match is made\n• create a rainbow gem that matches any color\n• add a combo multiplier for cascades\n• change all gems to specific colors\n• shuffle the grid\n• highlight all possible matches\n• add a timer mode with 60 seconds\n• set score multiplier to 5x';
+var QUICK_ACTIONS=[
+  {label:'∞ Shuffle',desc:'Randomize all gem types',code:'for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++)if(grid[r][c].type>=0)grid[r][c].type=Math.floor(Math.random()*GEM_TYPES);',color:'#00ffcc'},
+  {label:'📎 +20 Moves',desc:'Add 20 moves',code:'movesLeft+=20;',color:'#00ff88'},
+  {label:'⭐ Max Score',desc:'Set score to 99999',code:'GAME_SCORE=99999;',color:'#ffdd00'},
+  {label:'💥 Cascade All',desc:'Mark all gems for removal',code:'for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++)if(grid[r][c].type>=0){grid[r][c].matched=true;}startResolve();',color:'#ff6600'},
+  {label:'✨ Make Special',desc:'Turn gem at (0,0) into a special gem',code:'if(grid[0][0])grid[0][0].special=true;',color:'#ff88ff'},
+  {label:'🌈 All Same Color',desc:'Set all gems to type 0',code:'for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++)if(grid[r][c].type>=0)grid[r][c].type=0;',color:'#aaaaff'},
+];
+function collectContext(){var c={};try{
+  c.gameState=typeof gameState!=='undefined'?gameState:'?';
+  c.score=typeof GAME_SCORE!=='undefined'?GAME_SCORE:'?';
+  c.movesLeft=typeof movesLeft!=='undefined'?movesLeft:'?';
+  c.level=typeof level!=='undefined'?level:'?';
+  if(typeof objective!=='undefined')c.objective=JSON.stringify(objective).slice(0,60);
+  if(typeof grid!=='undefined')c.gridSize=ROWS+'x'+COLS;
+  if(typeof GEM_TYPES!=='undefined')c.gemTypes=GEM_TYPES;
+  if(typeof selR!=='undefined')c.selected='('+selR+','+selC+')';
+  c.hiScore=typeof _hiScore!=='undefined'?_hiScore:'?';
+}catch(e){}return c;}
+function takeSnapshot(){try{
+  var s={_ts:Date.now()};
+  if(typeof GAME_SCORE!=='undefined')s.score=GAME_SCORE;
+  if(typeof movesLeft!=='undefined')s.movesLeft=movesLeft;
+  if(typeof level!=='undefined')s.level=level;
+  if(typeof gameState!=='undefined')s.gameState=gameState;
+  if(typeof grid!=='undefined'){s.grid=[];for(var r=0;r<ROWS;r++){s.grid[r]=[];for(var c=0;c<COLS;c++)s.grid[r][c]={type:grid[r][c].type,special:grid[r][c].special};}}
+  return s;
+}catch(e){return null;}}
+function applySnapshot(s){if(!s)return false;var ok=false;try{
+  if(s.score!==undefined&&typeof GAME_SCORE!=='undefined'){GAME_SCORE=s.score;ok=true;}
+  if(s.movesLeft!==undefined&&typeof movesLeft!=='undefined'){movesLeft=s.movesLeft;ok=true;}
+  if(s.level!==undefined&&typeof level!=='undefined'){level=s.level;ok=true;}
+  if(s.gameState!==undefined&&typeof gameState!=='undefined'){gameState=s.gameState;ok=true;}
+  if(s.grid&&typeof grid!=='undefined'){for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++){grid[r][c].type=s.grid[r][c].type;grid[r][c].special=s.grid[r][c].special;}ok=true;}
+}catch(e){}return ok;}
+
+var FILENAME=window.location.pathname.split('/').pop();
+var panel=document.getElementById('dev-console');
+var input=document.getElementById('dev-console-input');
+var btn=document.getElementById('dev-console-btn');
+var undoBtn=document.getElementById('dev-console-undo');
+var statusEl=document.getElementById('dev-console-status');
+var closeBtn=document.getElementById('dev-console-close');
+var ctxBtn=document.getElementById('dev-console-ctx-btn');
+var ctxPanel=document.getElementById('dev-console-ctx');
+var logPanel=document.getElementById('dev-console-log');
+var cw=document.getElementById('dev-console-cw');
+var ctog=document.getElementById('dev-console-ctog');
+var cpre=document.getElementById('dev-console-cpre');
+var quickBar=document.getElementById('dev-console-quick');
+if(!panel||!input||!btn)return;
+input.placeholder=PLACEHOLDER_TEXT;
+QUICK_ACTIONS.forEach(function(qa){
+  var b=document.createElement('button');b.className='dc-qb';b.textContent=qa.label;
+  if(qa.color)b.style.color=qa.color;b.title=qa.desc||'';
+  b.addEventListener('click',function(){var snap=takeSnapshot();execCode(qa.code,qa.label);if(snap)pushSnapshot(snap);});
+  quickBar.appendChild(b);
+});
+var _snapshots=[],_history=[],_histIdx=-1,_actionLog=[],MAX_UNDO=15,MAX_LOG=30;
+if(ctog&&cw&&cpre){ctog.addEventListener('click',function(){var o=cpre.style.display==='block';cpre.style.display=o?'none':'block';ctog.textContent=(o?'▶ view':'▼ hide')+' generated code';});cpre.style.display='none';}
+function showCode(code){if(!cw||!cpre||!ctog)return;cpre.textContent=code||'';cw.classList.add('visible');cpre.style.display='none';ctog.textContent='▶ view generated code ('+(code||'').split('\n').length+' lines)';}
+function hideCode(){if(cw)cw.classList.remove('visible');}
+closeBtn.addEventListener('click',function(){panel.classList.remove('open');input.blur();});
+function setStatus(msg,cls){statusEl.textContent=msg;statusEl.className=cls||'';}
+function addLog(prompt,ok,note){var t=new Date().toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit',second:'2-digit'});var short=prompt.length>55?prompt.slice(0,55)+'…':prompt;_actionLog.unshift({t:t,short:short,ok:ok,note:note||''});if(_actionLog.length>MAX_LOG)_actionLog.pop();renderLog();}
+function renderLog(){if(!_actionLog.length){logPanel.classList.remove('visible');return;}logPanel.classList.add('visible');logPanel.innerHTML=_actionLog.map(function(e){return'<span style="color:#333">'+e.t+'</span> <span style="color:'+(e.ok?'#1a6a1a':'#6a1a1a')+'">&#9679;</span> <span style="color:'+(e.ok?'#447744':'#774444')+'">'+e.short+'</span>'+(e.note?'<span style="color:#333"> &rarr; '+e.note+'</span>':'');}).join('<br>');}
+function pushSnapshot(snap){if(!snap)return;_snapshots.push(snap);if(_snapshots.length>MAX_UNDO)_snapshots.shift();undoBtn.disabled=false;}
+function updateUndoBtn(){undoBtn.disabled=_snapshots.length===0;}
+undoBtn.addEventListener('click',function(){if(!_snapshots.length)return;var snap=_snapshots.pop();updateUndoBtn();var ok=applySnapshot(snap);var dt=Math.round((Date.now()-snap._ts)/1000);setStatus(ok?'↩ Undone ('+dt+'s ago)':'⚠ Partial undo — complex changes cannot be auto-reverted',ok?'ok':'warn');});
+ctxBtn.addEventListener('click',function(){if(ctxPanel.classList.contains('open')){ctxPanel.classList.remove('open');ctxBtn.classList.remove('active');ctxPanel.innerHTML='';return;}ctxBtn.classList.add('active');var c=collectContext();var lines=['<b style="color:#226622">═══ LIVE STATE ═══</b>'];Object.keys(c).forEach(function(k){var v=c[k];var vs=typeof v==='object'?JSON.stringify(v).slice(0,100):String(v);lines.push('<span style="color:#00cc55">'+k+'</span>: <span style="color:#88aa88">'+vs+'</span>');});if(lines.length===1)lines.push('<span style="color:#1a3a1a">No standard variables detected</span>');ctxPanel.innerHTML=lines.join('<br>');ctxPanel.classList.add('open');});
+function validateSyntax(code){var o=0,c=0,po=0,pc=0,bo=0,bc=0;for(var i=0;i<code.length;i++){var ch=code[i];if(ch==='{')o++;else if(ch==='}')c++;else if(ch==='(')po++;else if(ch===')')pc++;else if(ch==='[')bo++;else if(ch===']')bc++;}if(o!==c)return'Braces: '+o+' { for '+c+' }';if(po!==pc)return'Parens: '+po+' ( for '+pc+' )';if(bo!==bc)return'Brackets: '+bo+' [ for '+bc+' ]';return null;}
+function execCode(code,explanation){var synErr=validateSyntax(code);if(synErr){setStatus('⚠ Invalid syntax: '+synErr,'err');return false;}try{if(typeof window.__devPatch==='function'){window.__devPatch(code);}else{(new Function(code))();}setStatus('✅ '+(explanation||'Patch applied!'),'ok');input.value='';return true;}catch(e){var msg=e.message||String(e);if(msg.indexOf('not defined')!==-1){var vn=(msg.split(' ')[0]||'').replace(/[^a-zA-Z0-9_]/g,'');msg='Variable "'+vn+'" not found. Use 🔍 ctx to see available variables.';}else if(msg.indexOf('is not a function')!==-1){msg='Function unavailable: '+msg;}else if(msg.indexOf('Cannot read')!==-1){msg='Null/undefined: '+msg;}else if(msg.indexOf('Assignment to constant')!==-1){msg='Cannot reassign const — use object property: e.g. PALETTE.bg = "#000"';}setStatus('❌ '+msg,'err');return false;}}
+async function applyPatch(){var prompt=input.value.trim();if(!prompt)return;if(_history[0]!==prompt){_history.unshift(prompt);if(_history.length>50)_history.pop();}_histIdx=-1;btn.disabled=true;hideCode();setStatus('⏳ Generating patch...','pending');var snap=takeSnapshot();try{var resp=await fetch('/api/game-patch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:FILENAME,prompt:prompt,context:collectContext()})});if(!resp.ok){var errText=await resp.text();setStatus('❌ Server '+resp.status+': '+errText.slice(0,80),'err');addLog(prompt,false,'HTTP '+resp.status);return;}var data=await resp.json();if(data.error){setStatus('❌ '+data.error,'err');addLog(prompt,false,data.error.slice(0,40));}else if(data.code){showCode(data.code);var ok=execCode(data.code,data.explanation);if(ok){pushSnapshot(snap);addLog(prompt,true,(data.explanation||'').slice(0,80));}else{if(cpre)cpre.style.display='block';if(ctog)ctog.textContent='▼ hide generated code (error)';addLog(prompt,false,'exec error');}}else{setStatus('⚠ Empty server response','warn');addLog(prompt,false,'empty');}}catch(e){setStatus('❌ Network: '+e.message,'err');addLog(prompt,false,'network');}finally{btn.disabled=false;}}
+btn.addEventListener('click',applyPatch);
+input.addEventListener('keydown',function(e){if(e.code!=='Backquote'&&e.code!=='IntlBackslash')e.stopPropagation();if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();applyPatch();return;}if(e.key==='ArrowUp'&&!e.shiftKey&&_history.length){e.preventDefault();_histIdx=Math.min(_histIdx+1,_history.length-1);input.value=_history[_histIdx];}if(e.key==='ArrowDown'&&!e.shiftKey){e.preventDefault();_histIdx=Math.max(_histIdx-1,-1);input.value=_histIdx>=0?_history[_histIdx]:'';}});
+document.addEventListener('keydown',function(e){if(e.code==='Backquote'||e.code==='IntlBackslash'){e.preventDefault();if(panel.classList.contains('open')){panel.classList.remove('open');input.blur();}else{panel.classList.add('open');input.focus();}}});
+})();
+</script>
+
+<style id="dev-console-style">
+#dev-console{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,.96);border-top:2px solid #00ff88;padding:10px 14px;z-index:99999;font-family:monospace;color:#00ff88;box-shadow:0 -4px 20px rgba(0,255,136,.15)}
+#dev-console.open{display:flex;flex-direction:column;gap:5px}
+#dev-console-title{font-size:11px;color:#555;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center}
+#dev-console-title span:first-child{color:#00ff88;font-size:12px;font-weight:bold}
+#dev-console-ctx-bar{display:flex;gap:6px;align-items:center}
+#dev-console-row{display:flex;gap:8px;align-items:flex-start}
+#dev-console-input{flex:1;background:#0a0a0a;border:1px solid #00ff88;color:#00ff88;font-family:'Courier New',monospace;font-size:13px;padding:8px 10px;border-radius:4px;resize:vertical;min-height:38px;max-height:180px;line-height:1.4}
+#dev-console-input::placeholder{color:#1a4a2a}
+#dev-console-input:focus{outline:none;border-color:#00ffcc;box-shadow:0 0 8px rgba(0,255,204,.2)}
+#dev-console-btns{display:flex;flex-direction:column;gap:5px;min-width:90px}
+#dev-console-btn{background:linear-gradient(135deg,#00cc66,#00ff88);color:#000;border:none;font-family:monospace;font-size:12px;font-weight:900;padding:9px 14px;border-radius:4px;cursor:pointer;letter-spacing:.5px;transition:all .15s}
+#dev-console-btn:hover{background:linear-gradient(135deg,#00ff88,#00ffcc);transform:translateY(-1px)}
+#dev-console-btn:disabled{background:#222;color:#444;cursor:wait;transform:none}
+#dev-console-undo{background:#1a1a1a;color:#888;border:1px solid #333;font-family:monospace;font-size:11px;padding:5px 10px;border-radius:4px;cursor:pointer;transition:all .15s}
+#dev-console-undo:hover:not(:disabled){background:#2a2a2a;color:#fff;border-color:#555}
+#dev-console-undo:disabled{opacity:.3;cursor:default}
+#dev-console-ctx-btn{background:#0a1a0a;color:#555;border:1px solid #1a3a1a;font-size:10px;padding:3px 8px;border-radius:3px;cursor:pointer;font-family:monospace;transition:all .15s}
+#dev-console-ctx-btn:hover{color:#00ff88;border-color:#00ff88;background:#0a2a0a}
+#dev-console-ctx-btn.active{color:#00ff88;border-color:#00ff88;background:#051505}
+#dev-console-status{font-size:11px;min-height:16px;padding:2px 0;transition:color .2s;line-height:1.5;max-height:60px;overflow-y:auto}
+#dev-console-status.ok{color:#00ff88}
+#dev-console-status.err{color:#ff4444}
+#dev-console-status.pending{color:#ffaa00}
+#dev-console-status.warn{color:#ffcc44}
+#dev-console-ctx{display:none;background:#050f05;border:1px solid #0a2a0a;border-radius:4px;padding:8px 10px;font-size:10px;color:#668866;max-height:120px;overflow-y:auto;line-height:1.7;margin-top:2px}
+#dev-console-ctx.open{display:block}
+#dev-console-log{font-size:10px;color:#333;max-height:55px;overflow-y:auto;padding-top:3px;border-top:1px solid #111;display:none;line-height:1.6}
+#dev-console-log.visible{display:block}
+#dev-console-close{background:none;border:none;color:#333;font-size:16px;cursor:pointer;padding:0 3px;transition:color .15s}
+#dev-console-close:hover{color:#ff4444}
+#dev-console-hint{font-size:9px;color:#222;text-align:right;margin-top:1px}
+#dev-console-code-wrap{display:none;margin-top:4px}
+#dev-console-code-wrap.visible{display:block}
+#dev-console-code-toggle{background:none;border:none;color:#1a4a2a;font-size:10px;font-family:monospace;cursor:pointer;padding:2px 0;letter-spacing:.5px;transition:color .15s}
+#dev-console-code-toggle:hover{color:#00cc66}
+#dev-console-code-pre{background:#050f05;border:1px solid #0a2a0a;border-radius:3px;padding:8px 10px;font-size:11px;color:#44aa44;font-family:'Courier New',monospace;white-space:pre-wrap;word-break:break-all;max-height:140px;overflow-y:auto;margin-top:3px;line-height:1.5}
+</style>
+
+<div id="dev-console">
+  <div id="dev-console-title">
+    <span>&#9881; DEV CONSOLE</span>
+    <div id="dev-console-ctx-bar">
+      <button id="dev-console-ctx-btn" title="Afficher le contexte du jeu en temps réel">&#128269; ctx</button>
+      <span style="color:#222;font-size:10px">[ ² / &#96; ]</span>
+      <button id="dev-console-close" title="Fermer">&#10005;</button>
+    </div>
+  </div>
+  <div id="dev-console-ctx"></div>
+  <div id="dev-console-row">
+    <textarea id="dev-console-input" placeholder="Décris la modification souhaitée... Ex: rends le joueur invincible, ajoute un type ennemi dragon avec 500 HP, double la vitesse de tir, ajoute une compétence de téléportation, modifie la génération de niveaux..."></textarea>
+    <div id="dev-console-btns">
+      <button id="dev-console-btn">&#9654; Appliquer</button>
+      <button id="dev-console-undo" disabled title="Annuler le dernier patch">&#8617; Annuler</button>
+    </div>
+  </div>
+  <div id="dev-console-status"></div>
+  <div id="dev-console-code-wrap">
+    <button id="dev-console-code-toggle">&#9654; voir le code généré</button>
+    <pre id="dev-console-code-pre"></pre>
+  </div>
+  <div id="dev-console-log"></div>
+  <div id="dev-console-hint">Shift+Entrée = nouvelle ligne &nbsp;|&nbsp; Entrée = envoyer &nbsp;|&nbsp; ↑↓ = historique</div>
+</div>
+
+<script id="dev-console-script">
+/* DEV_CONSOLE_INJECTED */
+(function(){
+'use strict';
+var FILENAME=window.location.pathname.split('/').pop();
+var panel=document.getElementById('dev-console');
+var input=document.getElementById('dev-console-input');
+var btn=document.getElementById('dev-console-btn');
+var undoBtn=document.getElementById('dev-console-undo');
+var statusEl=document.getElementById('dev-console-status');
+var closeBtn=document.getElementById('dev-console-close');
+var ctxBtn=document.getElementById('dev-console-ctx-btn');
+var ctxPanel=document.getElementById('dev-console-ctx');
+var logPanel=document.getElementById('dev-console-log');
+var codeWrap=document.getElementById('dev-console-code-wrap');
+var codeToggle=document.getElementById('dev-console-code-toggle');
+var codePre=document.getElementById('dev-console-code-pre');
+if(!panel||!input||!btn||!statusEl)return;
+
+// ── État interne ──
+var _snapshots=[];
+var _history=[];
+var _histIdx=-1;
+var _actionLog=[];
+var MAX_UNDO=15;
+var MAX_LOG=30;
+var _lastCode='';
+
+// ── Toggle code généré ──
+if(codeToggle&&codeWrap&&codePre){
+  codeToggle.addEventListener('click',function(){
+    var isOpen=codePre.style.display==='block';
+    codePre.style.display=isOpen?'none':'block';
+    codeToggle.textContent=(isOpen?'▶ voir':'▼ masquer')+' le code généré';
+  });
+  codePre.style.display='none'; // fermé par défaut
+}
+
+function showGeneratedCode(code){
+  if(!codeWrap||!codePre||!codeToggle)return;
+  _lastCode=code||'';
+  codePre.textContent=_lastCode;
+  codeWrap.classList.add('visible');
+  codePre.style.display='none'; // fermé par défaut, l'utilisateur ouvre s'il veut
+  codeToggle.textContent='▶ voir le code généré ('+_lastCode.split('\n').length+' lignes)';
+}
+
+function hideGeneratedCode(){
+  if(!codeWrap)return;
+  codeWrap.classList.remove('visible');
+  _lastCode='';
+}
+
+// ── Utilitaires UI ──
+closeBtn.addEventListener('click',function(){panel.classList.remove('open');input.blur();});
+
+function setStatus(msg,cls){
+  statusEl.textContent=msg;
+  statusEl.className=cls||'';
+}
+
+function addLog(prompt,ok,note){
+  var t=new Date().toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  var short=prompt.length>55?prompt.slice(0,55)+'…':prompt;
+  _actionLog.unshift({t:t,short:short,ok:ok,note:note||''});
+  if(_actionLog.length>MAX_LOG)_actionLog.pop();
+  renderLog();
+}
+
+function renderLog(){
+  if(!_actionLog.length){logPanel.classList.remove('visible');return;}
+  logPanel.classList.add('visible');
+  logPanel.innerHTML=_actionLog.map(function(e){
+    return '<span style="color:#333">'+e.t+'</span> '+
+      '<span style="color:'+(e.ok?'#1a6a1a':'#6a1a1a')+'">&#8226;</span> '+
+      '<span style="color:'+(e.ok?'#447744':'#774444')+'">'+e.short+'</span>'+
+      (e.note?'<span style="color:#333"> → '+e.note+'</span>':'');
+  }).join('<br>');
+}
+
+// ── Snapshot pour undo ──
+function takeSnapshot(){
+  try{
+    var s={_ts:Date.now()};
+    // Numériques globaux
+    ['score','highScore','gold','lives','level','floor','stage','currentFloor',
+     'currentDungeonFloor','currentLevel','wave','waveNumber','coins','gems',
+     'playerGold','energy','mana','ammo'].forEach(function(n){
+      if(typeof window[n]==='number')s[n]=window[n];
+    });
+    // gameState
+    if(typeof gameState!=='undefined')s.gameState=gameState;
+    // Joueur (plusieurs conventions)
+    ['hero','player','ship','character'].forEach(function(pn){
+      if(typeof window[pn]!=='undefined'&&window[pn]&&typeof window[pn]==='object'){
+        var p=window[pn];
+        s['_p_'+pn]={hp:p.hp,maxHp:p.maxHp,speed:p.speed,attack:p.attack||p.damage,
+          defense:p.defense,mp:p.mp,maxMp:p.maxMp,level:p.level,xp:p.xp,
+          x:p.x,y:p.y,invincibilityTimer:p.invincibilityTimer||0,
+          classId:p.classId,vx:p.vx||0,vy:p.vy||0};
+      }
+    });
+    // Longueurs des tableaux
+    ['enemies','towers','loot','minions','projectiles','bullets','interactables',
+     'powerups','particles'].forEach(function(n){
+      if(typeof window[n]!=='undefined'&&Array.isArray(window[n]))s['_len_'+n]=window[n].length;
+    });
+    // playerStats si existe
+    if(typeof playerStats!=='undefined'&&playerStats)
+      s._playerStats=JSON.parse(JSON.stringify(playerStats));
+    if(typeof activeBuffs!=='undefined'&&Array.isArray(activeBuffs))
+      s._activeBuffs=JSON.parse(JSON.stringify(activeBuffs));
+    return s;
+  }catch(e){return null;}
+}
+
+function applySnapshot(s){
+  if(!s)return false;
+  var ok=false;
+  try{
+    ['score','highScore','gold','lives','level','floor','stage','currentFloor',
+     'currentDungeonFloor','currentLevel','wave','waveNumber','coins','gems',
+     'playerGold','energy','mana','ammo'].forEach(function(n){
+      if(s[n]!==undefined&&typeof window[n]==='number'){window[n]=s[n];ok=true;}
+    });
+    if(s.gameState!==undefined&&typeof gameState!=='undefined'){gameState=s.gameState;ok=true;}
+    ['hero','player','ship','character'].forEach(function(pn){
+      var pk='_p_'+pn;
+      if(s[pk]&&typeof window[pn]!=='undefined'&&window[pn]){
+        var p=window[pn],sd=s[pk];
+        ['hp','maxHp','speed','attack','defense','mp','maxMp','level','xp',
+         'invincibilityTimer','classId','vx','vy'].forEach(function(f){
+          if(sd[f]!==undefined)p[f]=sd[f];
+        });
+        ok=true;
+      }
+    });
+    if(s._playerStats&&typeof playerStats!=='undefined'&&playerStats){
+      Object.assign(playerStats,s._playerStats);ok=true;
+    }
+    if(s._activeBuffs&&typeof activeBuffs!=='undefined'&&Array.isArray(activeBuffs)){
+      activeBuffs.length=0;s._activeBuffs.forEach(function(b){activeBuffs.push(b);});ok=true;
+    }
+  }catch(e){}
+  return ok;
+}
+
+function pushSnapshot(snap){
+  if(!snap)return;
+  _snapshots.push(snap);
+  if(_snapshots.length>MAX_UNDO)_snapshots.shift();
+  undoBtn.disabled=false;
+}
+
+function updateUndoBtn(){undoBtn.disabled=_snapshots.length===0;}
+
+undoBtn.addEventListener('click',function(){
+  if(!_snapshots.length)return;
+  var snap=_snapshots.pop();
+  updateUndoBtn();
+  var ok=applySnapshot(snap);
+  var dt=Math.round((Date.now()-snap._ts)/1000);
+  if(ok){setStatus('↩ Annulé (il y a '+dt+'s)','ok');}
+  else{setStatus('⚠ Annulation partielle — les changements complexes (nouvelles fonctions, types) ne peuvent pas être annulés automatiquement','warn');}
+});
+
+// ── Context browser ──
+ctxBtn.addEventListener('click',function(){
+  if(ctxPanel.classList.contains('open')){
+    ctxPanel.classList.remove('open');
+    ctxBtn.classList.remove('active');
+    ctxPanel.innerHTML='';
+    return;
+  }
+  ctxBtn.classList.add('active');
+  var ctx=collectContext();
+  var lines=['<b style="color:#226622">═══ CONTEXTE EN TEMPS RÉEL ═══</b>'];
+  Object.keys(ctx).forEach(function(k){
+    var v=ctx[k];
+    var vs=typeof v==='object'?JSON.stringify(v).slice(0,90):String(v);
+    lines.push('<span style="color:#00cc55">'+k+'</span><span style="color:#224422">:</span> <span style="color:#88aa88">'+vs+'</span>');
+  });
+  if(lines.length===1)lines.push('<span style="color:#1a3a1a">Aucune variable standard détectée (jeu custom)</span>');
+  ctxPanel.innerHTML=lines.join('<br>');
+  ctxPanel.classList.add('open');
+});
+
+// ── Collecte du contexte runtime ──
+function collectContext(){
+  var ctx={};
+  try{
+    var stateNames=['gameState','state','currentState','phase','mode','screen'];
+    stateNames.forEach(function(n){if(typeof window[n]!=='undefined')ctx[n]=window[n];});
+    var scoreNames=['score','highScore','bestScore','gold','lives','level','floor','stage',
+                    'currentFloor','currentDungeonFloor','currentLevel','wave','waveNumber',
+                    'coins','gems','playerGold','energy','mana','ammo','kills'];
+    scoreNames.forEach(function(n){if(typeof window[n]!=='undefined')ctx[n]=window[n];});
+    ['hero','player','ship','character','pawn','tank'].forEach(function(pn){
+      if(typeof window[pn]!=='undefined'&&window[pn]&&typeof window[pn]==='object'){
+        var p=window[pn];
+        ctx[pn]={hp:p.hp,maxHp:p.maxHp,x:Math.round(p.x||0),y:Math.round(p.y||0),
+          speed:p.speed,level:p.level,attack:p.attack||p.damage||p.atk,
+          defense:p.defense||p.def,mp:p.mp,maxMp:p.maxMp,classId:p.classId,
+          invincible:!!(p.invincibilityTimer>0)};
+      }
+    });
+    var arrNames=['enemies','towers','projectiles','bullets','particles','loot','interactables',
+                  'minions','platforms','coins','items','obstacles','pieces','waves','powerups',
+                  'skills','traps','buildings','npcs','allies'];
+    arrNames.forEach(function(n){
+      if(typeof window[n]!=='undefined'&&Array.isArray(window[n]))ctx[n+'_count']=window[n].length;
+    });
+    if(typeof window['boss']!=='undefined')ctx.bossAlive=window['boss']!==null;
+    if(typeof window['bossGate']!=='undefined')ctx.bossGateOpen=!!(window['bossGate']&&window['bossGate'].open);
+    if(typeof ENEMY_TYPES!=='undefined')ctx.enemyTypes=Object.keys(ENEMY_TYPES);
+    if(typeof TOWER_TYPES!=='undefined')ctx.towerTypes=Object.keys(TOWER_TYPES);
+    if(typeof ITEM_TYPES!=='undefined')ctx.itemTypes=Object.keys(ITEM_TYPES);
+    if(typeof WEAPON_TYPES!=='undefined')ctx.weaponTypes=Object.keys(WEAPON_TYPES);
+    if(typeof UPGRADE_TYPES!=='undefined')ctx.upgradeTypes=Object.keys(UPGRADE_TYPES);
+    if(typeof HERO_CLASSES!=='undefined')ctx.heroClasses=HERO_CLASSES.map(function(c){return c.id+':'+c.name;});
+    if(typeof CUSTOM_SKILLS!=='undefined')ctx.customSkills=Object.keys(CUSTOM_SKILLS);
+    if(typeof CUSTOM_ATTACKS!=='undefined')ctx.customAttacks=Object.keys(CUSTOM_ATTACKS);
+    var fnNames=['createEnemy','spawnBoss','generateDungeon','checkLevelUp','handleEnemyDefeat',
+                 'spawnParticles','spawnFloatingText','triggerShake','createProjectile',
+                 'placeTower','addTower','spawnEnemy','createTower','restartGame','resetGame',
+                 'spawnWave','addPowerup','unlockSkill','applyKnockback','onBossDefeat',
+                 'openShop','buyItem','saveGame','loadGame','generateLevel','nextWave',
+                 'addUpgrade','applyUpgrade','createItem','dropLoot'];
+    var avail=fnNames.filter(function(n){return typeof window[n]==='function';});
+    if(avail.length)ctx.functions=avail;
+    if(typeof playerInventory!=='undefined')ctx.inventory=playerInventory;
+    if(typeof activeBuffs!=='undefined'&&Array.isArray(activeBuffs))ctx.buffs=activeBuffs.length;
+    if(typeof TILE_SIZE!=='undefined')ctx.TILE_SIZE=TILE_SIZE;
+    if(typeof MAP_W!=='undefined')ctx.MAP_W=MAP_W;
+  }catch(e){}
+  return ctx;
+}
+
+// ── Validation syntaxique client ──
+function validateSyntax(code){
+  var o=0,c=0,po=0,pc=0,bo=0,bc=0;
+  for(var i=0;i<code.length;i++){
+    var ch=code[i];
+    if(ch==='{')o++;else if(ch==='}')c++;
+    else if(ch==='(')po++;else if(ch===')')pc++;
+    else if(ch==='[')bo++;else if(ch===']')bc++;
+  }
+  if(o!==c)return 'Accolades: '+o+' { pour '+c+' }';
+  if(po!==pc)return 'Parenthèses: '+po+' ( pour '+pc+' )';
+  if(bo!==bc)return 'Crochets: '+bo+' [ pour '+bc+' ]';
+  return null;
+}
+
+// ── Exécution du code patché ──
+function execCode(code,explanation){
+  var synErr=validateSyntax(code);
+  if(synErr){
+    setStatus('⚠ Syntaxe invalide côté client: '+synErr+' — Le code ne sera pas exécuté.','err');
+    return false;
+  }
+  try{
+    if(typeof window.__devPatch==='function'){
+      window.__devPatch(code);
+    }else{
+      // Fallback: new Function (n'accède pas aux vars locales du jeu)
+      (new Function(code))();
+    }
+    var msg=explanation||'Patch appliqué !';
+    setStatus('✅ '+msg,'ok');
+    input.value='';
+    return true;
+  }catch(e){
+    var msg=e.message||String(e);
+    if(msg.indexOf('not defined')!==-1){
+      var vn=(msg.split(' ')[0]||'').replace(/[^a-zA-Z0-9_]/g,'');
+      msg='Variable "'+vn+'" introuvable dans ce jeu. Utilisez le bouton ctx pour voir ce qui est disponible.';
+    }else if(msg.indexOf('is not a function')!==-1){
+      msg='Fonction non disponible dans ce jeu: '+msg+'. Vérifiez ctx → functions.';
+    }else if(msg.indexOf('Cannot read')!==-1||msg.indexOf('null')!==-1){
+      msg='Accès à null/undefined: '+msg+' — Ajoutez une vérification if(variable) avant.';
+    }else if(msg.indexOf('Assignment to constant')!==-1){
+      msg="Impossible de modifier une constante (const). Passez par l'objet: ex TYPE.xxx au lieu de TYPE=...";
+    }else if(msg.indexOf('Unexpected token')!==-1){
+      msg='Erreur de syntaxe JS: '+msg;
+    }
+    setStatus('❌ '+msg,'err');
+    return false;
+  }
+}
+
+// ── Application d'un patch ──
+async function applyPatch(){
+  var prompt=input.value.trim();
+  if(!prompt)return;
+  if(_history[0]!==prompt){_history.unshift(prompt);if(_history.length>50)_history.pop();}
+  _histIdx=-1;
+  btn.disabled=true;
+  hideGeneratedCode();
+  setStatus('⏳ Génération en cours...','pending');
+  var snap=takeSnapshot();
+  try{
+    var resp=await fetch('/api/game-patch',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({filename:FILENAME,prompt:prompt,context:collectContext()})
+    });
+    if(!resp.ok){
+      var errText=await resp.text();
+      setStatus('❌ Erreur serveur '+resp.status+': '+errText.slice(0,80),'err');
+      addLog(prompt,false,'HTTP '+resp.status);
+      return;
+    }
+    var data=await resp.json();
+    if(data.error){
+      setStatus('❌ '+data.error,'err');
+      addLog(prompt,false,data.error.slice(0,40));
+    }else if(data.code){
+      // Afficher le code avant l'exec (utile si l'exec plante)
+      showGeneratedCode(data.code);
+      var ok=execCode(data.code,data.explanation);
+      if(ok){
+        pushSnapshot(snap);
+        addLog(prompt,true,data.explanation?data.explanation.slice(0,80):'');
+      }else{
+        // En cas d'erreur, garder le code visible automatiquement pour debug
+        if(codePre)codePre.style.display='block';
+        if(codeToggle)codeToggle.textContent='▼ masquer le code généré (erreur — vérifier la syntaxe)';
+        addLog(prompt,false,'Erreur exec');
+      }
+    }else{
+      setStatus('⚠ Réponse vide du serveur','warn');
+      addLog(prompt,false,'réponse vide');
+    }
+  }catch(e){
+    setStatus('❌ Réseau: '+e.message,'err');
+    addLog(prompt,false,'réseau');
+  }finally{btn.disabled=false;}
+}
+
+// ── Événements ──
+btn.addEventListener('click',applyPatch);
+input.addEventListener('keydown',function(e){
+  if(e.code!=='Backquote'&&e.code!=='IntlBackslash')e.stopPropagation();
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();applyPatch();return;}
+  if(e.key==='ArrowUp'&&!e.shiftKey&&_history.length){
+    e.preventDefault();_histIdx=Math.min(_histIdx+1,_history.length-1);input.value=_history[_histIdx];
+  }
+  if(e.key==='ArrowDown'&&!e.shiftKey){
+    e.preventDefault();_histIdx=Math.max(_histIdx-1,-1);input.value=_histIdx>=0?_history[_histIdx]:'';
+  }
+});
+document.addEventListener('keydown',function(e){
+  if(e.code==='Backquote'||e.code==='IntlBackslash'){
+    e.preventDefault();
+    if(panel.classList.contains('open')){
+      panel.classList.remove('open');input.blur();
+    }else{
+      panel.classList.add('open');input.focus();
+    }
+  }
+});
+})();
+</script>
+</body></html>

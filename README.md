@@ -241,23 +241,33 @@ Final Score =  0.25 × Gameplay
 
 ---
 
-## Generated Game Example
+## Generated Game Examples
 
-**Galactic Fury** — bullet-hell space shooter, generated from:
-> *"a retro space shooter with multiple enemy types, power-ups, and a screen-shaking boss fight"*
+The [`generated_games/`](generated_games/) folder contains real pipeline outputs — standalone HTML5 files playable directly in any browser.
+
+| Game | Genre | Score |
+|------|-------|-------|
+| `gemstone_gauntlet_8.23.html` | Match-3 Puzzle | **8.23/10** ✅ |
+| `robo_dash_neon_uprising_7.64.html` | Platformer | **7.64/10** ✅ |
+| `astroblast_7.37.html` | Shoot-em-up | **7.37/10** |
+| `gold_rush_guardians_6.83.html` | Tower Defense | **6.83/10** |
+
+### Benchmark breakdown — Gemstone Gauntlet (8.23/10)
+
+Generated from: *"a match-3 puzzle game with gem combos, special tiles, and escalating difficulty"*
 
 | Dimension | Score | Notes |
 |-----------|-------|-------|
-| Gameplay | 8.8/10 | Satisfying bullet patterns, well-paced wave escalation |
-| Technical | 8.5/10 | Clean game loop, delta-time physics, localStorage hi-score |
-| Execution | 9.0/10 | Playwright: canvas renders, no JS errors, input responsive |
-| Visual | 8.0/10 | Neon palette, particle explosions, smooth scrolling stars |
-| Fun Factor | 8.2/10 | Strong replayability, tight controls, boss creates tension |
+| Gameplay | 8.5/10 | Satisfying cascade chains, well-paced difficulty curve |
+| Technical | 8.2/10 | Clean grid logic, delta-time animations, localStorage hi-score |
+| Execution | 8.8/10 | Playwright: canvas renders, no JS errors, input responsive |
+| Visual | 8.0/10 | Gem glow effects, particle bursts, smooth swap animations |
+| Fun Factor | 8.1/10 | Strong replayability, satisfying combos, escalating challenge |
 | Anti-Pattern | 9.0/10 | No global state leaks, no infinite loops detected |
-| Benchmark | 8.0/10 | Competitive with genre standards (R-Type, Galaga) |
-| **Global** | **8.4/10** | **Approved — saved to library** |
+| Benchmark | 8.0/10 | Competitive with genre standards (Candy Crush, Bejeweled) |
+| **Global** | **8.23/10** | **Approved — saved to library** |
 
-Generation time: 7m 42s — 2 patch iterations.
+Generation time: 9m 15s — 2 patch iterations.
 
 ---
 
